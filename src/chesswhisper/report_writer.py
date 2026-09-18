@@ -7,7 +7,7 @@ _PHASE_KEY = {"opening": "phase_opening", "middlegame": "phase_middlegame", "end
 
 def _errors_table(errors_by_phase: dict, lang: str) -> str:
     lines = [
-        "| Faza / Phase | " + t("inaccuracy", lang) + " | " + t("mistake", lang) + " | " + t("blunder", lang) + " |",
+        "| " + t("phase_column", lang) + " | " + t("inaccuracy", lang) + " | " + t("mistake", lang) + " | " + t("blunder", lang) + " |",
         "| --- | --- | --- | --- |",
     ]
     for phase in PHASES:
@@ -31,7 +31,7 @@ def render_markdown(report, commentary: str, lang: str) -> str:
     parts.append("")
 
     parts.append(f"## {t('openings', lang)}")
-    parts.append(f"| Eco | {t('openings', lang)} | {t('opening_games', lang)} | {t('opening_record', lang)} |")
+    parts.append(f"| {t('eco_column', lang)} | {t('openings', lang)} | {t('opening_games', lang)} | {t('opening_record', lang)} |")
     parts.append("| --- | --- | --- | --- |")
     for op in report.openings:
         parts.append(f"| {op.eco} | {op.name} | {op.games} | {op.wins}/{op.losses}/{op.draws} |")
@@ -57,7 +57,7 @@ def render_markdown(report, commentary: str, lang: str) -> str:
     for game in report.games:
         result_str = t(_RESULT_KEY[game.result], lang)
         parts.append(
-            f"### {game.game_index + 1}. vs {game.opponent} ({result_str}, {game.your_color})"
+            f"### {game.game_index + 1}. {t('vs_label', lang)} {game.opponent} ({result_str}, {game.your_color})"
         )
         parts.append(f"- {game.opening_name} ({game.eco})")
         parts.append(f"- {t('acpl', lang)}: {game.your_stats.acpl:.1f}")

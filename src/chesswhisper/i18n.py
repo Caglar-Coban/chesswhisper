@@ -32,6 +32,9 @@ _STRINGS = {
     "game_result_loss": {"tr": "Kaybetti", "en": "Lost"},
     "game_result_draw": {"tr": "Berabere", "en": "Draw"},
     "top_mistakes": {"tr": "Kritik Hamleler", "en": "Critical Moves"},
+    "phase_column": {"tr": "Faz", "en": "Phase"},
+    "eco_column": {"tr": "ECO", "en": "ECO"},
+    "vs_label": {"tr": "vs", "en": "vs"},
 }
 
 
