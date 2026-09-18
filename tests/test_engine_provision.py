@@ -87,3 +87,35 @@ def test_get_stockfish_path_reuses_cached_binary(tmp_path, monkeypatch):
     result = get_stockfish_path(app_data_dir=tmp_path)
 
     assert result == fake_binary
+
+
+def test_get_stockfish_path_full_cache_miss_flow(tmp_path, mocker):
+    # No cached binary exists yet, so get_stockfish_path must go through the
+    # full download -> extract -> find -> (chmod) -> verify -> return pipeline.
+    version_dir = tmp_path / STOCKFISH_TAG_DIRNAME
+
+    def fake_extract(archive_path, dest_dir):
+        # Stand in for a real archive extraction by dropping a binary where
+        # _find_binary will discover it, so the real _find_binary logic runs.
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        (dest_dir / "stockfish").write_bytes(b"fake binary")
+
+    mock_download = mocker.patch("chesswhisper.engine_provision._download")
+    mock_extract = mocker.patch(
+        "chesswhisper.engine_provision._extract", side_effect=fake_extract
+    )
+    mock_verify = mocker.patch(
+        "chesswhisper.engine_provision._verify_binary", return_value=True
+    )
+
+    result = get_stockfish_path(app_data_dir=tmp_path)
+
+    expected_binary = version_dir / "stockfish"
+    assert result == expected_binary
+    mock_download.assert_called_once()
+    mock_extract.assert_called_once()
+    mock_verify.assert_called_once()
+
+    if os.name != "nt":
+        mode = expected_binary.stat().st_mode
+        assert mode & stat.S_IXUSR
