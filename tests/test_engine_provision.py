@@ -1,0 +1,89 @@
+import os
+import stat
+import tarfile
+import zipfile
+
+import pytest
+
+from chesswhisper.engine_provision import (
+    asset_name_for_platform,
+    get_stockfish_path,
+    StockfishProvisionError,
+    _find_binary,
+    _extract,
+    STOCKFISH_TAG_DIRNAME,
+)
+
+
+@pytest.mark.parametrize("system,machine,expected", [
+    ("Windows", "AMD64", "stockfish-windows-x86-64-universal.zip"),
+    ("Windows", "ARM64", "stockfish-windows-arm64-universal.zip"),
+    ("Linux", "x86_64", "stockfish-linux-x86-64-universal.tar.gz"),
+    ("Linux", "aarch64", "stockfish-linux-arm64-universal.tar.gz"),
+    ("Darwin", "x86_64", "stockfish-macos-universal.tar.gz"),
+    ("Darwin", "arm64", "stockfish-macos-universal.tar.gz"),
+])
+def test_asset_name_for_platform(system, machine, expected):
+    assert asset_name_for_platform(system, machine) == expected
+
+
+def test_asset_name_for_unsupported_platform_raises():
+    with pytest.raises(StockfishProvisionError):
+        asset_name_for_platform("Plan9", "mips")
+
+
+def test_find_binary_locates_nested_executable(tmp_path):
+    nested = tmp_path / "stockfish-windows-x86-64-universal" / "stockfish"
+    nested.parent.mkdir(parents=True)
+    exe = nested.with_suffix(".exe")
+    exe.write_bytes(b"fake binary")
+
+    found = _find_binary(tmp_path)
+
+    assert found == exe
+
+
+def test_find_binary_raises_when_missing(tmp_path):
+    with pytest.raises(StockfishProvisionError):
+        _find_binary(tmp_path)
+
+
+def test_extract_zip(tmp_path):
+    archive = tmp_path / "a.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("inner/stockfish.exe", "fake")
+    dest = tmp_path / "out"
+
+    _extract(archive, dest)
+
+    assert (dest / "inner" / "stockfish.exe").exists()
+
+
+def test_extract_tar_gz(tmp_path):
+    inner_file = tmp_path / "stockfish"
+    inner_file.write_bytes(b"fake")
+    archive = tmp_path / "a.tar.gz"
+    with tarfile.open(archive, "w:gz") as tf:
+        tf.add(inner_file, arcname="inner/stockfish")
+    dest = tmp_path / "out"
+
+    _extract(archive, dest)
+
+    assert (dest / "inner" / "stockfish").exists()
+
+
+def test_get_stockfish_path_reuses_cached_binary(tmp_path, monkeypatch):
+    # Pre-place a "binary" where get_stockfish_path expects to find one already installed.
+    version_dir = tmp_path / STOCKFISH_TAG_DIRNAME
+    version_dir.mkdir(parents=True)
+    fake_binary = version_dir / "stockfish.exe"
+    fake_binary.write_bytes(b"fake")
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("should not attempt a download when cached binary exists")
+
+    monkeypatch.setattr("chesswhisper.engine_provision._download", fail_if_called)
+
+    result = get_stockfish_path(app_data_dir=tmp_path)
+
+    assert result == fake_binary
