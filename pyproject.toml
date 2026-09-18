@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "chesswhisper"
+version = "0.1.0"
+description = "Stockfish + LLM chess coaching CLI"
+requires-python = ">=3.11"
+dependencies = [
+    "python-chess>=1.11",
+    "click>=8.1",
+    "anthropic>=0.40",
+    "openai>=1.50",
+    "requests>=2.31",
+    "platformdirs>=4.0",
+]
+
+[project.scripts]
+chesswhisper = "chesswhisper.cli:cli"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-mock>=3.14"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chesswhisper"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
