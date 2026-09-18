@@ -80,6 +80,15 @@ def test_build_game_report_counts_your_blunder():
     assert report.top_mistakes[0].move_san == "e4"
 
 
+def test_build_game_report_raises_when_player_not_in_game():
+    loaded = _loaded_game(0, "Alice", "Bob", "1-0", "1. e4 e5")
+    evals = _evals_no_errors()
+    eco_table = load_eco_table()
+
+    with pytest.raises(ValueError):
+        build_game_report(loaded, evals, player_name="Zara", eco_table=eco_table)
+
+
 def test_build_aggregate_report_sums_across_games():
     loaded_a = _loaded_game(0, "Alice", "Bob", "1-0", "1. e4 e5")
     loaded_b = _loaded_game(1, "Carol", "Alice", "0-1", "1. e4 e5")

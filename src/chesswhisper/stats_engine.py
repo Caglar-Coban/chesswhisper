@@ -229,6 +229,11 @@ def _player_stats_for_color(evals, color, ply_to_phase) -> tuple[PlayerGameStats
 def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
     white = loaded.headers.get("White", "")
     black = loaded.headers.get("Black", "")
+    if player_name not in (white, black):
+        raise ValueError(
+            f"Player {player_name!r} not found in game {loaded.index} "
+            f"(White={white!r}, Black={black!r})"
+        )
     result_header = loaded.headers.get("Result", "*")
 
     your_color = "white" if player_name == white else "black"
