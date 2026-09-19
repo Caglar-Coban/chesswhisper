@@ -1,11 +1,16 @@
 import pytest
 
-from chesswhisper.stats_engine import (
-    AggregateReport, GameReport, PlayerGameStats, ErrorCounts,
-    TimeManagementStats, OpeningStats, PHASES,
-)
 from chesswhisper.llm.base import LLMProviderError
 from chesswhisper.llm.openai_provider import OpenAIProvider
+from chesswhisper.stats_engine import (
+    PHASES,
+    AggregateReport,
+    ErrorCounts,
+    GameReport,
+    OpeningStats,
+    PlayerGameStats,
+    TimeManagementStats,
+)
 
 
 def _sample_report():
@@ -56,6 +61,26 @@ def test_generate_commentary_wraps_api_errors(mocker):
 def test_generate_commentary_wraps_malformed_response(mocker):
     fake_response = mocker.Mock()
     fake_response.choices = []  # atypical SDK response (e.g. a content filter) -> IndexError
+
+    fake_client = mocker.Mock()
+    fake_client.chat.completions.create.return_value = fake_response
+
+    provider = OpenAIProvider(api_key="fake-key")
+    provider._client = fake_client
+
+    with pytest.raises(LLMProviderError):
+        provider.generate_commentary(_sample_report(), lang="tr")
+
+
+def test_generate_commentary_raises_on_none_content(mocker):
+    # The OpenAI SDK types message.content as Optional[str] -- a refusal or
+    # tool-call-only response can legitimately return None instead of text.
+    fake_message = mocker.Mock()
+    fake_message.content = None
+    fake_choice = mocker.Mock()
+    fake_choice.message = fake_message
+    fake_response = mocker.Mock()
+    fake_response.choices = [fake_choice]
 
     fake_client = mocker.Mock()
     fake_client.chat.completions.create.return_value = fake_response

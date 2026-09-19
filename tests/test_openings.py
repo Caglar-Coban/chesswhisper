@@ -1,4 +1,4 @@
-from chesswhisper.openings import load_eco_table, match_opening, UNKNOWN_OPENING
+from chesswhisper.openings import UNKNOWN_OPENING, load_eco_table, match_opening
 
 
 def test_load_eco_table_has_entries():

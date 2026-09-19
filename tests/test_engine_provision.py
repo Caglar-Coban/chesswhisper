@@ -7,14 +7,14 @@ import pytest
 import requests
 
 from chesswhisper.engine_provision import (
+    STOCKFISH_TAG_DIRNAME,
+    StockfishProvisionError,
+    _extract,
+    _find_binary,
+    _verify_binary,
     asset_name_for_platform,
     get_stockfish_path,
     resolve_installed_stockfish,
-    StockfishProvisionError,
-    _find_binary,
-    _extract,
-    _verify_binary,
-    STOCKFISH_TAG_DIRNAME,
 )
 
 

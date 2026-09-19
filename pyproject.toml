@@ -6,7 +6,18 @@ build-backend = "hatchling.build"
 name = "chesswhisper"
 version = "0.1.0"
 description = "Stockfish + LLM chess coaching CLI"
+readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
+keywords = ["chess", "stockfish", "llm", "cli", "coaching"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment :: Board Games",
+]
 dependencies = [
     "python-chess>=1.11",
     "click>=8.1",
@@ -14,13 +25,18 @@ dependencies = [
     "openai>=1.50",
     "requests>=2.31",
     "platformdirs>=4.0",
+    "python-dotenv>=1.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/Caglar-Coban/chesswhisper"
 
 [project.scripts]
 chesswhisper = "chesswhisper.cli:cli"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-mock>=3.14"]
+dev = ["pytest>=8.0", "pytest-mock>=3.14", "ruff>=0.6", "mypy>=1.11"]
+web = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9", "jinja2>=3.1", "markdown>=3.6"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chesswhisper"]
@@ -28,3 +44,17 @@ artifacts = ["src/chesswhisper/data/eco.tsv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]  # long lines are common in this codebase's report/prompt strings
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = true
+check_untyped_defs = true

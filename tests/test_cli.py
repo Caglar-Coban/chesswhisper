@@ -1,3 +1,4 @@
+import os
 import textwrap
 
 import pytest
@@ -26,6 +27,19 @@ class FakeEngine:
         cp = self._scores[self._i % len(self._scores)]
         self._i += 1
         return {"score": chess.engine.PovScore(chess.engine.Cp(cp), chess.WHITE)}
+
+
+def test_cli_loads_dotenv_from_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CHESSWHISPER_TEST_VAR", raising=False)
+    (tmp_path / ".env").write_text("CHESSWHISPER_TEST_VAR=hello\n", encoding="utf-8")
+
+    runner = CliRunner()
+    # Any subcommand invocation runs the group callback first, which loads .env;
+    # the analyze call itself is expected to fail fast (missing PGN) -- that's fine.
+    runner.invoke(cli, ["analyze", str(tmp_path / "nope.pgn"), "--llm", "none"])
+
+    assert os.environ.get("CHESSWHISPER_TEST_VAR") == "hello"
 
 
 def test_analyze_produces_report_with_none_llm(tmp_path, monkeypatch):

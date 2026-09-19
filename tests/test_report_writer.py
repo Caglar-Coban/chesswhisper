@@ -1,8 +1,13 @@
-from chesswhisper.stats_engine import (
-    AggregateReport, GameReport, PlayerGameStats, ErrorCounts,
-    TimeManagementStats, OpeningStats, PHASES,
-)
 from chesswhisper.report_writer import render_markdown, write_report
+from chesswhisper.stats_engine import (
+    PHASES,
+    AggregateReport,
+    ErrorCounts,
+    GameReport,
+    OpeningStats,
+    PlayerGameStats,
+    TimeManagementStats,
+)
 
 
 def _sample_report():

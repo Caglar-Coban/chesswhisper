@@ -23,6 +23,10 @@ class OpenAIProvider(LLMProvider):
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
         except Exception as exc:  # noqa: BLE001
             raise LLMProviderError(f"OpenAI API call failed: {exc}") from exc
+
+        if content is None:
+            raise LLMProviderError("OpenAI returned an empty response (no text content).")
+        return content

@@ -7,7 +7,9 @@ from chesswhisper.engine_analyzer import PositionEval
 from chesswhisper.openings import load_eco_table
 from chesswhisper.pgn_loader import LoadedGame
 from chesswhisper.stats_engine import (
-    detect_player, build_game_report, build_aggregate_report,
+    build_aggregate_report,
+    build_game_report,
+    detect_player,
 )
 
 WHITE = True

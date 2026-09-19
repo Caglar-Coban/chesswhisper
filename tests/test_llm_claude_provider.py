@@ -2,12 +2,17 @@ import chess
 import pytest
 
 from chesswhisper.engine_analyzer import PositionEval
-from chesswhisper.stats_engine import (
-    AggregateReport, GameReport, PlayerGameStats, ErrorCounts,
-    TimeManagementStats, OpeningStats, PHASES,
-)
 from chesswhisper.llm.base import LLMProviderError
 from chesswhisper.llm.claude_provider import ClaudeProvider
+from chesswhisper.stats_engine import (
+    PHASES,
+    AggregateReport,
+    ErrorCounts,
+    GameReport,
+    OpeningStats,
+    PlayerGameStats,
+    TimeManagementStats,
+)
 
 
 def _sample_report():
@@ -59,6 +64,23 @@ def test_generate_commentary_wraps_api_errors(mocker):
 def test_generate_commentary_wraps_malformed_response(mocker):
     fake_response = mocker.Mock()
     fake_response.content = []  # atypical SDK response (e.g. a refusal) -> IndexError
+
+    fake_client = mocker.Mock()
+    fake_client.messages.create.return_value = fake_response
+
+    provider = ClaudeProvider(api_key="fake-key")
+    provider._client = fake_client
+
+    with pytest.raises(LLMProviderError):
+        provider.generate_commentary(_sample_report(), lang="tr")
+
+
+def test_generate_commentary_raises_on_non_text_content_block(mocker):
+    # A ThinkingBlock/ToolUseBlock (or any non-text content block) has no .text
+    # attribute; the Claude SDK's response.content is a union of many block types.
+    non_text_block = mocker.Mock(spec=[])  # no attributes at all, including .text
+    fake_response = mocker.Mock()
+    fake_response.content = [non_text_block]
 
     fake_client = mocker.Mock()
     fake_client.messages.create.return_value = fake_response

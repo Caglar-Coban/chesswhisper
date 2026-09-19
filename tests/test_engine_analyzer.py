@@ -1,9 +1,10 @@
+import io
+
 import chess
 import chess.engine
 import chess.pgn
-import io
 
-from chesswhisper.engine_analyzer import analyze_game, parse_clock_seconds, PositionEval
+from chesswhisper.engine_analyzer import analyze_game, parse_clock_seconds
 
 
 class FakeEngine:

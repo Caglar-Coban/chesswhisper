@@ -1,6 +1,7 @@
 import textwrap
 
 import chess.pgn
+import pytest
 
 from chesswhisper.pgn_loader import load_pgn
 
@@ -123,8 +124,5 @@ def test_hard_parse_exception_continues_to_next_game(tmp_path, monkeypatch):
 
 def test_missing_file_raises(tmp_path):
     missing = tmp_path / "nope.pgn"
-    try:
+    with pytest.raises(FileNotFoundError):
         load_pgn(str(missing))
-        assert False, "expected FileNotFoundError"
-    except FileNotFoundError:
-        pass

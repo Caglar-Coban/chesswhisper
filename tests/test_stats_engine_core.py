@@ -1,6 +1,10 @@
 import chess
+
 from chesswhisper.stats_engine import (
-    classify_move, game_phase, win_percent, move_accuracy,
+    classify_move,
+    game_phase,
+    move_accuracy,
+    win_percent,
 )
 
 

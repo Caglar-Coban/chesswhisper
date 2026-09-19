@@ -1,4 +1,5 @@
 import pytest
+
 from chesswhisper.i18n import t
 
 

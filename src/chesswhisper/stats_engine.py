@@ -1,6 +1,10 @@
 import math
+from collections import Counter
+from dataclasses import dataclass, field
 
 import chess
+
+from chesswhisper.openings import match_opening
 
 INACCURACY_CP = 50
 MISTAKE_CP = 100
@@ -51,11 +55,6 @@ def move_accuracy(wp_before: float, wp_after: float) -> float:
     raw = 103.1668 * math.exp(-0.04354 * win_diff) - 3.1669
     return max(0.0, min(100.0, raw))
 
-
-from collections import Counter, defaultdict
-from dataclasses import dataclass, field
-
-from chesswhisper.openings import match_opening
 
 PHASES = ("opening", "middlegame", "endgame")
 
@@ -179,7 +178,7 @@ def detect_player(loaded_games) -> str:
     if not loaded_games:
         raise ValueError("Cannot detect player from an empty game list")
 
-    counts = Counter()
+    counts: Counter[str] = Counter()
     for lg in loaded_games:
         counts[lg.headers.get("White", "")] += 1
         counts[lg.headers.get("Black", "")] += 1

@@ -2,9 +2,10 @@ import os
 import sys
 
 import click
+from dotenv import find_dotenv, load_dotenv
 
 from chesswhisper.engine_analyzer import analyze_game
-from chesswhisper.engine_provision import get_stockfish_path, StockfishProvisionError
+from chesswhisper.engine_provision import StockfishProvisionError, get_stockfish_path
 from chesswhisper.llm.base import LLMProviderError
 from chesswhisper.llm.none_provider import NoneProvider
 from chesswhisper.openings import load_eco_table
@@ -15,6 +16,7 @@ from chesswhisper.stats_engine import build_aggregate_report, build_game_report,
 
 def _open_engine(engine_path=None):
     import chess.engine
+
     from chesswhisper.engine_provision import resolve_installed_stockfish
 
     path = resolve_installed_stockfish(engine_path) or get_stockfish_path()
@@ -38,7 +40,7 @@ def _build_llm_provider(name: str):
 
 @click.group()
 def cli():
-    pass
+    load_dotenv(find_dotenv(usecwd=True))
 
 
 @cli.command()

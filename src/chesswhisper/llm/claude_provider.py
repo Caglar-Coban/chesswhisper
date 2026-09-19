@@ -24,6 +24,10 @@ class ClaudeProvider(LLMProvider):
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return response.content[0].text
+            text = getattr(response.content[0], "text", None) if response.content else None
         except Exception as exc:  # noqa: BLE001 - any SDK failure becomes a provider error
             raise LLMProviderError(f"Claude API call failed: {exc}") from exc
+
+        if text is None:
+            raise LLMProviderError("Claude returned a response with no text content.")
+        return text

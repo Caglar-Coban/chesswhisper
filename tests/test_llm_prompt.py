@@ -1,11 +1,16 @@
 import chess
 
 from chesswhisper.engine_analyzer import PositionEval
-from chesswhisper.stats_engine import (
-    AggregateReport, GameReport, PlayerGameStats, ErrorCounts,
-    TimeManagementStats, OpeningStats, PHASES,
-)
 from chesswhisper.llm.prompt import build_prompt
+from chesswhisper.stats_engine import (
+    PHASES,
+    AggregateReport,
+    ErrorCounts,
+    GameReport,
+    OpeningStats,
+    PlayerGameStats,
+    TimeManagementStats,
+)
 
 
 def _sample_report():
