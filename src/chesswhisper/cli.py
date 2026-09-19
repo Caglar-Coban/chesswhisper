@@ -179,3 +179,29 @@ def serve(host, port):
 
     click.echo(f"chesswhisper web UI running at http://{host}:{port}")
     uvicorn.run("chesswhisper.web.app:app", host=host, port=port)
+
+
+@cli.command("create-admin")
+@click.option("--username", prompt=True)
+@click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+def create_admin(username, password):
+    try:
+        from chesswhisper.web.db import get_db, init_db
+        from chesswhisper.web.models import User
+        from chesswhisper.web.security import hash_password
+    except ImportError:
+        click.echo(
+            'Error: the web UI requires extra dependencies. Install them with: pip install -e ".[web]"',
+            err=True,
+        )
+        sys.exit(1)
+
+    init_db()
+    db = next(get_db())
+    if db.query(User).filter_by(username=username).first() is not None:
+        click.echo(f"Error: a user named {username!r} already exists.", err=True)
+        sys.exit(1)
+
+    db.add(User(username=username, password_hash=hash_password(password), is_admin=True))
+    db.commit()
+    click.echo(f"Admin user {username!r} created.")

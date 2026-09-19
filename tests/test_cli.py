@@ -329,3 +329,36 @@ def test_run_analysis_passes_explicit_api_key_to_provider(tmp_path, monkeypatch)
     run_analysis(str(pgn_path), "Alice", "en", "claude", llm_api_key="sk-explicit-key")
 
     assert captured["api_key"] == "sk-explicit-key"
+
+
+def test_create_admin_creates_admin_user(tmp_path, monkeypatch):
+    from chesswhisper.web import db as web_db
+    db_path = tmp_path / "create_admin_test.db"
+    monkeypatch.setattr(web_db, "_default_db_path", lambda: db_path)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["create-admin", "--username", "root", "--password", "correct-horse-battery"])
+
+    assert result.exit_code == 0, result.output
+
+    web_db.init_db(db_path)
+    from chesswhisper.web.models import User
+    db_gen = web_db.get_db()
+    db_session = next(db_gen)
+    user = db_session.query(User).filter_by(username="root").one()
+    assert user.is_admin is True
+    from chesswhisper.web.security import verify_password
+    assert verify_password("correct-horse-battery", user.password_hash)
+
+
+def test_create_admin_rejects_duplicate_username(tmp_path, monkeypatch):
+    from chesswhisper.web import db as web_db
+    db_path = tmp_path / "create_admin_dup_test.db"
+    monkeypatch.setattr(web_db, "_default_db_path", lambda: db_path)
+
+    runner = CliRunner()
+    runner.invoke(cli, ["create-admin", "--username", "root", "--password", "correct-horse-battery"])
+    result = runner.invoke(cli, ["create-admin", "--username", "root", "--password", "another-password"])
+
+    assert result.exit_code != 0
+    assert "already" in result.output.lower() or "zaten" in result.output.lower()

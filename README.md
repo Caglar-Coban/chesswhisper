@@ -52,21 +52,38 @@ OPENAI_API_KEY=sk-...
 
 ## Web UI
 
-For a browser-based alternative to the CLI, install the `web` extra and start
-the server:
+For a browser-based alternative to the CLI, with accounts, per-user API
+keys, and analysis history, install the `web` extra:
 
 ```
 pip install -e ".[web]"
+```
+
+Create the first admin account:
+
+```
+chesswhisper create-admin
+```
+
+Then start the server:
+
+```
 chesswhisper serve --host 127.0.0.1 --port 8000
 ```
 
-Then open `http://127.0.0.1:8000` in a browser: upload a `.pgn` file, pick a
-player/language/coaching-provider, and the rendered report appears on the
-same page once analysis finishes (this can take a few minutes for larger
-files — the page shows a loading state while it waits). `--engine-path`,
-`CHESSWHISPER_STOCKFISH_PATH`, and `.env`-provided API keys all work the same
-way as with the CLI. The server binds to localhost only by default and isn't
-intended to be exposed on a public network.
+Open `http://127.0.0.1:8000`: anyone who can reach this address can
+register their own account. Each user sets their own Anthropic/OpenAI API
+key under **Settings** (encrypted at rest, never in an environment
+variable shared across users) and every analysis they run is saved to
+their **History**. The admin account additionally sees an **Admin** page
+listing every registered user, can view any user's history, delete a
+user, or reset a user's password.
+
+This is still a local-only tool: the server binds to `127.0.0.1` by
+default and isn't hardened for or intended to be exposed on the public
+internet (no HTTPS, no rate limiting, no email verification) — the
+threat model is "a few people who already have access to this machine,"
+not the open internet.
 
 ## Development
 
