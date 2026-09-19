@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Giriş{% endblock %}
+{% block content %}
+<div class="card">
+  {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+  <form method="post" action="/login">
+    <label for="username">Kullanıcı adı</label>
+    <input type="text" id="username" name="username" required>
+    <label for="password">Parola</label>
+    <input type="password" id="password" name="password" required>
+    <button type="submit">Giriş Yap</button>
+  </form>
+  <p class="hint" style="margin-top:16px;">Hesabın yok mu? <a href="/register">Kayıt ol</a></p>
+</div>
+{% endblock %}

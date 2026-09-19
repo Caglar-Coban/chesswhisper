@@ -143,16 +143,36 @@
   a { color: var(--accent); }
   .back-link { display: inline-block; margin-top: 24px; font-size: 14px; text-decoration: none; }
   .back-link:hover { text-decoration: underline; }
+  header.site-header { justify-content: space-between; }
+  .nav-links { display: flex; align-items: center; gap: 16px; font-size: 14px; }
+  .nav-links a { text-decoration: none; }
+  .nav-links a:hover { text-decoration: underline; }
+  .link-button {
+    background: none; border: none; padding: 0; margin: 0;
+    color: var(--accent); font-size: 14px; font-weight: 400;
+    cursor: pointer; text-decoration: none;
+  }
+  .link-button:hover { text-decoration: underline; background: none; }
 </style>
 </head>
 <body>
 <div class="page">
   <header class="site-header">
-    <span class="logo">&#9822;</span>
-    <div>
-      <h1>chesswhisper</h1>
-      <p class="tagline">Stockfish + LLM ile satranç analiz ve koçluk aracı</p>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span class="logo">&#9822;</span>
+      <div>
+        <h1>chesswhisper</h1>
+        <p class="tagline">Stockfish + LLM ile satranç analiz ve koçluk aracı</p>
+      </div>
     </div>
+    {% if current_user %}
+    <nav class="nav-links">
+      <a href="/">Analiz</a>
+      <form method="post" action="/logout" style="display:inline; margin:0;">
+        <button type="submit" class="link-button">Çıkış ({{ current_user.username }})</button>
+      </form>
+    </nav>
+    {% endif %}
   </header>
   {% block content %}{% endblock %}
 </div>
