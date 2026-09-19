@@ -16,7 +16,7 @@ from chesswhisper.report_writer import render_markdown
 from chesswhisper.web.auth import Forbidden, RedirectToLogin, get_current_user, get_optional_current_user
 from chesswhisper.web.db import get_db
 from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
-from chesswhisper.web.security import decrypt_api_key, get_session_secret, hash_password, verify_password
+from chesswhisper.web.security import decrypt_api_key, encrypt_api_key, get_session_secret, hash_password, verify_password
 
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=_TEMPLATES_DIR)
@@ -128,6 +128,55 @@ async def login_submit(
 async def logout(request: Request) -> RedirectResponse:
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_form(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    key_row = db.get(UserApiKey, current_user.id)
+    return templates.TemplateResponse(
+        request, "settings.html",
+        {
+            "current_user": current_user,
+            "has_anthropic_key": bool(key_row and key_row.anthropic_key_encrypted),
+            "has_openai_key": bool(key_row and key_row.openai_key_encrypted),
+            "message": "Devam etmeden önce bir API anahtarı gir." if request.query_params.get("message") == "missing_key" else None,
+        },
+    )
+
+
+@app.post("/settings", response_class=HTMLResponse)
+async def settings_submit(
+    request: Request,
+    anthropic_key: str = Form(default=""),
+    openai_key: str = Form(default=""),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    key_row = db.get(UserApiKey, current_user.id)
+    if key_row is None:
+        key_row = UserApiKey(user_id=current_user.id)
+        db.add(key_row)
+
+    if anthropic_key:
+        key_row.anthropic_key_encrypted = encrypt_api_key(anthropic_key)
+    if openai_key:
+        key_row.openai_key_encrypted = encrypt_api_key(openai_key)
+
+    db.commit()
+
+    return templates.TemplateResponse(
+        request, "settings.html",
+        {
+            "current_user": current_user,
+            "has_anthropic_key": bool(key_row.anthropic_key_encrypted),
+            "has_openai_key": bool(key_row.openai_key_encrypted),
+            "message": "Kaydedildi.",
+        },
+    )
 
 
 @app.get("/", response_class=HTMLResponse)

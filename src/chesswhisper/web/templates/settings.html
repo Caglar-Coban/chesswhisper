@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Ayarlar{% endblock %}
+{% block content %}
+<div class="card">
+  {% if message %}<div class="banner warning">{{ message }}</div>{% endif %}
+  <form method="post" action="/settings">
+    <label for="anthropic_key">Anthropic (Claude) API anahtarı</label>
+    <input type="password" id="anthropic_key" name="anthropic_key"
+           placeholder="{% if has_anthropic_key %}•••••••• (kayıtlı, değiştirmek için yeni bir değer gir){% else %}kayıtlı değil{% endif %}">
+
+    <label for="openai_key">OpenAI API anahtarı</label>
+    <input type="password" id="openai_key" name="openai_key"
+           placeholder="{% if has_openai_key %}•••••••• (kayıtlı, değiştirmek için yeni bir değer gir){% else %}kayıtlı değil{% endif %}">
+
+    <p class="hint">Bir alanı boş bırakırsan mevcut kayıtlı anahtar (varsa) değişmeden kalır.</p>
+    <button type="submit">Kaydet</button>
+  </form>
+</div>
+{% endblock %}
