@@ -8,9 +8,11 @@ engine evaluations into natural-language coaching feedback via an LLM
 
 ## Status
 
-Core CLI implemented — see [`docs/superpowers/specs/2026-09-19-chesswhisper-design.md`](docs/superpowers/specs/2026-09-19-chesswhisper-design.md)
-for the full design spec. A web UI is planned; see
-[`docs/superpowers/specs/2026-09-19-chesswhisper-web-ui-design.md`](docs/superpowers/specs/2026-09-19-chesswhisper-web-ui-design.md).
+Both the CLI and a local web UI are implemented — see
+[`docs/superpowers/specs/2026-09-19-chesswhisper-design.md`](docs/superpowers/specs/2026-09-19-chesswhisper-design.md)
+and
+[`docs/superpowers/specs/2026-09-19-chesswhisper-web-ui-design.md`](docs/superpowers/specs/2026-09-19-chesswhisper-web-ui-design.md)
+for the full design specs.
 
 ## Usage
 
@@ -47,6 +49,24 @@ OPENAI_API_KEY=sk-...
 ```
 
 `.env` is already listed in `.gitignore` — never commit it.
+
+## Web UI
+
+For a browser-based alternative to the CLI, install the `web` extra and start
+the server:
+
+```
+pip install -e ".[web]"
+chesswhisper serve --host 127.0.0.1 --port 8000
+```
+
+Then open `http://127.0.0.1:8000` in a browser: upload a `.pgn` file, pick a
+player/language/coaching-provider, and the rendered report appears on the
+same page once analysis finishes (this can take a few minutes for larger
+files — the page shows a loading state while it waits). `--engine-path`,
+`CHESSWHISPER_STOCKFISH_PATH`, and `.env`-provided API keys all work the same
+way as with the CLI. The server binds to localhost only by default and isn't
+intended to be exposed on a public network.
 
 ## Development
 
