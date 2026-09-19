@@ -1,4 +1,7 @@
 import textwrap
+
+import chess.pgn
+
 from chesswhisper.pgn_loader import load_pgn
 
 VALID_SINGLE = textwrap.dedent("""
@@ -70,6 +73,52 @@ def test_skips_malformed_game_and_warns(tmp_path):
     assert result.games[0].headers["Event"] == "Ok"
     assert len(result.warnings) == 1
     assert "0" in result.warnings[0]
+
+
+def test_hard_parse_exception_warns_and_stops_without_crashing(tmp_path, monkeypatch):
+    p = tmp_path / "x.pgn"
+    p.write_text(VALID_SINGLE, encoding="utf-8")
+
+    calls = {"n": 0}
+
+    def flaky_read_game(fh):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            fh.read()  # advance the stream so "no progress" isn't (mis)detected
+            raise ValueError("simulated hard parse failure")
+        return None  # simulate end of file after the failure
+
+    monkeypatch.setattr(chess.pgn, "read_game", flaky_read_game)
+
+    result = load_pgn(str(p))
+
+    assert result.games == []
+    assert len(result.warnings) == 1
+    assert "index 0" in result.warnings[0]
+
+
+def test_hard_parse_exception_continues_to_next_game(tmp_path, monkeypatch):
+    p = tmp_path / "x.pgn"
+    p.write_text(VALID_SINGLE, encoding="utf-8")
+
+    real_read_game = chess.pgn.read_game
+    calls = {"n": 0}
+
+    def flaky_read_game(fh):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            fh.readline()  # advance the stream a little, then fail
+            raise ValueError("simulated hard parse failure")
+        return real_read_game(fh)
+
+    monkeypatch.setattr(chess.pgn, "read_game", flaky_read_game)
+
+    result = load_pgn(str(p))
+
+    assert len(result.warnings) == 1
+    assert "index 0" in result.warnings[0]
+    assert len(result.games) == 1
+    assert result.games[0].headers["White"] == "Alice"
 
 
 def test_missing_file_raises(tmp_path):

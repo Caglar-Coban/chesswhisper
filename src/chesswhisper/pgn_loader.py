@@ -27,12 +27,16 @@ def load_pgn(path: str) -> PgnLoadResult:
     with open(path, encoding="utf-8", errors="replace") as fh:
         index = 0
         while True:
-            offset_before = fh.tell()
+            pos_before = fh.tell()
             try:
                 game = chess.pgn.read_game(fh)
             except (ValueError, UnicodeDecodeError) as exc:
                 warnings.append(f"Game at index {index} could not be parsed: {exc}")
-                break
+                index += 1
+                if fh.tell() == pos_before:
+                    # No progress was made; retrying would loop forever.
+                    break
+                continue
 
             if game is None:
                 break
