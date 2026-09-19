@@ -101,3 +101,17 @@ def test_admin_can_reset_another_users_password(clients):
     db2 = next(get_db())
     alice2 = db2.get(User, alice.id)
     assert verify_password("brand-new-pass", alice2.password_hash)
+
+
+def test_admin_reset_password_rejects_short_password(clients):
+    admin_client, _ = clients
+    db = next(get_db())
+    alice = db.query(User).filter_by(username="alice").one()
+    original_hash = alice.password_hash
+
+    response = admin_client.post(f"/admin/users/{alice.id}/reset-password", data={"new_password": "short"})
+
+    assert response.status_code == 400
+    db2 = next(get_db())
+    alice2 = db2.get(User, alice.id)
+    assert alice2.password_hash == original_hash

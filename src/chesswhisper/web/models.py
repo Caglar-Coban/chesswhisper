@@ -17,10 +17,10 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
-    api_key: Mapped["UserApiKey | None"] = relationship(
+    api_key: Mapped[UserApiKey | None] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
-    analyses: Mapped[list["AnalysisRecord"]] = relationship(
+    analyses: Mapped[list[AnalysisRecord]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 
@@ -33,7 +33,7 @@ class UserApiKey(Base):
     openai_key_encrypted: Mapped[str | None] = mapped_column(Text, default=None)
     updated_at: Mapped[datetime] = mapped_column(default=utcnow)
 
-    user: Mapped["User"] = relationship(back_populates="api_key")
+    user: Mapped[User] = relationship(back_populates="api_key")
 
 
 class AnalysisRecord(Base):
@@ -50,4 +50,4 @@ class AnalysisRecord(Base):
     overall_accuracy: Mapped[float]
     report_markdown: Mapped[str] = mapped_column(Text)
 
-    user: Mapped["User"] = relationship(back_populates="analyses")
+    user: Mapped[User] = relationship(back_populates="analyses")

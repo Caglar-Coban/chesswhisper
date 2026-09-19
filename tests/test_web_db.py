@@ -1,4 +1,4 @@
-from chesswhisper.web.db import init_db, get_db
+from chesswhisper.web.db import get_db, init_db
 from chesswhisper.web.models import User
 
 

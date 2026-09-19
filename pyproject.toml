@@ -53,6 +53,12 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]  # long lines are common in this codebase's report/prompt strings
 
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's dependency injection idiom requires calling Depends(...) as an
+# argument default; this is not the antipattern B008 warns about.
+"src/chesswhisper/web/*.py" = ["B008"]
+"tests/test_web_auth.py" = ["B008"]
+
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true

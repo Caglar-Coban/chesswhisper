@@ -13,10 +13,22 @@ from starlette.responses import RedirectResponse
 from chesswhisper.cli import run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
 from chesswhisper.report_writer import render_markdown
-from chesswhisper.web.auth import Forbidden, RedirectToLogin, get_current_user, get_optional_current_user, require_admin
+from chesswhisper.web.auth import (
+    Forbidden,
+    RedirectToLogin,
+    get_current_user,
+    get_optional_current_user,
+    require_admin,
+)
 from chesswhisper.web.db import get_db
 from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
-from chesswhisper.web.security import decrypt_api_key, encrypt_api_key, get_session_secret, hash_password, verify_password
+from chesswhisper.web.security import (
+    decrypt_api_key,
+    encrypt_api_key,
+    get_session_secret,
+    hash_password,
+    verify_password,
+)
 
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=_TEMPLATES_DIR)
@@ -376,6 +388,9 @@ async def admin_reset_password(
     target = db.get(User, user_id)
     if target is None:
         return _render_error(request, "Kullanıcı bulunamadı.", 404, current_user)
+
+    if len(new_password) < 8:
+        return _render_error(request, "Parola en az 8 karakter olmalı.", 400, current_user)
 
     target.password_hash = hash_password(new_password)
     db.commit()
