@@ -13,10 +13,11 @@ from chesswhisper.report_writer import write_report
 from chesswhisper.stats_engine import build_aggregate_report, build_game_report, detect_player
 
 
-def _open_engine():
+def _open_engine(engine_path=None):
     import chess.engine
+    from chesswhisper.engine_provision import resolve_installed_stockfish
 
-    path = get_stockfish_path()
+    path = resolve_installed_stockfish(engine_path) or get_stockfish_path()
     return chess.engine.SimpleEngine.popen_uci(str(path))
 
 
@@ -45,11 +46,20 @@ def cli():
 @click.option("-o", "--output", "output_path", default="report.md", type=click.Path())
 @click.option("--movetime", default=300, help="Engine think time per position, in milliseconds.")
 @click.option("--depth", default=None, type=int, help="Fixed search depth (overrides --movetime).")
-def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth):
-    output_dir = os.path.dirname(os.path.abspath(output_path)) or "."
-    if not os.access(output_dir, os.W_OK):
-        click.echo(f"Error: cannot write to output directory {output_dir}", err=True)
+@click.option("--engine-path", default=None, help="Path to an existing Stockfish binary (skips auto-download).")
+def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth, engine_path):
+    existed_before = os.path.exists(output_path)
+    try:
+        with open(output_path, "a", encoding="utf-8"):
+            pass
+    except OSError as exc:
+        click.echo(f"Error: cannot write to output path {output_path}: {exc}", err=True)
         sys.exit(1)
+    if not existed_before:
+        try:
+            os.remove(output_path)
+        except OSError:
+            pass
 
     try:
         load_result = load_pgn(pgn_path)
@@ -74,7 +84,7 @@ def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth):
     eco_table = load_eco_table()
 
     try:
-        engine = _open_engine()
+        engine = _open_engine(engine_path=engine_path)
     except StockfishProvisionError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
@@ -101,5 +111,9 @@ def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth):
         except LLMProviderError as exc:
             click.echo(f"Warning: LLM commentary unavailable ({exc}); writing stats-only report.", err=True)
 
-    write_report(aggregate, commentary, lang, output_path)
+    try:
+        write_report(aggregate, commentary, lang, output_path)
+    except OSError as exc:
+        click.echo(f"Error: failed to write report to {output_path}: {exc}", err=True)
+        sys.exit(1)
     click.echo(f"Report written to {output_path}")

@@ -31,7 +31,7 @@ def test_analyze_produces_report_with_none_llm(tmp_path, monkeypatch):
     pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
     output_path = tmp_path / "report.md"
 
-    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda: FakeEngine())
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
 
     runner = CliRunner()
     result = runner.invoke(
@@ -67,7 +67,7 @@ def test_analyze_llm_failure_falls_back_to_stats_only(tmp_path, monkeypatch):
     pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
     output_path = tmp_path / "report.md"
 
-    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda: FakeEngine())
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
 
     def boom(*args, **kwargs):
         from chesswhisper.llm.base import LLMProviderError
@@ -88,12 +88,39 @@ def test_analyze_llm_failure_falls_back_to_stats_only(tmp_path, monkeypatch):
     assert output_path.exists()
 
 
+def test_analyze_unwritable_output_path_fails_fast(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+    # Output path is an existing directory, so opening it for writing must fail.
+    output_path = tmp_path / "report_dir"
+    output_path.mkdir()
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("engine should not be opened when output path is unwritable")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", fail_if_called)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "analyze", str(pgn_path),
+            "--player", "Alice",
+            "--llm", "none",
+            "-o", str(output_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+
+
 def test_analyze_unknown_player_fails_fast(tmp_path, monkeypatch):
     pgn_path = tmp_path / "game.pgn"
     pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
     output_path = tmp_path / "report.md"
 
-    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda: FakeEngine())
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
 
     runner = CliRunner()
     result = runner.invoke(

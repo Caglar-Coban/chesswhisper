@@ -8,6 +8,7 @@ import pytest
 from chesswhisper.engine_provision import (
     asset_name_for_platform,
     get_stockfish_path,
+    resolve_installed_stockfish,
     StockfishProvisionError,
     _find_binary,
     _extract,
@@ -119,3 +120,39 @@ def test_get_stockfish_path_full_cache_miss_flow(tmp_path, mocker):
     if os.name != "nt":
         mode = expected_binary.stat().st_mode
         assert mode & stat.S_IXUSR
+
+
+def test_resolve_installed_stockfish_explicit_path_wins(monkeypatch):
+    monkeypatch.setenv("CHESSWHISPER_STOCKFISH_PATH", "/env/stockfish")
+    monkeypatch.setattr("shutil.which", lambda name: "/path/stockfish")
+
+    result = resolve_installed_stockfish("/explicit/stockfish")
+
+    assert result == "/explicit/stockfish"
+
+
+def test_resolve_installed_stockfish_env_var_wins_when_no_explicit(monkeypatch):
+    monkeypatch.setenv("CHESSWHISPER_STOCKFISH_PATH", "/env/stockfish")
+    monkeypatch.setattr("shutil.which", lambda name: "/path/stockfish")
+
+    result = resolve_installed_stockfish(None)
+
+    assert result == "/env/stockfish"
+
+
+def test_resolve_installed_stockfish_uses_which_when_nothing_else_set(monkeypatch):
+    monkeypatch.delenv("CHESSWHISPER_STOCKFISH_PATH", raising=False)
+    monkeypatch.setattr("shutil.which", lambda name: "/fake/path")
+
+    result = resolve_installed_stockfish(None)
+
+    assert result == "/fake/path"
+
+
+def test_resolve_installed_stockfish_returns_none_when_not_found(monkeypatch):
+    monkeypatch.delenv("CHESSWHISPER_STOCKFISH_PATH", raising=False)
+    monkeypatch.setattr("shutil.which", lambda name: None)
+
+    result = resolve_installed_stockfish(None)
+
+    assert result is None

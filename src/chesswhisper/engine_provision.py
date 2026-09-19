@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 import tarfile
@@ -40,8 +41,22 @@ def asset_name_for_platform(system: str, machine: str) -> str:
 
     raise StockfishProvisionError(
         f"No known Stockfish build for platform system={system!r} machine={machine!r}. "
-        "Install Stockfish manually and point chesswhisper at it."
+        "Install Stockfish manually and point chesswhisper at it via --engine-path or the "
+        "CHESSWHISPER_STOCKFISH_PATH environment variable."
     )
+
+
+def resolve_installed_stockfish(explicit_path: str | None = None) -> str | None:
+    """Returns a path to an already-installed Stockfish, or None if not found.
+
+    Checks, in order: explicit_path, CHESSWHISPER_STOCKFISH_PATH env var, PATH via shutil.which.
+    """
+    if explicit_path:
+        return explicit_path
+    env_path = os.environ.get("CHESSWHISPER_STOCKFISH_PATH")
+    if env_path:
+        return env_path
+    return shutil.which("stockfish")
 
 
 def _download(url: str, dest: Path) -> None:
