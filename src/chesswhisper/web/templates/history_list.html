@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Geçmiş{% endblock %}
+{% block content %}
+<div class="card">
+  {% if viewing_as_admin %}
+  <p class="hint">{{ target_username }} kullanıcısının analiz geçmişini görüntülüyorsun.</p>
+  {% endif %}
+  {% if records %}
+  <table>
+    <thead><tr><th>Tarih</th><th>Oyuncu</th><th>Doğruluk</th><th>ACPL</th><th>Oyun</th><th></th></tr></thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td>{{ r.player_name }}</td>
+        <td>{{ "%.1f"|format(r.overall_accuracy) }}%</td>
+        <td>{{ "%.1f"|format(r.overall_acpl) }}</td>
+        <td>{{ r.games_count }}</td>
+        <td><a href="{{ detail_url_prefix }}/{{ r.id }}">Görüntüle</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Henüz kaydedilmiş bir analiz yok.</p>
+  {% endif %}
+</div>
+{% endblock %}

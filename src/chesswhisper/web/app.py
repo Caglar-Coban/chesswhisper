@@ -179,6 +179,45 @@ async def settings_submit(
     )
 
 
+@app.get("/history", response_class=HTMLResponse)
+async def history_list(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    records = (
+        db.query(AnalysisRecord)
+        .filter_by(user_id=current_user.id)
+        .order_by(AnalysisRecord.created_at.desc())
+        .all()
+    )
+    return templates.TemplateResponse(
+        request, "history_list.html",
+        {
+            "current_user": current_user, "records": records,
+            "detail_url_prefix": "/history", "viewing_as_admin": False,
+        },
+    )
+
+
+@app.get("/history/{record_id}", response_class=HTMLResponse)
+async def history_detail(
+    request: Request,
+    record_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    record = db.get(AnalysisRecord, record_id)
+    if record is None or record.user_id != current_user.id:
+        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+
+    report_html = _report_to_safe_html(record.report_markdown)
+    return templates.TemplateResponse(
+        request, "history_detail.html",
+        {"current_user": current_user, "report_html": report_html, "back_url": "/history"},
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, current_user: User = Depends(get_current_user)) -> HTMLResponse:
     return templates.TemplateResponse(request, "index.html", {"current_user": current_user})

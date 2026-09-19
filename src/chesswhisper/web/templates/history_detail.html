@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Rapor{% endblock %}
+{% block content %}
+<div class="card report">
+  {{ report_html | safe }}
+</div>
+<a class="back-link" href="{{ back_url }}">&larr; Geçmişe dön</a>
+{% endblock %}
