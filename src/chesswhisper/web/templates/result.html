@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}chesswhisper — Rapor{% endblock %}
 {% block content %}
+{% if saved %}
+<p class="hint">Bu analiz geçmişine kaydedildi.</p>
+{% endif %}
 {% if warnings %}
 <div class="banner warning">
   <strong>Uyarılar:</strong>

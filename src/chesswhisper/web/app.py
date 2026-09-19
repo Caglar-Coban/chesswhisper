@@ -15,8 +15,8 @@ from chesswhisper.engine_provision import StockfishProvisionError
 from chesswhisper.report_writer import render_markdown
 from chesswhisper.web.auth import Forbidden, RedirectToLogin, get_current_user, get_optional_current_user
 from chesswhisper.web.db import get_db
-from chesswhisper.web.models import User
-from chesswhisper.web.security import get_session_secret, hash_password, verify_password
+from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
+from chesswhisper.web.security import decrypt_api_key, get_session_secret, hash_password, verify_password
 
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=_TEMPLATES_DIR)
@@ -44,15 +44,17 @@ async def _forbidden_handler(request: Request, exc: Forbidden) -> HTMLResponse:
     return _render_error(request, "Bu sayfaya erişim yetkiniz yok.", 403)
 
 
-def _render_error(request: Request, message: str, status_code: int) -> HTMLResponse:
+def _render_error(
+    request: Request, message: str, status_code: int, current_user: User | None = None
+) -> HTMLResponse:
     return templates.TemplateResponse(
-        request, "error.html", {"message": message}, status_code=status_code
+        request, "error.html", {"message": message, "current_user": current_user}, status_code=status_code
     )
 
 
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> HTMLResponse:
-    return _render_error(request, "Beklenmeyen bir hata oluştu.", 500)
+    return _render_error(request, "Beklenmeyen bir hata oluştu.", 500, None)
 
 
 def _report_to_safe_html(report_markdown: str) -> str:
@@ -129,8 +131,8 @@ async def logout(request: Request) -> RedirectResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "index.html", {})
+async def index(request: Request, current_user: User = Depends(get_current_user)) -> HTMLResponse:
+    return templates.TemplateResponse(request, "index.html", {"current_user": current_user})
 
 
 @app.post("/analyze", response_class=HTMLResponse)
@@ -140,12 +142,23 @@ async def analyze(
     player: str = Form(default=""),
     lang: str = Form(default="tr"),
     llm: str = Form(default="none"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> HTMLResponse:
     if pgn is None or not pgn.filename:
-        return _render_error(request, "Lütfen analiz edilecek bir PGN dosyası seçin.", 400)
+        return _render_error(request, "Lütfen analiz edilecek bir PGN dosyası seçin.", 400, current_user)
+
+    llm_api_key = None
+    if llm != "none":
+        key_row = db.get(UserApiKey, current_user.id)
+        encrypted = None
+        if key_row is not None:
+            encrypted = key_row.anthropic_key_encrypted if llm == "claude" else key_row.openai_key_encrypted
+        if not encrypted:
+            return RedirectResponse("/settings?message=missing_key", status_code=303)
+        llm_api_key = decrypt_api_key(encrypted)
 
     contents = await pgn.read()
-
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".pgn", delete=False) as tmp:
@@ -154,19 +167,34 @@ async def analyze(
 
         try:
             aggregate, commentary, warnings = run_analysis(
-                tmp_path, player or None, lang, llm
+                tmp_path, player or None, lang, llm, llm_api_key=llm_api_key
             )
         except (OSError, ValueError) as exc:
-            return _render_error(request, str(exc), 400)
+            return _render_error(request, str(exc), 400, current_user)
         except StockfishProvisionError as exc:
-            return _render_error(request, f"Motor kurulum hatası: {exc}", 500)
+            return _render_error(request, f"Motor kurulum hatası: {exc}", 500, current_user)
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
     report_markdown = render_markdown(aggregate, commentary, lang)
+
+    record = AnalysisRecord(
+        user_id=current_user.id,
+        player_name=aggregate.player,
+        lang=lang,
+        llm_used=llm,
+        games_count=len(aggregate.games),
+        overall_acpl=aggregate.overall_acpl,
+        overall_accuracy=aggregate.overall_accuracy,
+        report_markdown=report_markdown,
+    )
+    db.add(record)
+    db.commit()
+
     report_html = _report_to_safe_html(report_markdown)
 
     return templates.TemplateResponse(
-        request, "result.html", {"report_html": report_html, "warnings": warnings}
+        request, "result.html",
+        {"report_html": report_html, "warnings": warnings, "current_user": current_user, "saved": True},
     )

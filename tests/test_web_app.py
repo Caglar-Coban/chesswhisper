@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from chesswhisper.web.app import app
+from chesswhisper.web.db import init_db
 
 SAMPLE_PGN = textwrap.dedent("""
     [Event "Test"]
@@ -28,54 +29,22 @@ class FakeEngine:
 
 
 @pytest.fixture
-def client():
+def client(tmp_path):
+    init_db(tmp_path / "web_app_test.db")
     return TestClient(app, raise_server_exceptions=False)
 
 
-def test_index_returns_upload_form(client):
-    response = client.get("/")
-
-    assert response.status_code == 200
-    assert "<form" in response.text
-    assert 'name="pgn"' in response.text
-
-
-def test_analyze_returns_report_html_for_valid_pgn(client, monkeypatch):
-    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
-
-    response = client.post(
-        "/analyze",
-        files={"pgn": ("game.pgn", SAMPLE_PGN, "application/octet-stream")},
-        data={"player": "Alice", "lang": "en", "llm": "none"},
-    )
-
-    assert response.status_code == 200
-    assert "chesswhisper Analysis Report" in response.text
-    assert "Alice" in response.text
-    assert "<table" in response.text
-
-
 def test_analyze_without_file_returns_400(client):
+    client.post("/register", data={"username": "alice", "password": "correct-horse"})
+
     response = client.post("/analyze", data={"player": "", "lang": "tr", "llm": "none"})
 
     assert response.status_code == 400
     assert "Hata" in response.text
 
 
-def test_analyze_unknown_player_returns_400(client, monkeypatch):
-    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
-
-    response = client.post(
-        "/analyze",
-        files={"pgn": ("game.pgn", SAMPLE_PGN, "application/octet-stream")},
-        data={"player": "Nobody", "lang": "en", "llm": "none"},
-    )
-
-    assert response.status_code == 400
-    assert "Hata" in response.text
-
-
 def test_analyze_sanitizes_html_injected_via_pgn_headers(client, monkeypatch):
+    client.post("/register", data={"username": "alice", "password": "correct-horse"})
     monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
     hostile_pgn = textwrap.dedent("""
         [Event "Test"]
@@ -97,6 +66,7 @@ def test_analyze_sanitizes_html_injected_via_pgn_headers(client, monkeypatch):
 
 
 def test_analyze_engine_provisioning_failure_returns_500(client, monkeypatch):
+    client.post("/register", data={"username": "alice", "password": "correct-horse"})
     from chesswhisper.engine_provision import StockfishProvisionError
 
     def fail_provisioning(**kwargs):

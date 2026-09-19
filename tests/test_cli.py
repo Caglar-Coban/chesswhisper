@@ -105,7 +105,7 @@ def test_analyze_llm_failure_falls_back_to_stats_only(tmp_path, monkeypatch):
         from chesswhisper.llm.base import LLMProviderError
         raise LLMProviderError("no key")
 
-    monkeypatch.setattr("chesswhisper.cli._build_llm_provider", lambda name: type(
+    monkeypatch.setattr("chesswhisper.cli._build_llm_provider", lambda name, api_key=None: type(
         "P", (), {"generate_commentary": staticmethod(boom)}
     )())
 
@@ -297,7 +297,7 @@ def test_run_analysis_collects_skip_and_llm_warnings_instead_of_printing(tmp_pat
         from chesswhisper.llm.base import LLMProviderError
         raise LLMProviderError("no key")
 
-    monkeypatch.setattr("chesswhisper.cli._build_llm_provider", lambda name: type(
+    monkeypatch.setattr("chesswhisper.cli._build_llm_provider", lambda name, api_key=None: type(
         "P", (), {"generate_commentary": staticmethod(boom)}
     )())
 
@@ -307,3 +307,25 @@ def test_run_analysis_collects_skip_and_llm_warnings_instead_of_printing(tmp_pat
     assert commentary == ""
     assert any("skipped" in w.lower() for w in warnings)
     assert any("no key" in w for w in warnings)
+
+
+def test_run_analysis_passes_explicit_api_key_to_provider(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    captured = {}
+
+    class FakeProvider:
+        def __init__(self, api_key=None):
+            captured["api_key"] = api_key
+
+        def generate_commentary(self, report, lang):
+            return "ok"
+
+    monkeypatch.setattr("chesswhisper.llm.claude_provider.ClaudeProvider", FakeProvider)
+
+    run_analysis(str(pgn_path), "Alice", "en", "claude", llm_api_key="sk-explicit-key")
+
+    assert captured["api_key"] == "sk-explicit-key"

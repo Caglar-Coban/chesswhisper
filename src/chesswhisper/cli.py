@@ -26,15 +26,15 @@ def _open_engine(engine_path=None):
         raise StockfishProvisionError(f"Failed to start Stockfish at {path}: {exc}") from exc
 
 
-def _build_llm_provider(name: str):
+def _build_llm_provider(name: str, api_key: str | None = None):
     if name == "none":
         return NoneProvider()
     if name == "claude":
         from chesswhisper.llm.claude_provider import ClaudeProvider
-        return ClaudeProvider()
+        return ClaudeProvider(api_key=api_key)
     if name == "openai":
         from chesswhisper.llm.openai_provider import OpenAIProvider
-        return OpenAIProvider()
+        return OpenAIProvider(api_key=api_key)
     raise ValueError(f"Unknown LLM provider: {name}")
 
 
@@ -46,6 +46,7 @@ def run_analysis(
     movetime=300,
     depth=None,
     engine_path=None,
+    llm_api_key=None,
 ):
     """Runs the full analysis pipeline and returns (aggregate_report, commentary, warnings).
 
@@ -54,6 +55,10 @@ def run_analysis(
     (the CLI, the web UI) decide how to present these. LLM failures are caught
     internally and folded into the returned `warnings` list with an empty
     `commentary` instead of raising.
+
+    llm_api_key, if given, is passed straight to the chosen LLM provider
+    instead of letting it fall back to reading from the environment --
+    used by the web UI to supply a specific logged-in user's own key.
     """
     warnings = []
 
@@ -96,7 +101,7 @@ def run_analysis(
     commentary = ""
     if llm_name != "none":
         try:
-            provider = _build_llm_provider(llm_name)
+            provider = _build_llm_provider(llm_name, api_key=llm_api_key)
             commentary = provider.generate_commentary(aggregate, lang)
         except LLMProviderError as exc:
             warnings.append(f"LLM commentary unavailable ({exc}); writing stats-only report.")
