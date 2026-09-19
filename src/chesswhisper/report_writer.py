@@ -18,6 +18,20 @@ def _errors_table(errors_by_phase: dict, lang: str) -> str:
     return "\n".join(lines)
 
 
+def _time_management_lines(tm, lang: str) -> list[str]:
+    lines = []
+    if tm.available:
+        low_rate = tm.low_time_error_rate
+        normal_rate = tm.normal_time_error_rate
+        low_str = f"{low_rate:.1%}" if low_rate is not None else t("not_enough_data", lang)
+        normal_str = f"{normal_rate:.1%}" if normal_rate is not None else t("not_enough_data", lang)
+        lines.append(f"- {t('low_time_error_rate', lang)}: {low_str}")
+        lines.append(f"- {t('normal_time_error_rate', lang)}: {normal_str}")
+    else:
+        lines.append(t("time_management_unavailable", lang))
+    return lines
+
+
 def render_markdown(report, commentary: str, lang: str) -> str:
     parts = [f"# {t('report_title', lang)}", ""]
     parts.append(f"**{t('player', lang)}:** {report.player}")
@@ -38,15 +52,7 @@ def render_markdown(report, commentary: str, lang: str) -> str:
     parts.append("")
 
     parts.append(f"## {t('time_management', lang)}")
-    if report.time_management.available:
-        low_rate = report.time_management.low_time_error_rate
-        normal_rate = report.time_management.normal_time_error_rate
-        low_str = f"{low_rate:.1%}" if low_rate is not None else t("not_enough_data", lang)
-        normal_str = f"{normal_rate:.1%}" if normal_rate is not None else t("not_enough_data", lang)
-        parts.append(f"- {t('low_time_error_rate', lang)}: {low_str}")
-        parts.append(f"- {t('normal_time_error_rate', lang)}: {normal_str}")
-    else:
-        parts.append(t("time_management_unavailable", lang))
+    parts.extend(_time_management_lines(report.time_management, lang))
     parts.append("")
 
     parts.append(f"## {t('coaching_commentary', lang)}")
@@ -62,6 +68,11 @@ def render_markdown(report, commentary: str, lang: str) -> str:
         parts.append(f"- {game.opening_name} ({game.eco})")
         parts.append(f"- {t('acpl', lang)}: {game.your_stats.acpl:.1f}")
         parts.append(f"- {t('accuracy', lang)}: {game.your_stats.accuracy:.1f}%")
+        game_errors_table = _errors_table(game.your_stats.errors_by_phase, lang)
+        parts.append(f"**{t('errors_by_phase', lang)}:**")
+        parts.append(game_errors_table)
+        parts.append(f"**{t('time_management', lang)}:**")
+        parts.extend(_time_management_lines(game.time_management, lang))
         if game.top_mistakes:
             parts.append(f"- {t('top_mistakes', lang)}: " + ", ".join(m.move_san for m in game.top_mistakes))
         parts.append("")

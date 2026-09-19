@@ -15,7 +15,7 @@ def _sample_report():
         game_index=0, your_color="white", opponent="Bob", result="win",
         your_stats=your_stats, opponent_stats=opp_stats,
         eco="C60", opening_name="Ruy Lopez",
-        time_management=TimeManagementStats(available=False),
+        time_management=TimeManagementStats(available=True, low_time_error_rate=0.25, normal_time_error_rate=0.05),
         top_mistakes=[],
     )
 
@@ -50,6 +50,21 @@ def test_write_report_creates_file(tmp_path):
 
     assert out.exists()
     assert "Hi." in out.read_text(encoding="utf-8")
+
+
+def test_render_markdown_includes_per_game_errors_by_phase_and_time_management():
+    md = render_markdown(_sample_report(), commentary="Test comment.", lang="en")
+
+    # Per-game breakdown section should exist and contain both the errors-by-phase
+    # table (with the game's middlegame blunder count) and the time-management rates.
+    per_game_section = md[md.index("### 1."):]
+
+    assert "**Errors by Phase:**" in per_game_section
+    # the game's middlegame blunder count of 1 should appear in the per-game table
+    assert "| Middlegame | 0 | 0 | 1 |" in per_game_section
+    assert "**Time Management:**" in per_game_section
+    assert "25.0%" in per_game_section
+    assert "5.0%" in per_game_section
 
 
 def test_render_markdown_handles_partial_time_management_data():
