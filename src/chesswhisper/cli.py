@@ -74,7 +74,7 @@ def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth, engi
 
     try:
         load_result = load_pgn(pgn_path)
-    except FileNotFoundError as exc:
+    except OSError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
@@ -100,9 +100,15 @@ def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth, engi
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
+    skipped_for_player = 0
     try:
         game_reports = []
         for loaded in load_result.games:
+            white = loaded.headers.get("White", "")
+            black = loaded.headers.get("Black", "")
+            if player not in (white, black):
+                skipped_for_player += 1
+                continue
             evals = analyze_game(loaded.game, engine, movetime_ms=movetime, depth=depth)
             game_reports.append(build_game_report(loaded, evals, player, eco_table))
     except ValueError as exc:
@@ -111,6 +117,16 @@ def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth, engi
     finally:
         if hasattr(engine, "quit"):
             engine.quit()
+
+    if skipped_for_player:
+        click.echo(
+            f"Warning: skipped {skipped_for_player} game(s) not featuring player {player!r}.",
+            err=True,
+        )
+
+    if not game_reports:
+        click.echo(f"Error: no games featuring player {player!r} were found in {pgn_path}", err=True)
+        sys.exit(1)
 
     aggregate = build_aggregate_report(player, game_reports)
 

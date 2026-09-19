@@ -21,7 +21,7 @@ class FakeEngine:
         self._scores = [0, 20, 10, 15]
         self._i = 0
 
-    def analyse(self, board, limit):
+    def analyse(self, board, limit, **kwargs):
         import chess.engine
         cp = self._scores[self._i % len(self._scores)]
         self._i += 1
@@ -52,6 +52,22 @@ def test_analyze_produces_report_with_none_llm(tmp_path, monkeypatch):
     content = output_path.read_text(encoding="utf-8")
     assert "chesswhisper Analysis Report" in content
     assert "Alice" in content
+
+
+def test_analyze_pgn_permission_error_fails_cleanly(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+
+    def raise_permission_error(path):
+        raise PermissionError(f"cannot read {path}")
+
+    monkeypatch.setattr("chesswhisper.cli.load_pgn", raise_permission_error)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["analyze", str(pgn_path), "--llm", "none"])
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
 
 
 def test_analyze_missing_pgn_file_fails_fast(tmp_path):
@@ -160,6 +176,52 @@ def test_analyze_unknown_player_fails_fast(tmp_path, monkeypatch):
             "--llm", "none",
             "-o", str(output_path),
         ],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert not output_path.exists()
+
+
+MULTI_GAME_PGN = SAMPLE_PGN + "\n" + textwrap.dedent("""
+    [Event "Unrelated"]
+    [White "Carol"]
+    [Black "Dave"]
+    [Result "1-0"]
+
+    1. d4 d5 1-0
+""").strip() + "\n"
+
+
+def test_analyze_skips_games_not_featuring_player_without_aborting(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "games.pgn"
+    pgn_path.write_text(MULTI_GAME_PGN, encoding="utf-8")
+    output_path = tmp_path / "report.md"
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["analyze", str(pgn_path), "--player", "Alice", "--llm", "none", "-o", str(output_path)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "skipped" in result.output.lower()
+    assert output_path.exists()
+
+
+def test_analyze_no_games_feature_player_fails_cleanly(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "games.pgn"
+    pgn_path.write_text(MULTI_GAME_PGN, encoding="utf-8")
+    output_path = tmp_path / "report.md"
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["analyze", str(pgn_path), "--player", "Zara", "--llm", "none", "-o", str(output_path)],
     )
 
     assert result.exit_code != 0
