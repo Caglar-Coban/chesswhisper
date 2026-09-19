@@ -29,7 +29,7 @@ def build_prompt(report, lang: str) -> str:
         for mistake in game.top_mistakes:
             lines.append(
                 f"  Game {game.game_index + 1}, move {mistake.move_san} (ply {mistake.ply}): "
-                f"lost {mistake.cp_before - mistake.cp_after} cp"
+                f"lost {mistake.cp_before - mistake.cp_after} cp, resulting position FEN: {mistake.fen_after}"
             )
 
     instruction = _LANG_INSTRUCTION[lang]
