@@ -20,6 +20,13 @@ def test_match_prefers_longest_match():
     assert result.eco == "C65"
 
 
+def test_match_bare_e4_has_a_catch_all_entry():
+    table = load_eco_table()
+    result = match_opening(["e4"], table)
+    assert result.eco != "A00"  # a real entry, not the UNKNOWN_OPENING fallback
+    assert result.moves == ("e4",)
+
+
 def test_match_falls_back_to_unknown():
     table = load_eco_table()
     result = match_opening(["a3", "a6", "a4", "a5"], table)

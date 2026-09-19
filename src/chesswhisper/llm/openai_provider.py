@@ -3,7 +3,7 @@ import os
 import openai
 
 from chesswhisper.llm.base import LLMProvider, LLMProviderError
-from chesswhisper.llm.claude_provider import build_prompt
+from chesswhisper.llm.prompt import build_prompt
 
 
 class OpenAIProvider(LLMProvider):
