@@ -43,7 +43,7 @@ _ALLOWED_TAGS = [
 _ALLOWED_ATTRS = {"a": ["href"]}
 
 app = FastAPI(title="chesswhisper")
-app.add_middleware(SessionMiddleware, secret_key=get_session_secret())
+app.add_middleware(SessionMiddleware, secret_key=get_session_secret().hex())
 
 
 @app.exception_handler(RedirectToLogin)
@@ -74,20 +74,22 @@ def _report_to_safe_html(report_markdown: str) -> str:
     return bleach.clean(raw_html, tags=_ALLOWED_TAGS, attributes=_ALLOWED_ATTRS, strip=True)
 
 
-@app.get("/register", response_class=HTMLResponse)
-async def register_form(request: Request, current_user: User | None = Depends(get_optional_current_user)) -> HTMLResponse:
+@app.get("/register", response_class=HTMLResponse, response_model=None)
+async def register_form(
+    request: Request, current_user: User | None = Depends(get_optional_current_user)
+) -> HTMLResponse | RedirectResponse:
     if current_user is not None:
         return RedirectResponse("/", status_code=303)
     return templates.TemplateResponse(request, "register.html", {"current_user": None})
 
 
-@app.post("/register", response_class=HTMLResponse)
+@app.post("/register", response_class=HTMLResponse, response_model=None)
 async def register_submit(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
-) -> HTMLResponse:
+) -> HTMLResponse | RedirectResponse:
     if len(password) < 8:
         return templates.TemplateResponse(
             request, "register.html",
@@ -110,20 +112,22 @@ async def register_submit(
     return RedirectResponse("/", status_code=303)
 
 
-@app.get("/login", response_class=HTMLResponse)
-async def login_form(request: Request, current_user: User | None = Depends(get_optional_current_user)) -> HTMLResponse:
+@app.get("/login", response_class=HTMLResponse, response_model=None)
+async def login_form(
+    request: Request, current_user: User | None = Depends(get_optional_current_user)
+) -> HTMLResponse | RedirectResponse:
     if current_user is not None:
         return RedirectResponse("/", status_code=303)
     return templates.TemplateResponse(request, "login.html", {"current_user": None})
 
 
-@app.post("/login", response_class=HTMLResponse)
+@app.post("/login", response_class=HTMLResponse, response_model=None)
 async def login_submit(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
-) -> HTMLResponse:
+) -> HTMLResponse | RedirectResponse:
     user = db.query(User).filter_by(username=username).first()
     if user is None or not verify_password(password, user.password_hash):
         return templates.TemplateResponse(
@@ -235,7 +239,7 @@ async def index(request: Request, current_user: User = Depends(get_current_user)
     return templates.TemplateResponse(request, "index.html", {"current_user": current_user})
 
 
-@app.post("/analyze", response_class=HTMLResponse)
+@app.post("/analyze", response_class=HTMLResponse, response_model=None)
 async def analyze(
     request: Request,
     pgn: UploadFile | None = File(default=None),  # noqa: B008 - FastAPI's own idiom
@@ -244,7 +248,7 @@ async def analyze(
     llm: str = Form(default="none"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> HTMLResponse:
+) -> HTMLResponse | RedirectResponse:
     if pgn is None or not pgn.filename:
         return _render_error(request, "Lütfen analiz edilecek bir PGN dosyası seçin.", 400, current_user)
 
