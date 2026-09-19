@@ -13,8 +13,15 @@
         <td>{{ u.created_at.strftime("%Y-%m-%d") }}</td>
         <td>
           <a href="/admin/users/{{ u.id }}">Geçmişi gör</a>
+          <form method="post" action="/admin/users/{{ u.id }}/reset-password" style="display:inline; margin-left:8px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="password" name="new_password" placeholder="yeni parola" minlength="8" required
+                   style="width:120px; padding:4px 6px; font-size:13px;">
+            <button type="submit" class="link-button">Sıfırla</button>
+          </form>
           {% if u.id != current_user.id %}
           <form method="post" action="/admin/users/{{ u.id }}/delete" style="display:inline; margin-left:8px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="link-button">Sil</button>
           </form>
           {% endif %}

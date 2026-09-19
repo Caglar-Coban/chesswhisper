@@ -16,7 +16,15 @@
         <td>{{ "%.1f"|format(r.overall_accuracy) }}%</td>
         <td>{{ "%.1f"|format(r.overall_acpl) }}</td>
         <td>{{ r.games_count }}</td>
-        <td><a href="{{ detail_url_prefix }}/{{ r.id }}">Görüntüle</a></td>
+        <td>
+          <a href="{{ detail_url_prefix }}/{{ r.id }}">Görüntüle</a>
+          {% if not viewing_as_admin %}
+          <form method="post" action="/history/{{ r.id }}/delete" style="display:inline; margin-left:8px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="link-button">Sil</button>
+          </form>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

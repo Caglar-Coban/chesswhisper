@@ -1,5 +1,5 @@
 import pytest
-from fastapi.testclient import TestClient
+from conftest import CsrfClient
 
 from chesswhisper.web.app import app
 from chesswhisper.web.db import get_db, init_db
@@ -10,7 +10,7 @@ from chesswhisper.web.security import verify_password
 @pytest.fixture
 def clients(tmp_path):
     init_db(tmp_path / "admin_test.db")
-    admin_client = TestClient(app, follow_redirects=False)
+    admin_client = CsrfClient(app, follow_redirects=False)
     admin_client.post("/register", data={"username": "root", "password": "correct-horse"})
 
     db = next(get_db())
@@ -18,7 +18,7 @@ def clients(tmp_path):
     root.is_admin = True
     db.commit()
 
-    plain_client = TestClient(app, follow_redirects=False)
+    plain_client = CsrfClient(app, follow_redirects=False)
     plain_client.post("/register", data={"username": "alice", "password": "correct-horse"})
 
     return admin_client, plain_client
@@ -40,6 +40,16 @@ def test_admin_route_lists_all_users(clients):
     assert response.status_code == 200
     assert "root" in response.text
     assert "alice" in response.text
+
+
+def test_admin_route_shows_reset_password_form_for_each_user(clients):
+    admin_client, _ = clients
+
+    response = admin_client.get("/admin")
+
+    assert response.status_code == 200
+    assert "/admin/users/" in response.text and "/reset-password" in response.text
+    assert 'name="new_password"' in response.text
 
 
 def test_admin_can_view_another_users_history(clients):

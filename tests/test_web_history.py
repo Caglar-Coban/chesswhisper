@@ -1,5 +1,5 @@
 import pytest
-from fastapi.testclient import TestClient
+from conftest import CsrfClient
 
 from chesswhisper.web.app import app
 from chesswhisper.web.db import get_db, init_db
@@ -10,7 +10,7 @@ from chesswhisper.web.security import hash_password
 @pytest.fixture
 def client(tmp_path):
     init_db(tmp_path / "history_test.db")
-    c = TestClient(app, follow_redirects=False)
+    c = CsrfClient(app, follow_redirects=False)
     c.post("/register", data={"username": "alice", "password": "correct-horse"})
     return c
 
@@ -31,7 +31,7 @@ def _seed_record(username: str, player_name: str) -> int:
 
 def test_history_redirects_when_logged_out(tmp_path):
     init_db(tmp_path / "history_logged_out.db")
-    client = TestClient(app, follow_redirects=False)
+    client = CsrfClient(app, follow_redirects=False)
 
     response = client.get("/history")
 
@@ -64,6 +64,30 @@ def test_history_detail_renders_stored_report(client):
     assert response.status_code == 200
     assert "Test Report" in response.text
     assert "Hello." in response.text
+
+
+def test_can_delete_own_history_record(client):
+    record_id = _seed_record("alice", "Alice")
+
+    response = client.post(f"/history/{record_id}/delete")
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/history"
+    assert client.get(f"/history/{record_id}").status_code == 404
+
+
+def test_cannot_delete_another_users_history_record(client):
+    db = next(get_db())
+    bob = User(username="bob", password_hash=hash_password("correct-horse"), is_admin=False)
+    db.add(bob)
+    db.commit()
+    bob_record_id = _seed_record("bob", "Bob")
+
+    response = client.post(f"/history/{bob_record_id}/delete")
+
+    assert response.status_code == 404
+    db2 = next(get_db())
+    assert db2.get(AnalysisRecord, bob_record_id) is not None
 
 
 def test_history_detail_404s_for_another_users_record(client):

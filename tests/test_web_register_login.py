@@ -1,5 +1,5 @@
 import pytest
-from fastapi.testclient import TestClient
+from conftest import CsrfClient
 
 from chesswhisper.web.app import app
 from chesswhisper.web.db import init_db
@@ -8,7 +8,7 @@ from chesswhisper.web.db import init_db
 @pytest.fixture
 def client(tmp_path):
     init_db(tmp_path / "register_login_test.db")
-    return TestClient(app, follow_redirects=False)
+    return CsrfClient(app, follow_redirects=False)
 
 
 def test_register_creates_user_and_logs_in(client):
@@ -55,6 +55,36 @@ def test_login_with_wrong_password_fails(client):
 
     assert response.status_code == 200
     assert "hata" in response.text.lower() or "incorrect" in response.text.lower() or "yanlış" in response.text.lower()
+
+
+def test_login_locks_account_after_five_failed_attempts(client):
+    client.post("/register", data={"username": "alice", "password": "correct-horse"})
+    client.post("/logout")
+
+    for _ in range(5):
+        client.post("/login", data={"username": "alice", "password": "wrong-password"})
+
+    response = client.post("/login", data={"username": "alice", "password": "correct-horse"})
+
+    assert response.status_code == 200
+    assert "kilit" in response.text.lower() or "locked" in response.text.lower()
+
+
+def test_login_resets_failed_attempts_after_success(client):
+    client.post("/register", data={"username": "alice", "password": "correct-horse"})
+    client.post("/logout")
+
+    for _ in range(3):
+        client.post("/login", data={"username": "alice", "password": "wrong-password"})
+    client.post("/login", data={"username": "alice", "password": "correct-horse"})
+    client.post("/logout")
+
+    for _ in range(3):
+        client.post("/login", data={"username": "alice", "password": "wrong-password"})
+    response = client.post("/login", data={"username": "alice", "password": "correct-horse"})
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
 
 
 def test_logout_clears_session(client):

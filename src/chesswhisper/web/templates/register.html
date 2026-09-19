@@ -4,6 +4,7 @@
 <div class="card">
   {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
   <form method="post" action="/register">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label for="username">Kullanıcı adı</label>
     <input type="text" id="username" name="username" required>
     <label for="password">Parola</label>

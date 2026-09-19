@@ -2,7 +2,7 @@ import textwrap
 
 import chess.engine
 import pytest
-from fastapi.testclient import TestClient
+from conftest import CsrfClient
 
 from chesswhisper.web.app import app
 from chesswhisper.web.db import init_db
@@ -31,7 +31,7 @@ class FakeEngine:
 @pytest.fixture
 def client(tmp_path):
     init_db(tmp_path / "web_app_test.db")
-    return TestClient(app, raise_server_exceptions=False)
+    return CsrfClient(app, raise_server_exceptions=False)
 
 
 def test_analyze_without_file_returns_400(client):

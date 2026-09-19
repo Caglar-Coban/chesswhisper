@@ -1,5 +1,6 @@
 import os
 import tempfile
+from datetime import timedelta
 
 import bleach
 import markdown as markdown_lib
@@ -16,11 +17,13 @@ from chesswhisper.report_writer import render_markdown
 from chesswhisper.web.auth import (
     Forbidden,
     RedirectToLogin,
+    get_csrf_token,
     get_current_user,
     get_optional_current_user,
     require_admin,
+    verify_csrf,
 )
-from chesswhisper.web.db import get_db
+from chesswhisper.web.db import get_db, utcnow
 from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
 from chesswhisper.web.security import (
     decrypt_api_key,
@@ -29,6 +32,16 @@ from chesswhisper.web.security import (
     hash_password,
     verify_password,
 )
+
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_MINUTES = 15
+
+
+def _naive_utcnow():
+    # SQLite round-trips DateTime columns as naive, so lockout comparisons
+    # must use a naive "now" too, or aware/naive comparison raises TypeError.
+    return utcnow().replace(tzinfo=None)
+
 
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=_TEMPLATES_DIR)
@@ -56,12 +69,16 @@ async def _forbidden_handler(request: Request, exc: Forbidden) -> HTMLResponse:
     return _render_error(request, "Bu sayfaya erişim yetkiniz yok.", 403)
 
 
+def _render(request: Request, template_name: str, context: dict, status_code: int = 200) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request, template_name, {**context, "csrf_token": get_csrf_token(request)}, status_code=status_code
+    )
+
+
 def _render_error(
     request: Request, message: str, status_code: int, current_user: User | None = None
 ) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request, "error.html", {"message": message, "current_user": current_user}, status_code=status_code
-    )
+    return _render(request, "error.html", {"message": message, "current_user": current_user}, status_code)
 
 
 @app.exception_handler(Exception)
@@ -80,7 +97,7 @@ async def register_form(
 ) -> HTMLResponse | RedirectResponse:
     if current_user is not None:
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse(request, "register.html", {"current_user": None})
+    return _render(request, "register.html", {"current_user": None})
 
 
 @app.post("/register", response_class=HTMLResponse, response_model=None)
@@ -89,18 +106,17 @@ async def register_submit(
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
     if len(password) < 8:
-        return templates.TemplateResponse(
+        return _render(
             request, "register.html",
             {"current_user": None, "error": "Parola en az 8 karakter olmalı."},
-            status_code=200,
         )
     if db.query(User).filter_by(username=username).first() is not None:
-        return templates.TemplateResponse(
+        return _render(
             request, "register.html",
             {"current_user": None, "error": "Bu kullanıcı adı zaten kayıtlı."},
-            status_code=200,
         )
 
     user = User(username=username, password_hash=hash_password(password), is_admin=False)
@@ -118,7 +134,7 @@ async def login_form(
 ) -> HTMLResponse | RedirectResponse:
     if current_user is not None:
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"current_user": None})
+    return _render(request, "login.html", {"current_user": None})
 
 
 @app.post("/login", response_class=HTMLResponse, response_model=None)
@@ -127,21 +143,41 @@ async def login_submit(
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
     user = db.query(User).filter_by(username=username).first()
+
+    if user is not None and user.locked_until is not None and user.locked_until > _naive_utcnow():
+        remaining_minutes = max(1, int((user.locked_until - _naive_utcnow()).total_seconds() // 60) + 1)
+        return _render(
+            request, "login.html",
+            {
+                "current_user": None,
+                "error": f"Hesap kilitlendi. {remaining_minutes} dakika sonra tekrar dene.",
+            },
+        )
+
     if user is None or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse(
+        if user is not None:
+            user.failed_login_attempts += 1
+            if user.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
+                user.locked_until = _naive_utcnow() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+            db.commit()
+        return _render(
             request, "login.html",
             {"current_user": None, "error": "Kullanıcı adı veya parola yanlış."},
-            status_code=200,
         )
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    db.commit()
 
     request.session["user_id"] = user.id
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/logout")
-async def logout(request: Request) -> RedirectResponse:
+async def logout(request: Request, _csrf: None = Depends(verify_csrf)) -> RedirectResponse:
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 
@@ -153,7 +189,7 @@ async def settings_form(
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     key_row = db.get(UserApiKey, current_user.id)
-    return templates.TemplateResponse(
+    return _render(
         request, "settings.html",
         {
             "current_user": current_user,
@@ -171,6 +207,7 @@ async def settings_submit(
     openai_key: str = Form(default=""),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse:
     key_row = db.get(UserApiKey, current_user.id)
     if key_row is None:
@@ -184,7 +221,7 @@ async def settings_submit(
 
     db.commit()
 
-    return templates.TemplateResponse(
+    return _render(
         request, "settings.html",
         {
             "current_user": current_user,
@@ -207,7 +244,7 @@ async def history_list(
         .order_by(AnalysisRecord.created_at.desc())
         .all()
     )
-    return templates.TemplateResponse(
+    return _render(
         request, "history_list.html",
         {
             "current_user": current_user, "records": records,
@@ -228,15 +265,32 @@ async def history_detail(
         return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
 
     report_html = _report_to_safe_html(record.report_markdown)
-    return templates.TemplateResponse(
+    return _render(
         request, "history_detail.html",
         {"current_user": current_user, "report_html": report_html, "back_url": "/history"},
     )
 
 
+@app.post("/history/{record_id}/delete", response_model=None)
+async def history_delete(
+    record_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse | RedirectResponse:
+    record = db.get(AnalysisRecord, record_id)
+    if record is None or record.user_id != current_user.id:
+        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+
+    db.delete(record)
+    db.commit()
+    return RedirectResponse("/history", status_code=303)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, current_user: User = Depends(get_current_user)) -> HTMLResponse:
-    return templates.TemplateResponse(request, "index.html", {"current_user": current_user})
+    return _render(request, "index.html", {"current_user": current_user})
 
 
 @app.post("/analyze", response_class=HTMLResponse, response_model=None)
@@ -248,6 +302,7 @@ async def analyze(
     llm: str = Form(default="none"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
     if pgn is None or not pgn.filename:
         return _render_error(request, "Lütfen analiz edilecek bir PGN dosyası seçin.", 400, current_user)
@@ -298,7 +353,7 @@ async def analyze(
 
     report_html = _report_to_safe_html(report_markdown)
 
-    return templates.TemplateResponse(
+    return _render(
         request, "result.html",
         {"report_html": report_html, "warnings": warnings, "current_user": current_user, "saved": True},
     )
@@ -311,7 +366,7 @@ async def admin_users_list(
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     users = db.query(User).order_by(User.created_at).all()
-    return templates.TemplateResponse(
+    return _render(
         request, "admin_users.html", {"current_user": current_user, "users": users}
     )
 
@@ -333,7 +388,7 @@ async def admin_user_history(
         .order_by(AnalysisRecord.created_at.desc())
         .all()
     )
-    return templates.TemplateResponse(
+    return _render(
         request, "history_list.html",
         {
             "current_user": current_user, "records": records,
@@ -356,19 +411,20 @@ async def admin_user_history_detail(
         return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
 
     report_html = _report_to_safe_html(record.report_markdown)
-    return templates.TemplateResponse(
+    return _render(
         request, "history_detail.html",
         {"current_user": current_user, "report_html": report_html, "back_url": f"/admin/users/{user_id}"},
     )
 
 
-@app.post("/admin/users/{user_id}/delete")
+@app.post("/admin/users/{user_id}/delete", response_model=None)
 async def admin_delete_user(
     user_id: int,
     request: Request,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
-):
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse | RedirectResponse:
     if user_id == current_user.id:
         return _render_error(request, "Kendi hesabını silemezsin.", 400, current_user)
 
@@ -381,14 +437,15 @@ async def admin_delete_user(
     return RedirectResponse("/admin", status_code=303)
 
 
-@app.post("/admin/users/{user_id}/reset-password")
+@app.post("/admin/users/{user_id}/reset-password", response_model=None)
 async def admin_reset_password(
     user_id: int,
     request: Request,
     new_password: str = Form(...),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
-):
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse | RedirectResponse:
     target = db.get(User, user_id)
     if target is None:
         return _render_error(request, "Kullanıcı bulunamadı.", 404, current_user)

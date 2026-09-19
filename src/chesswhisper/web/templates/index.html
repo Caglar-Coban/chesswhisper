@@ -3,6 +3,7 @@
 {% block content %}
 <div class="card">
   <form id="analyze-form" method="post" action="/analyze" enctype="multipart/form-data" onsubmit="return handleSubmit()">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label for="pgn">PGN dosyası</label>
     <input type="file" id="pgn" name="pgn" accept=".pgn" required>
     <p class="hint">Chess.com veya Lichess'ten indirdiğin bir .pgn dosyası.</p>

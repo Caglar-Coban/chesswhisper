@@ -16,6 +16,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     is_admin: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    failed_login_attempts: Mapped[int] = mapped_column(default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(default=None)
 
     api_key: Mapped[UserApiKey | None] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"

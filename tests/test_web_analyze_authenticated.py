@@ -2,7 +2,7 @@ import textwrap
 
 import chess.engine
 import pytest
-from fastapi.testclient import TestClient
+from conftest import CsrfClient
 
 from chesswhisper.web.app import app
 from chesswhisper.web.db import get_db, init_db
@@ -33,14 +33,14 @@ class FakeEngine:
 @pytest.fixture
 def client(tmp_path):
     init_db(tmp_path / "analyze_test.db")
-    c = TestClient(app, follow_redirects=False)
+    c = CsrfClient(app, follow_redirects=False)
     c.post("/register", data={"username": "alice", "password": "correct-horse"})
     return c
 
 
 def test_index_redirects_when_logged_out(tmp_path):
     init_db(tmp_path / "logged_out_test.db")
-    client = TestClient(app, follow_redirects=False)
+    client = CsrfClient(app, follow_redirects=False)
 
     response = client.get("/")
 

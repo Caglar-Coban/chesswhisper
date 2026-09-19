@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from fastapi import Depends
+import secrets
+
+from fastapi import Depends, Form
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from chesswhisper.web.db import get_db
 from chesswhisper.web.models import User
+from chesswhisper.web.security import generate_csrf_token
+
+_CSRF_SESSION_KEY = "csrf_token"
 
 
 class RedirectToLogin(Exception):
@@ -14,6 +19,20 @@ class RedirectToLogin(Exception):
 
 class Forbidden(Exception):
     pass
+
+
+def get_csrf_token(request: Request) -> str:
+    token = request.session.get(_CSRF_SESSION_KEY)
+    if not token:
+        token = generate_csrf_token()
+        request.session[_CSRF_SESSION_KEY] = token
+    return token
+
+
+async def verify_csrf(request: Request, csrf_token: str = Form(...)) -> None:
+    expected = request.session.get(_CSRF_SESSION_KEY)
+    if not expected or not secrets.compare_digest(csrf_token, expected):
+        raise Forbidden()
 
 
 def get_optional_current_user(request: Request, db: Session = Depends(get_db)) -> User | None:

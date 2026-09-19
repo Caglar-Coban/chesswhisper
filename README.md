@@ -75,9 +75,15 @@ Open `http://127.0.0.1:8000`: anyone who can reach this address can
 register their own account. Each user sets their own Anthropic/OpenAI API
 key under **Settings** (encrypted at rest, never in an environment
 variable shared across users) and every analysis they run is saved to
-their **History**. The admin account additionally sees an **Admin** page
-listing every registered user, can view any user's history, delete a
-user, or reset a user's password.
+their **History**, where they can also delete their own past records.
+The admin account additionally sees an **Admin** page listing every
+registered user, can view any user's history, delete a user, or reset a
+user's password.
+
+A few hardening details: accounts lock for 15 minutes after 5 consecutive
+failed login attempts, and every state-changing form (login, register,
+settings, analyze, history/user deletion, password reset) is protected
+against CSRF via a per-session token.
 
 This is still a local-only tool: the server binds to `127.0.0.1` by
 default and isn't hardened for or intended to be exposed on the public

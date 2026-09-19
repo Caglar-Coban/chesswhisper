@@ -37,6 +37,10 @@ def get_session_secret() -> bytes:
     return _get_or_create_secret_bytes("session_secret.key", lambda: secrets.token_bytes(32))
 
 
+def generate_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
 def get_encryption_key() -> bytes:
     return _get_or_create_secret_bytes("api_key_encryption.key", Fernet.generate_key)
 
