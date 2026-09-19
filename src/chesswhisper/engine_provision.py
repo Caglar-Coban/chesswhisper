@@ -121,9 +121,15 @@ def get_stockfish_path(app_data_dir: Path | None = None) -> Path:
 
     asset_name = asset_name_for_platform(platform.system(), platform.machine())
     archive_path = base_dir / asset_name
-    _download(f"{_RELEASE_BASE_URL}/{asset_name}", archive_path)
-    _extract(archive_path, version_dir)
-    archive_path.unlink(missing_ok=True)
+    try:
+        _download(f"{_RELEASE_BASE_URL}/{asset_name}", archive_path)
+        _extract(archive_path, version_dir)
+    except (OSError, requests.RequestException, zipfile.BadZipFile, tarfile.TarError) as exc:
+        raise StockfishProvisionError(
+            f"Failed to download or extract Stockfish: {exc}"
+        ) from exc
+    finally:
+        archive_path.unlink(missing_ok=True)
 
     binary = _find_binary(version_dir)
     if os.name != "nt":

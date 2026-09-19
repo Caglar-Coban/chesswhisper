@@ -4,6 +4,7 @@ import tarfile
 import zipfile
 
 import pytest
+import requests
 
 from chesswhisper.engine_provision import (
     asset_name_for_platform,
@@ -120,6 +121,49 @@ def test_get_stockfish_path_full_cache_miss_flow(tmp_path, mocker):
     if os.name != "nt":
         mode = expected_binary.stat().st_mode
         assert mode & stat.S_IXUSR
+
+
+def test_get_stockfish_path_wraps_download_failure(tmp_path, mocker):
+    mocker.patch(
+        "chesswhisper.engine_provision._download",
+        side_effect=requests.ConnectionError("boom"),
+    )
+
+    with pytest.raises(StockfishProvisionError):
+        get_stockfish_path(app_data_dir=tmp_path)
+
+
+def test_get_stockfish_path_cleans_up_partial_archive_on_download_failure(tmp_path, mocker):
+    import platform
+
+    from chesswhisper.engine_provision import asset_name_for_platform
+
+    def fake_download_leaves_partial_file(url, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"partial download")
+        raise requests.ConnectionError("boom")
+
+    mocker.patch(
+        "chesswhisper.engine_provision._download",
+        side_effect=fake_download_leaves_partial_file,
+    )
+
+    with pytest.raises(StockfishProvisionError):
+        get_stockfish_path(app_data_dir=tmp_path)
+
+    asset_name = asset_name_for_platform(platform.system(), platform.machine())
+    assert not (tmp_path / asset_name).exists()
+
+
+def test_get_stockfish_path_wraps_extract_failure(tmp_path, mocker):
+    mocker.patch("chesswhisper.engine_provision._download")
+    mocker.patch(
+        "chesswhisper.engine_provision._extract",
+        side_effect=zipfile.BadZipFile("bad archive"),
+    )
+
+    with pytest.raises(StockfishProvisionError):
+        get_stockfish_path(app_data_dir=tmp_path)
 
 
 def test_resolve_installed_stockfish_explicit_path_wins(monkeypatch):

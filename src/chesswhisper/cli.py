@@ -18,7 +18,10 @@ def _open_engine(engine_path=None):
     from chesswhisper.engine_provision import resolve_installed_stockfish
 
     path = resolve_installed_stockfish(engine_path) or get_stockfish_path()
-    return chess.engine.SimpleEngine.popen_uci(str(path))
+    try:
+        return chess.engine.SimpleEngine.popen_uci(str(path))
+    except OSError as exc:
+        raise StockfishProvisionError(f"Failed to start Stockfish at {path}: {exc}") from exc
 
 
 def _build_llm_provider(name: str):
@@ -48,6 +51,14 @@ def cli():
 @click.option("--depth", default=None, type=int, help="Fixed search depth (overrides --movetime).")
 @click.option("--engine-path", default=None, help="Path to an existing Stockfish binary (skips auto-download).")
 def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth, engine_path):
+    if os.path.abspath(output_path) == os.path.abspath(pgn_path):
+        click.echo(
+            f"Error: output path {output_path} is the same as the input PGN file; "
+            "refusing to overwrite it. Use -o to choose a different output path.",
+            err=True,
+        )
+        sys.exit(1)
+
     existed_before = os.path.exists(output_path)
     try:
         with open(output_path, "a", encoding="utf-8"):

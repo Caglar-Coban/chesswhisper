@@ -1,8 +1,10 @@
 import textwrap
 
+import pytest
 from click.testing import CliRunner
 
-from chesswhisper.cli import cli
+from chesswhisper.cli import _open_engine, cli
+from chesswhisper.engine_provision import StockfishProvisionError
 
 SAMPLE_PGN = textwrap.dedent("""
     [Event "Test"]
@@ -113,6 +115,33 @@ def test_analyze_unwritable_output_path_fails_fast(tmp_path, monkeypatch):
 
     assert result.exit_code != 0
     assert "Error:" in result.output
+
+
+def test_open_engine_wraps_bad_explicit_path_as_provision_error(tmp_path):
+    bogus_path = tmp_path / "not-a-real-stockfish-binary"
+
+    with pytest.raises(StockfishProvisionError):
+        _open_engine(engine_path=str(bogus_path))
+
+
+def test_analyze_refuses_to_overwrite_input_pgn(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+
+    def fail_if_called(**kwargs):
+        raise AssertionError("engine should not be opened when output path == input PGN path")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", fail_if_called)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["analyze", str(pgn_path), "--player", "Alice", "--llm", "none", "-o", str(pgn_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "Error:" in result.output
+    assert pgn_path.read_text(encoding="utf-8") == SAMPLE_PGN
 
 
 def test_analyze_unknown_player_fails_fast(tmp_path, monkeypatch):
