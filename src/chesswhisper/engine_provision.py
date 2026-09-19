@@ -88,23 +88,23 @@ def _find_binary(root: Path) -> Path:
     raise StockfishProvisionError(f"No Stockfish binary found under {root}")
 
 
-def _verify_binary(path: Path) -> bool:
+def _verify_binary(path: Path, timeout: float = 10.0) -> bool:
     try:
         proc = subprocess.Popen(
             [str(path)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, text=True,
         )
-        proc.stdin.write("uci\n")
-        proc.stdin.flush()
-        for _ in range(200):
-            line = proc.stdout.readline()
-            if "uciok" in line:
-                proc.terminate()
-                return True
-        proc.terminate()
-        return False
     except OSError:
         return False
+
+    try:
+        stdout, _ = proc.communicate(input="uci\n", timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        return False
+
+    return "uciok" in stdout
 
 
 def get_stockfish_path(app_data_dir: Path | None = None) -> Path:
@@ -115,7 +115,9 @@ def get_stockfish_path(app_data_dir: Path | None = None) -> Path:
 
     if version_dir.is_dir():
         try:
-            return _find_binary(version_dir)
+            cached_binary = _find_binary(version_dir)
+            if _verify_binary(cached_binary):
+                return cached_binary
         except StockfishProvisionError:
             pass  # fall through and (re-)download
 

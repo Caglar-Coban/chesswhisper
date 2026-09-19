@@ -13,6 +13,7 @@ from chesswhisper.engine_provision import (
     StockfishProvisionError,
     _find_binary,
     _extract,
+    _verify_binary,
     STOCKFISH_TAG_DIRNAME,
 )
 
@@ -74,7 +75,7 @@ def test_extract_tar_gz(tmp_path):
     assert (dest / "inner" / "stockfish").exists()
 
 
-def test_get_stockfish_path_reuses_cached_binary(tmp_path, monkeypatch):
+def test_get_stockfish_path_reuses_cached_binary(tmp_path, monkeypatch, mocker):
     # Pre-place a "binary" where get_stockfish_path expects to find one already installed.
     version_dir = tmp_path / STOCKFISH_TAG_DIRNAME
     version_dir.mkdir(parents=True)
@@ -85,6 +86,7 @@ def test_get_stockfish_path_reuses_cached_binary(tmp_path, monkeypatch):
         raise AssertionError("should not attempt a download when cached binary exists")
 
     monkeypatch.setattr("chesswhisper.engine_provision._download", fail_if_called)
+    mocker.patch("chesswhisper.engine_provision._verify_binary", return_value=True)
 
     result = get_stockfish_path(app_data_dir=tmp_path)
 
@@ -164,6 +166,62 @@ def test_get_stockfish_path_wraps_extract_failure(tmp_path, mocker):
 
     with pytest.raises(StockfishProvisionError):
         get_stockfish_path(app_data_dir=tmp_path)
+
+
+def test_verify_binary_true_when_uciok_in_output(tmp_path, mocker):
+    fake_proc = mocker.Mock()
+    fake_proc.communicate.return_value = ("id name Stockfish\nuciok\n", None)
+    mocker.patch("chesswhisper.engine_provision.subprocess.Popen", return_value=fake_proc)
+
+    assert _verify_binary(tmp_path / "stockfish") is True
+    fake_proc.communicate.assert_called_once()
+
+
+def test_verify_binary_false_when_no_uciok_in_output(tmp_path, mocker):
+    fake_proc = mocker.Mock()
+    fake_proc.communicate.return_value = ("not a real engine\n", None)
+    mocker.patch("chesswhisper.engine_provision.subprocess.Popen", return_value=fake_proc)
+
+    assert _verify_binary(tmp_path / "stockfish") is False
+
+
+def test_verify_binary_false_and_kills_process_on_timeout(tmp_path, mocker):
+    import subprocess
+
+    fake_proc = mocker.Mock()
+    fake_proc.communicate.side_effect = subprocess.TimeoutExpired(cmd="stockfish", timeout=10)
+    mocker.patch("chesswhisper.engine_provision.subprocess.Popen", return_value=fake_proc)
+
+    assert _verify_binary(tmp_path / "stockfish") is False
+    fake_proc.kill.assert_called_once()
+    fake_proc.wait.assert_called_once()
+
+
+def test_verify_binary_false_when_binary_cannot_be_launched(tmp_path, mocker):
+    mocker.patch("chesswhisper.engine_provision.subprocess.Popen", side_effect=OSError("nope"))
+
+    assert _verify_binary(tmp_path / "stockfish") is False
+
+
+def test_get_stockfish_path_reverifies_cached_binary_and_redownloads_if_corrupt(tmp_path, mocker):
+    version_dir = tmp_path / STOCKFISH_TAG_DIRNAME
+    version_dir.mkdir(parents=True)
+    stale_binary = version_dir / "stockfish.exe"
+    stale_binary.write_bytes(b"corrupted leftover from an interrupted run")
+
+    def fake_extract(archive_path, dest_dir):
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        (dest_dir / "stockfish.exe").write_bytes(b"freshly downloaded")
+
+    mock_download = mocker.patch("chesswhisper.engine_provision._download")
+    mocker.patch("chesswhisper.engine_provision._extract", side_effect=fake_extract)
+    # First call verifies the stale cached binary (fails); second verifies the fresh one (passes).
+    mocker.patch("chesswhisper.engine_provision._verify_binary", side_effect=[False, True])
+
+    result = get_stockfish_path(app_data_dir=tmp_path)
+
+    mock_download.assert_called_once()
+    assert result == version_dir / "stockfish.exe"
 
 
 def test_resolve_installed_stockfish_explicit_path_wins(monkeypatch):
