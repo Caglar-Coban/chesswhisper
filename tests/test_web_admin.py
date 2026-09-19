@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from chesswhisper.web.app import app
 from chesswhisper.web.db import get_db, init_db
-from chesswhisper.web.models import AnalysisRecord, User
+from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
 from chesswhisper.web.security import verify_password
 
 
@@ -78,6 +78,7 @@ def test_admin_can_delete_another_user_cascading_records(clients):
         user_id=alice_id, player_name="Alice", lang="en", llm_used="none",
         games_count=1, overall_acpl=10.0, overall_accuracy=95.0, report_markdown="x",
     ))
+    db.add(UserApiKey(user_id=alice_id, anthropic_key_encrypted="encrypted-placeholder"))
     db.commit()
 
     response = admin_client.post(f"/admin/users/{alice_id}/delete")
@@ -86,6 +87,7 @@ def test_admin_can_delete_another_user_cascading_records(clients):
     db2 = next(get_db())
     assert db2.get(User, alice_id) is None
     assert db2.query(AnalysisRecord).filter_by(user_id=alice_id).count() == 0
+    assert db2.get(UserApiKey, alice_id) is None
 
 
 def test_admin_can_reset_another_users_password(clients):
