@@ -170,6 +170,7 @@
       <a href="/">Analiz</a>
       <a href="/history">Geçmiş</a>
       <a href="/settings">Ayarlar</a>
+      {% if current_user.is_admin %}<a href="/admin">Admin</a>{% endif %}
       <form method="post" action="/logout" style="display:inline; margin:0;">
         <button type="submit" class="link-button">Çıkış ({{ current_user.username }})</button>
       </form>

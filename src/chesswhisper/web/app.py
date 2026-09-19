@@ -13,7 +13,7 @@ from starlette.responses import RedirectResponse
 from chesswhisper.cli import run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
 from chesswhisper.report_writer import render_markdown
-from chesswhisper.web.auth import Forbidden, RedirectToLogin, get_current_user, get_optional_current_user
+from chesswhisper.web.auth import Forbidden, RedirectToLogin, get_current_user, get_optional_current_user, require_admin
 from chesswhisper.web.db import get_db
 from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
 from chesswhisper.web.security import decrypt_api_key, encrypt_api_key, get_session_secret, hash_password, verify_password
@@ -286,3 +286,97 @@ async def analyze(
         request, "result.html",
         {"report_html": report_html, "warnings": warnings, "current_user": current_user, "saved": True},
     )
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_users_list(
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    users = db.query(User).order_by(User.created_at).all()
+    return templates.TemplateResponse(
+        request, "admin_users.html", {"current_user": current_user, "users": users}
+    )
+
+
+@app.get("/admin/users/{user_id}", response_class=HTMLResponse)
+async def admin_user_history(
+    request: Request,
+    user_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    target = db.get(User, user_id)
+    if target is None:
+        return _render_error(request, "Kullanıcı bulunamadı.", 404, current_user)
+
+    records = (
+        db.query(AnalysisRecord)
+        .filter_by(user_id=user_id)
+        .order_by(AnalysisRecord.created_at.desc())
+        .all()
+    )
+    return templates.TemplateResponse(
+        request, "history_list.html",
+        {
+            "current_user": current_user, "records": records,
+            "detail_url_prefix": f"/admin/users/{user_id}/history",
+            "viewing_as_admin": True, "target_username": target.username,
+        },
+    )
+
+
+@app.get("/admin/users/{user_id}/history/{record_id}", response_class=HTMLResponse)
+async def admin_user_history_detail(
+    request: Request,
+    user_id: int,
+    record_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    record = db.get(AnalysisRecord, record_id)
+    if record is None or record.user_id != user_id:
+        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+
+    report_html = _report_to_safe_html(record.report_markdown)
+    return templates.TemplateResponse(
+        request, "history_detail.html",
+        {"current_user": current_user, "report_html": report_html, "back_url": f"/admin/users/{user_id}"},
+    )
+
+
+@app.post("/admin/users/{user_id}/delete")
+async def admin_delete_user(
+    user_id: int,
+    request: Request,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if user_id == current_user.id:
+        return _render_error(request, "Kendi hesabını silemezsin.", 400, current_user)
+
+    target = db.get(User, user_id)
+    if target is None:
+        return _render_error(request, "Kullanıcı bulunamadı.", 404, current_user)
+
+    db.delete(target)
+    db.commit()
+    return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/users/{user_id}/reset-password")
+async def admin_reset_password(
+    user_id: int,
+    request: Request,
+    new_password: str = Form(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        return _render_error(request, "Kullanıcı bulunamadı.", 404, current_user)
+
+    target.password_hash = hash_password(new_password)
+    db.commit()
+    return RedirectResponse(f"/admin/users/{user_id}", status_code=303)

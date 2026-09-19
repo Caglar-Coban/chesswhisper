@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Admin{% endblock %}
+{% block content %}
+<div class="card">
+  <table>
+    <thead><tr><th>Kullanıcı</th><th>Admin mi</th><th>Analiz sayısı</th><th>Kayıt tarihi</th><th></th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.username }}</td>
+        <td>{{ "Evet" if u.is_admin else "Hayır" }}</td>
+        <td>{{ u.analyses|length }}</td>
+        <td>{{ u.created_at.strftime("%Y-%m-%d") }}</td>
+        <td>
+          <a href="/admin/users/{{ u.id }}">Geçmişi gör</a>
+          {% if u.id != current_user.id %}
+          <form method="post" action="/admin/users/{{ u.id }}/delete" style="display:inline; margin-left:8px;">
+            <button type="submit" class="link-button">Sil</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
