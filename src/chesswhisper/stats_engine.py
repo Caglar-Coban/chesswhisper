@@ -31,8 +31,8 @@ def _non_pawn_material(board: chess.Board) -> int:
     return total
 
 
-def game_phase(ply: int, fen_after: str) -> str:
-    if ply <= OPENING_PLY_CUTOFF:
+def game_phase(ply: int, fen_after: str, force_material_based: bool = False) -> str:
+    if not force_material_based and ply <= OPENING_PLY_CUTOFF:
         return "opening"
     board = chess.Board(fen_after)
     if _non_pawn_material(board) <= ENDGAME_MATERIAL_THRESHOLD:
@@ -85,6 +85,7 @@ class PlayerGameStats:
     acpl: float
     accuracy: float
     errors_by_phase: dict
+    move_count: int = 0
 
 
 @dataclass
@@ -145,7 +146,6 @@ class GameReport:
     opponent: str
     result: str
     your_stats: PlayerGameStats
-    opponent_stats: PlayerGameStats
     eco: str
     opening_name: str
     time_management: TimeManagementStats
@@ -220,7 +220,9 @@ def _player_stats_for_color(evals, color, ply_to_phase) -> tuple[PlayerGameStats
 
     acpl = sum(cp_losses) / len(cp_losses) if cp_losses else 0.0
     accuracy = sum(accuracies) / len(accuracies) if accuracies else 100.0
-    stats = PlayerGameStats(acpl=acpl, accuracy=accuracy, errors_by_phase=errors_by_phase)
+    stats = PlayerGameStats(
+        acpl=acpl, accuracy=accuracy, errors_by_phase=errors_by_phase, move_count=len(cp_losses)
+    )
 
     flagged.sort(key=lambda pair: pair[0], reverse=True)
     top_mistakes = [ev for _, ev in flagged[:5]]
@@ -249,14 +251,21 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
     else:
         result = "unknown"
 
-    ply_to_phase = {ev.ply: game_phase(ev.ply, ev.fen_after) for ev in evals}
+    is_custom_start = loaded.headers.get("SetUp") == "1" or "FEN" in loaded.headers
+    ply_to_phase = {
+        ev.ply: game_phase(ev.ply, ev.fen_after, force_material_based=is_custom_start)
+        for ev in evals
+    }
 
     your_bool_color = your_color == "white"
     your_stats, top_mistakes = _player_stats_for_color(evals, your_bool_color, ply_to_phase)
-    opp_stats, _ = _player_stats_for_color(evals, not your_bool_color, ply_to_phase)
 
-    san_moves = [ev.move_san for ev in evals]
-    opening = match_opening(san_moves, eco_table)
+    if is_custom_start:
+        opening_eco, opening_name = "N/A", "Custom starting position"
+    else:
+        san_moves = [ev.move_san for ev in evals]
+        opening = match_opening(san_moves, eco_table)
+        opening_eco, opening_name = opening.eco, opening.name
 
     time_buckets = _time_buckets_for_color(evals, your_bool_color)
 
@@ -266,9 +275,8 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
         opponent=opponent,
         result=result,
         your_stats=your_stats,
-        opponent_stats=opp_stats,
-        eco=opening.eco,
-        opening_name=opening.name,
+        eco=opening_eco,
+        opening_name=opening_name,
         time_management=time_buckets.to_stats(),
         time_buckets=time_buckets,
         top_mistakes=top_mistakes,
@@ -276,15 +284,18 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
 
 
 def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
-    all_cp_losses_weight = []
-    all_accuracies = []
+    weighted_acpl_sum = 0.0
+    weighted_accuracy_sum = 0.0
+    total_moves = 0
     error_totals = {p: ErrorCounts() for p in PHASES}
     opening_map: dict = {}
     combined_time_buckets = _TimeBuckets()
 
     for gr in game_reports:
-        all_accuracies.append(gr.your_stats.accuracy)
-        all_cp_losses_weight.append(gr.your_stats.acpl)
+        move_count = gr.your_stats.move_count
+        weighted_acpl_sum += gr.your_stats.acpl * move_count
+        weighted_accuracy_sum += gr.your_stats.accuracy * move_count
+        total_moves += move_count
         for phase in PHASES:
             error_totals[phase].merge(gr.your_stats.errors_by_phase[phase])
         combined_time_buckets.merge(gr.time_buckets)
@@ -303,8 +314,8 @@ def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
         else:
             entry.unknown += 1
 
-    overall_acpl = sum(all_cp_losses_weight) / len(all_cp_losses_weight) if all_cp_losses_weight else 0.0
-    overall_accuracy = sum(all_accuracies) / len(all_accuracies) if all_accuracies else 100.0
+    overall_acpl = weighted_acpl_sum / total_moves if total_moves else 0.0
+    overall_accuracy = weighted_accuracy_sum / total_moves if total_moves else 100.0
 
     return AggregateReport(
         player=player,

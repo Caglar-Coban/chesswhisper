@@ -114,6 +114,26 @@ def test_build_aggregate_report_counts_unknown_results_separately():
     assert opening.draws == 0
 
 
+def test_build_game_report_marks_custom_start_position():
+    text = (
+        '[White "Alice"]\n[Black "Bob"]\n[Result "1-0"]\n'
+        '[SetUp "1"]\n[FEN "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"]\n\n'
+        '1. Kd2 1-0\n'
+    )
+    game = chess.pgn.read_game(io.StringIO(text))
+    loaded = LoadedGame(index=0, game=game, headers=dict(game.headers))
+    evals = [
+        PositionEval(ply=1, move_san="Kd2", color=WHITE, cp_before=0, cp_after=0,
+                     fen_after="4k3/8/8/8/8/4K3/4P3/8 b - - 1 1"),
+    ]
+    eco_table = load_eco_table()
+
+    report = build_game_report(loaded, evals, "Alice", eco_table)
+
+    assert report.eco == "N/A"
+    assert "custom" in report.opening_name.lower()
+
+
 def test_build_aggregate_report_sums_across_games():
     loaded_a = _loaded_game(0, "Alice", "Bob", "1-0", "1. e4 e5")
     loaded_b = _loaded_game(1, "Carol", "Alice", "0-1", "1. e4 e5")
@@ -129,6 +149,45 @@ def test_build_aggregate_report_sums_across_games():
     assert len(aggregate.games) == 2
     assert aggregate.games[1].your_color == "black"
     assert aggregate.games[1].result == "win"  # Alice was Black in a 0-1 result
+
+
+def test_build_aggregate_report_weights_acpl_by_move_count():
+    loaded_a = _loaded_game(0, "Alice", "Bob", "1-0", "1. e4 e5")
+    loaded_b = _loaded_game(1, "Alice", "Carol", "1-0", "1. e4 e5")
+    eco_table = load_eco_table()
+
+    # Game A: Alice (White) makes one move with a huge 300cp loss.
+    game_a_evals = [
+        PositionEval(ply=1, move_san="e4", color=WHITE, cp_before=300, cp_after=0,
+                     fen_after="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"),
+        PositionEval(ply=2, move_san="e5", color=BLACK, cp_before=0, cp_after=0,
+                     fen_after="rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"),
+    ]
+    # Game B: Alice (White) makes three perfect moves (0 cp loss each).
+    game_b_evals = [
+        PositionEval(ply=1, move_san="e4", color=WHITE, cp_before=0, cp_after=0,
+                     fen_after="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"),
+        PositionEval(ply=2, move_san="e5", color=BLACK, cp_before=0, cp_after=0,
+                     fen_after="rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"),
+        PositionEval(ply=3, move_san="Nf3", color=WHITE, cp_before=0, cp_after=0,
+                     fen_after="rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2"),
+        PositionEval(ply=4, move_san="Nc6", color=BLACK, cp_before=0, cp_after=0,
+                     fen_after="r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"),
+        PositionEval(ply=5, move_san="Bb5", color=WHITE, cp_before=0, cp_after=0,
+                     fen_after="r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"),
+        PositionEval(ply=6, move_san="a6", color=BLACK, cp_before=0, cp_after=0,
+                     fen_after="r1bqkbnr/1ppp1ppp/p1n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4"),
+    ]
+
+    report_a = build_game_report(loaded_a, game_a_evals, "Alice", eco_table)
+    report_b = build_game_report(loaded_b, game_b_evals, "Alice", eco_table)
+
+    aggregate = build_aggregate_report("Alice", [report_a, report_b])
+
+    # Alice made 1 move in game A (300 cp lost) and 3 moves in game B (0 cp lost each).
+    # Weighted by move count: 300 / (1 + 3) = 75.0, NOT the naive per-game mean of
+    # (300 + 0) / 2 = 150.0.
+    assert aggregate.overall_acpl == 75.0
 
 
 def test_build_game_report_time_management_unavailable_without_clock():

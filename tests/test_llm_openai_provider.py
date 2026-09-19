@@ -13,7 +13,7 @@ def _sample_report():
     stats = PlayerGameStats(acpl=42.5, accuracy=87.3, errors_by_phase=errors)
     game = GameReport(
         game_index=0, your_color="white", opponent="Bob", result="win",
-        your_stats=stats, opponent_stats=stats, eco="C60", opening_name="Ruy Lopez",
+        your_stats=stats, eco="C60", opening_name="Ruy Lopez",
         time_management=TimeManagementStats(available=False), top_mistakes=[],
     )
     return AggregateReport(

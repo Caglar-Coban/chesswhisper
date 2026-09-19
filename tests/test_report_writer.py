@@ -9,11 +9,10 @@ def _sample_report():
     errors = {p: ErrorCounts() for p in PHASES}
     errors["middlegame"].blunder = 1
     your_stats = PlayerGameStats(acpl=42.5, accuracy=87.3, errors_by_phase=errors)
-    opp_stats = PlayerGameStats(acpl=30.0, accuracy=90.0, errors_by_phase={p: ErrorCounts() for p in PHASES})
 
     game = GameReport(
         game_index=0, your_color="white", opponent="Bob", result="win",
-        your_stats=your_stats, opponent_stats=opp_stats,
+        your_stats=your_stats,
         eco="C60", opening_name="Ruy Lopez",
         time_management=TimeManagementStats(available=True, low_time_error_rate=0.25, normal_time_error_rate=0.05),
         top_mistakes=[],

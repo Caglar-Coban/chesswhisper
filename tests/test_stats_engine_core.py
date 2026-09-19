@@ -32,6 +32,13 @@ def test_game_phase_middlegame_when_material_remains():
     assert game_phase(21, chess.STARTING_FEN) == "middlegame"
 
 
+def test_game_phase_force_material_based_ignores_ply_cutoff():
+    # Ply 1 would normally be "opening", but a custom-start game with almost no
+    # material on the board should be classified as "endgame" instead.
+    bare_fen = "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"
+    assert game_phase(1, bare_fen, force_material_based=True) == "endgame"
+
+
 def test_win_percent_symmetry_around_zero():
     assert abs(win_percent(0) - 50.0) < 1e-6
     assert win_percent(100) > 50.0

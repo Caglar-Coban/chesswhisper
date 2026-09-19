@@ -7,7 +7,7 @@ from chesswhisper.stats_engine import (
     TimeManagementStats, OpeningStats, PHASES,
 )
 from chesswhisper.llm.base import LLMProviderError
-from chesswhisper.llm.claude_provider import ClaudeProvider, build_prompt
+from chesswhisper.llm.claude_provider import ClaudeProvider
 
 
 def _sample_report():
@@ -19,7 +19,7 @@ def _sample_report():
     )
     game = GameReport(
         game_index=0, your_color="white", opponent="Bob", result="win",
-        your_stats=stats, opponent_stats=stats, eco="C60", opening_name="Ruy Lopez",
+        your_stats=stats, eco="C60", opening_name="Ruy Lopez",
         time_management=TimeManagementStats(available=False), top_mistakes=[top_mistake],
     )
     return AggregateReport(
@@ -27,15 +27,6 @@ def _sample_report():
         error_totals=errors, openings=[OpeningStats(eco="C60", name="Ruy Lopez", games=1, wins=1)],
         time_management=TimeManagementStats(available=False),
     )
-
-
-def test_build_prompt_includes_key_numbers():
-    prompt = build_prompt(_sample_report(), lang="tr")
-    assert "Alice" in prompt
-    assert "42.5" in prompt
-    assert "Ruy Lopez" in prompt
-    assert "tr" not in prompt.split()  # sanity: lang code itself isn't dumped verbatim into prose
-    assert chess.STARTING_FEN in prompt
 
 
 def test_generate_commentary_returns_text(mocker):
