@@ -89,6 +89,31 @@ def test_build_game_report_raises_when_player_not_in_game():
         build_game_report(loaded, evals, player_name="Zara", eco_table=eco_table)
 
 
+def test_build_game_report_result_unknown_for_unrecorded_games():
+    loaded = _loaded_game(0, "Alice", "Bob", "*", "1. e4 e5")
+    evals = _evals_no_errors()
+    eco_table = load_eco_table()
+
+    report = build_game_report(loaded, evals, player_name="Alice", eco_table=eco_table)
+
+    assert report.result == "unknown"
+
+
+def test_build_aggregate_report_counts_unknown_results_separately():
+    loaded = _loaded_game(0, "Alice", "Bob", "*", "1. e4 e5")
+    evals = _evals_no_errors()
+    eco_table = load_eco_table()
+
+    report = build_game_report(loaded, evals, "Alice", eco_table)
+    aggregate = build_aggregate_report("Alice", [report])
+
+    opening = aggregate.openings[0]
+    assert opening.unknown == 1
+    assert opening.wins == 0
+    assert opening.losses == 0
+    assert opening.draws == 0
+
+
 def test_build_aggregate_report_sums_across_games():
     loaded_a = _loaded_game(0, "Alice", "Bob", "1-0", "1. e4 e5")
     loaded_b = _loaded_game(1, "Carol", "Alice", "0-1", "1. e4 e5")

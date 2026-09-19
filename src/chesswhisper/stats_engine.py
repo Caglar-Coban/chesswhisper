@@ -161,6 +161,7 @@ class OpeningStats:
     wins: int = 0
     losses: int = 0
     draws: int = 0
+    unknown: int = 0
 
 
 @dataclass
@@ -243,8 +244,10 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
         result = "win" if your_color == "white" else "loss"
     elif result_header == "0-1":
         result = "win" if your_color == "black" else "loss"
-    else:
+    elif result_header == "1/2-1/2":
         result = "draw"
+    else:
+        result = "unknown"
 
     ply_to_phase = {ev.ply: game_phase(ev.ply, ev.fen_after) for ev in evals}
 
@@ -295,8 +298,10 @@ def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
             entry.wins += 1
         elif gr.result == "loss":
             entry.losses += 1
-        else:
+        elif gr.result == "draw":
             entry.draws += 1
+        else:
+            entry.unknown += 1
 
     overall_acpl = sum(all_cp_losses_weight) / len(all_cp_losses_weight) if all_cp_losses_weight else 0.0
     overall_accuracy = sum(all_accuracies) / len(all_accuracies) if all_accuracies else 100.0

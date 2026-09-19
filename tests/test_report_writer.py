@@ -67,6 +67,26 @@ def test_render_markdown_includes_per_game_errors_by_phase_and_time_management()
     assert "5.0%" in per_game_section
 
 
+def test_render_markdown_translates_player_color():
+    md_tr = render_markdown(_sample_report(), commentary="", lang="tr")
+    assert "beyaz" in md_tr
+    assert ", white)" not in md_tr
+
+    md_en = render_markdown(_sample_report(), commentary="", lang="en")
+    assert ", white)" in md_en
+
+
+def test_render_markdown_handles_unknown_game_result():
+    report = _sample_report()
+    report.games[0].result = "unknown"
+    report.openings[0].unknown = 1
+
+    md = render_markdown(report, commentary="", lang="en")
+
+    assert "Unknown" in md
+    assert "1/0/0/1" in md  # wins/losses/draws/unknown
+
+
 def test_render_markdown_handles_partial_time_management_data():
     report = _sample_report()
     # available=True but only the low-time bucket has data (normal_time_error_rate is None)

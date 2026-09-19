@@ -13,7 +13,7 @@ _STRINGS = {
     "blunder": {"tr": "Gaf", "en": "Blunder"},
     "openings": {"tr": "Açılış Repertuarı", "en": "Opening Repertoire"},
     "opening_games": {"tr": "Oyun", "en": "Games"},
-    "opening_record": {"tr": "G/M/B", "en": "W/L/D"},
+    "opening_record": {"tr": "G/M/B/?", "en": "W/L/D/?"},
     "time_management": {"tr": "Zaman Yönetimi", "en": "Time Management"},
     "time_management_unavailable": {
         "tr": "Bu PGN'de saat bilgisi bulunmadığı için zaman yönetimi analizi mevcut değil.",
@@ -31,6 +31,9 @@ _STRINGS = {
     "game_result_win": {"tr": "Kazandı", "en": "Won"},
     "game_result_loss": {"tr": "Kaybetti", "en": "Lost"},
     "game_result_draw": {"tr": "Berabere", "en": "Draw"},
+    "game_result_unknown": {"tr": "Bilinmiyor", "en": "Unknown"},
+    "color_white": {"tr": "beyaz", "en": "white"},
+    "color_black": {"tr": "siyah", "en": "black"},
     "top_mistakes": {"tr": "Kritik Hamleler", "en": "Critical Moves"},
     "phase_column": {"tr": "Faz", "en": "Phase"},
     "eco_column": {"tr": "ECO", "en": "ECO"},

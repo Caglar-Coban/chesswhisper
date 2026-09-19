@@ -1,8 +1,14 @@
 from chesswhisper.i18n import t
 from chesswhisper.stats_engine import PHASES
 
-_RESULT_KEY = {"win": "game_result_win", "loss": "game_result_loss", "draw": "game_result_draw"}
+_RESULT_KEY = {
+    "win": "game_result_win",
+    "loss": "game_result_loss",
+    "draw": "game_result_draw",
+    "unknown": "game_result_unknown",
+}
 _PHASE_KEY = {"opening": "phase_opening", "middlegame": "phase_middlegame", "endgame": "phase_endgame"}
+_COLOR_KEY = {"white": "color_white", "black": "color_black"}
 
 
 def _errors_table(errors_by_phase: dict, lang: str) -> str:
@@ -48,7 +54,9 @@ def render_markdown(report, commentary: str, lang: str) -> str:
     parts.append(f"| {t('eco_column', lang)} | {t('openings', lang)} | {t('opening_games', lang)} | {t('opening_record', lang)} |")
     parts.append("| --- | --- | --- | --- |")
     for op in report.openings:
-        parts.append(f"| {op.eco} | {op.name} | {op.games} | {op.wins}/{op.losses}/{op.draws} |")
+        parts.append(
+            f"| {op.eco} | {op.name} | {op.games} | {op.wins}/{op.losses}/{op.draws}/{op.unknown} |"
+        )
     parts.append("")
 
     parts.append(f"## {t('time_management', lang)}")
@@ -62,8 +70,9 @@ def render_markdown(report, commentary: str, lang: str) -> str:
     parts.append(f"## {t('per_game_breakdown', lang)}")
     for game in report.games:
         result_str = t(_RESULT_KEY[game.result], lang)
+        color_str = t(_COLOR_KEY[game.your_color], lang)
         parts.append(
-            f"### {game.game_index + 1}. {t('vs_label', lang)} {game.opponent} ({result_str}, {game.your_color})"
+            f"### {game.game_index + 1}. {t('vs_label', lang)} {game.opponent} ({result_str}, {color_str})"
         )
         parts.append(f"- {game.opening_name} ({game.eco})")
         parts.append(f"- {t('acpl', lang)}: {game.your_stats.acpl:.1f}")
