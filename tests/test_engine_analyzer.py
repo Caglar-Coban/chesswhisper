@@ -13,7 +13,7 @@ class FakeEngine:
         # scores are plain White-relative centipawns, one per analyse() call
         self._scores = iter(scores)
 
-    def analyse(self, board, limit):
+    def analyse(self, board, limit, **kwargs):
         cp = next(self._scores)
         return {"score": chess.engine.PovScore(chess.engine.Cp(cp), chess.WHITE)}
 
@@ -87,6 +87,29 @@ def test_analyze_game_extracts_clock_seconds():
     assert evals[0].clock_seconds == 598.0
     assert evals[1].clock_seconds == 25.0
     assert evals[2].clock_seconds == 580.0
+
+
+def test_analyze_game_passes_game_identity_to_engine_analyse(mocker):
+    game = _parse(SIMPLE_GAME)
+    engine = FakeEngine([0, 30, 20, 50])
+    spy = mocker.spy(engine, "analyse")
+
+    analyze_game(game, engine, movetime_ms=10)
+
+    assert spy.call_count == 4
+    for call in spy.call_args_list:
+        assert call.kwargs.get("game") is game
+
+
+def test_analyze_game_honors_explicit_zero_depth(mocker):
+    game = _parse(SIMPLE_GAME)
+    engine = FakeEngine([0, 30, 20, 50])
+    spy = mocker.spy(engine, "analyse")
+
+    analyze_game(game, engine, depth=0)
+
+    limit = spy.call_args_list[0].args[1]
+    assert limit.depth == 0
 
 
 def test_parse_clock_seconds_various_formats():

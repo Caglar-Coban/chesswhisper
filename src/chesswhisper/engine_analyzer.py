@@ -37,12 +37,12 @@ def analyze_game(
     movetime_ms: int = 300,
     depth: int | None = None,
 ) -> list[PositionEval]:
-    limit = chess.engine.Limit(depth=depth) if depth else chess.engine.Limit(time=movetime_ms / 1000)
+    limit = chess.engine.Limit(depth=depth) if depth is not None else chess.engine.Limit(time=movetime_ms / 1000)
 
     board = game.board()
     results: list[PositionEval] = []
 
-    prev_score = engine.analyse(board, limit)["score"]
+    prev_score = engine.analyse(board, limit, game=game)["score"]
 
     for ply, node in enumerate(game.mainline(), start=1):
         move = node.move
@@ -51,7 +51,7 @@ def analyze_game(
         cp_before = prev_score.pov(mover).score(mate_score=100_000)
 
         board.push(move)
-        info_after = engine.analyse(board, limit)
+        info_after = engine.analyse(board, limit, game=game)
         current_score = info_after["score"]
         cp_after = current_score.pov(mover).score(mate_score=100_000)
 
