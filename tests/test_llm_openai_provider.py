@@ -53,6 +53,20 @@ def test_generate_commentary_wraps_api_errors(mocker):
         provider.generate_commentary(_sample_report(), lang="tr")
 
 
+def test_generate_commentary_wraps_malformed_response(mocker):
+    fake_response = mocker.Mock()
+    fake_response.choices = []  # atypical SDK response (e.g. a content filter) -> IndexError
+
+    fake_client = mocker.Mock()
+    fake_client.chat.completions.create.return_value = fake_response
+
+    provider = OpenAIProvider(api_key="fake-key")
+    provider._client = fake_client
+
+    with pytest.raises(LLMProviderError):
+        provider.generate_commentary(_sample_report(), lang="tr")
+
+
 def test_missing_api_key_raises_at_construction(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(LLMProviderError):

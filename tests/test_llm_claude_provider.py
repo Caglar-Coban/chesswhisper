@@ -65,6 +65,20 @@ def test_generate_commentary_wraps_api_errors(mocker):
         provider.generate_commentary(_sample_report(), lang="tr")
 
 
+def test_generate_commentary_wraps_malformed_response(mocker):
+    fake_response = mocker.Mock()
+    fake_response.content = []  # atypical SDK response (e.g. a refusal) -> IndexError
+
+    fake_client = mocker.Mock()
+    fake_client.messages.create.return_value = fake_response
+
+    provider = ClaudeProvider(api_key="fake-key")
+    provider._client = fake_client
+
+    with pytest.raises(LLMProviderError):
+        provider.generate_commentary(_sample_report(), lang="tr")
+
+
 def test_missing_api_key_raises_at_construction(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(LLMProviderError):

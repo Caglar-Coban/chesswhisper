@@ -60,7 +60,6 @@ class ClaudeProvider(LLMProvider):
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}],
             )
+            return response.content[0].text
         except Exception as exc:  # noqa: BLE001 - any SDK failure becomes a provider error
             raise LLMProviderError(f"Claude API call failed: {exc}") from exc
-
-        return response.content[0].text
