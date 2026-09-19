@@ -6,22 +6,31 @@ engine evaluations into natural-language coaching feedback via an LLM
 
 ## Status
 
-Early design stage — see [`docs/superpowers/specs/2026-09-19-chesswhisper-design.md`](docs/superpowers/specs/2026-09-19-chesswhisper-design.md)
-for the full design spec. Implementation not started yet.
+Implementation in progress — see [`docs/superpowers/specs/2026-09-19-chesswhisper-design.md`](docs/superpowers/specs/2026-09-19-chesswhisper-design.md)
+for the full design spec.
 
-## Planned usage
+## Usage
+
+Install (editable, for development):
 
 ```
-chesswhisper analyze games.pgn --lang tr --llm claude -o report.md
+pip install -e ".[dev]"
 ```
 
-Given a local PGN file, it will:
-- Evaluate every position with Stockfish.
-- Compute accuracy/ACPL, blunder/mistake/inaccuracy counts by game phase,
-  opening repertoire stats, and time-management analysis (when clock data
-  is present).
-- Use an LLM to explain the results in plain Turkish or English.
-- Write everything to a Markdown report.
+Analyze a PGN file:
+
+```
+chesswhisper analyze games.pgn --player "YourName" --lang tr --llm claude -o report.md
+```
+
+- `--player` — your name as it appears in the PGN `White`/`Black` headers. If omitted, chesswhisper tries to auto-detect it from whichever name repeats most often across the file's games.
+- `--lang {tr,en}` — report language (default: `tr`). Opening names are always kept in their standard international form.
+- `--llm {claude,openai,none}` — coaching-commentary provider (default: `none`, stats-only). `claude` requires `ANTHROPIC_API_KEY`; `openai` requires `OPENAI_API_KEY` in the environment.
+- `-o, --output` — output Markdown path (default: `report.md`).
+- `--movetime` — milliseconds of engine think time per position (default: `300`).
+- `--depth` — fixed search depth; overrides `--movetime` when set.
+
+The first run downloads a matching Stockfish binary automatically and caches it locally.
 
 ## License
 
