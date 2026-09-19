@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Analiz{% endblock %}
+{% block content %}
+<div class="card">
+  <form id="analyze-form" method="post" action="/analyze" enctype="multipart/form-data" onsubmit="return handleSubmit()">
+    <label for="pgn">PGN dosyası</label>
+    <input type="file" id="pgn" name="pgn" accept=".pgn" required>
+    <p class="hint">Chess.com veya Lichess'ten indirdiğin bir .pgn dosyası.</p>
+
+    <label for="player">Oyuncu adı (opsiyonel)</label>
+    <input type="text" id="player" name="player" placeholder="Boş bırakırsan otomatik tespit edilir">
+
+    <label for="lang">Rapor dili</label>
+    <select id="lang" name="lang">
+      <option value="tr" selected>Türkçe</option>
+      <option value="en">English</option>
+    </select>
+
+    <label for="llm">Koçluk yorumu</label>
+    <select id="llm" name="llm">
+      <option value="none" selected>Yok (sadece istatistik)</option>
+      <option value="claude">Claude</option>
+      <option value="openai">OpenAI</option>
+    </select>
+    <p class="hint">Claude/OpenAI seçilirse sunucu ortamında ilgili API anahtarının tanımlı olması gerekir.</p>
+
+    <button type="submit" id="submit-btn">Analiz Et</button>
+    <p class="status-line" id="status-line">Analiz ediliyor… bu birkaç dakika sürebilir, lütfen sayfadan ayrılmayın.</p>
+  </form>
+</div>
+<script>
+  function handleSubmit() {
+    document.getElementById("submit-btn").disabled = true;
+    document.getElementById("submit-btn").textContent = "Analiz ediliyor…";
+    document.getElementById("status-line").style.display = "block";
+    return true;
+  }
+</script>
+{% endblock %}

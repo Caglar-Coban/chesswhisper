@@ -157,3 +157,20 @@ def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth, engi
         click.echo(f"Error: failed to write report to {output_path}: {exc}", err=True)
         sys.exit(1)
     click.echo(f"Report written to {output_path}")
+
+
+@cli.command()
+@click.option("--host", default="127.0.0.1", help="Interface to bind the web server to.")
+@click.option("--port", default=8000, type=int, help="Port to bind the web server to.")
+def serve(host, port):
+    try:
+        import uvicorn
+    except ImportError:
+        click.echo(
+            'Error: the web UI requires extra dependencies. Install them with: pip install -e ".[web]"',
+            err=True,
+        )
+        sys.exit(1)
+
+    click.echo(f"chesswhisper web UI running at http://{host}:{port}")
+    uvicorn.run("chesswhisper.web.app:app", host=host, port=port)

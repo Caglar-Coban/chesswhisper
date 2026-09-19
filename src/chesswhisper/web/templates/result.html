@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Rapor{% endblock %}
+{% block content %}
+{% if warnings %}
+<div class="banner warning">
+  <strong>Uyarılar:</strong>
+  <ul>
+    {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+<div class="card report">
+  {{ report_html | safe }}
+</div>
+<a class="back-link" href="/">&larr; Yeni analiz</a>
+{% endblock %}

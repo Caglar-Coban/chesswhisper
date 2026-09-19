@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Hata{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="banner error">
+    <strong>Hata:</strong> {{ message }}
+  </div>
+  <a class="back-link" href="/">&larr; Geri dön</a>
+</div>
+{% endblock %}
