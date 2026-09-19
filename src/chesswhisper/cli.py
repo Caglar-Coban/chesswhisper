@@ -38,6 +38,72 @@ def _build_llm_provider(name: str):
     raise ValueError(f"Unknown LLM provider: {name}")
 
 
+def run_analysis(
+    pgn_path,
+    player,
+    lang,
+    llm_name,
+    movetime=300,
+    depth=None,
+    engine_path=None,
+):
+    """Runs the full analysis pipeline and returns (aggregate_report, commentary, warnings).
+
+    Writes no output file. Raises FileNotFoundError/OSError, ValueError, or
+    StockfishProvisionError on unrecoverable input/engine problems -- callers
+    (the CLI, the web UI) decide how to present these. LLM failures are caught
+    internally and folded into the returned `warnings` list with an empty
+    `commentary` instead of raising.
+    """
+    warnings = []
+
+    load_result = load_pgn(pgn_path)
+    warnings.extend(load_result.warnings)
+
+    if not load_result.games:
+        raise ValueError("no valid games found in PGN file")
+
+    if player is None:
+        player = detect_player(load_result.games)
+
+    eco_table = load_eco_table()
+
+    engine = _open_engine(engine_path=engine_path)
+
+    skipped_for_player = 0
+    try:
+        game_reports = []
+        for loaded in load_result.games:
+            white = loaded.headers.get("White", "")
+            black = loaded.headers.get("Black", "")
+            if player not in (white, black):
+                skipped_for_player += 1
+                continue
+            evals = analyze_game(loaded.game, engine, movetime_ms=movetime, depth=depth)
+            game_reports.append(build_game_report(loaded, evals, player, eco_table))
+    finally:
+        if hasattr(engine, "quit"):
+            engine.quit()
+
+    if skipped_for_player:
+        warnings.append(f"skipped {skipped_for_player} game(s) not featuring player {player!r}.")
+
+    if not game_reports:
+        raise ValueError(f"no games featuring player {player!r} were found in {pgn_path}")
+
+    aggregate = build_aggregate_report(player, game_reports)
+
+    commentary = ""
+    if llm_name != "none":
+        try:
+            provider = _build_llm_provider(llm_name)
+            commentary = provider.generate_commentary(aggregate, lang)
+        except LLMProviderError as exc:
+            warnings.append(f"LLM commentary unavailable ({exc}); writing stats-only report.")
+
+    return aggregate, commentary, warnings
+
+
 @click.group()
 def cli():
     load_dotenv(find_dotenv(usecwd=True))
@@ -75,70 +141,15 @@ def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth, engi
             pass
 
     try:
-        load_result = load_pgn(pgn_path)
-    except OSError as exc:
-        click.echo(f"Error: {exc}", err=True)
-        sys.exit(1)
-
-    for warning in load_result.warnings:
-        click.echo(f"Warning: {warning}", err=True)
-
-    if not load_result.games:
-        click.echo("Error: no valid games found in PGN file", err=True)
-        sys.exit(1)
-
-    if player is None:
-        try:
-            player = detect_player(load_result.games)
-        except ValueError as exc:
-            click.echo(f"Error: {exc}", err=True)
-            sys.exit(1)
-
-    eco_table = load_eco_table()
-
-    try:
-        engine = _open_engine(engine_path=engine_path)
-    except StockfishProvisionError as exc:
-        click.echo(f"Error: {exc}", err=True)
-        sys.exit(1)
-
-    skipped_for_player = 0
-    try:
-        game_reports = []
-        for loaded in load_result.games:
-            white = loaded.headers.get("White", "")
-            black = loaded.headers.get("Black", "")
-            if player not in (white, black):
-                skipped_for_player += 1
-                continue
-            evals = analyze_game(loaded.game, engine, movetime_ms=movetime, depth=depth)
-            game_reports.append(build_game_report(loaded, evals, player, eco_table))
-    except ValueError as exc:
-        click.echo(f"Error: {exc}", err=True)
-        sys.exit(1)
-    finally:
-        if hasattr(engine, "quit"):
-            engine.quit()
-
-    if skipped_for_player:
-        click.echo(
-            f"Warning: skipped {skipped_for_player} game(s) not featuring player {player!r}.",
-            err=True,
+        aggregate, commentary, warnings = run_analysis(
+            pgn_path, player, lang, llm_name, movetime=movetime, depth=depth, engine_path=engine_path
         )
-
-    if not game_reports:
-        click.echo(f"Error: no games featuring player {player!r} were found in {pgn_path}", err=True)
+    except (OSError, ValueError, StockfishProvisionError) as exc:
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
-    aggregate = build_aggregate_report(player, game_reports)
-
-    commentary = ""
-    if llm_name != "none":
-        try:
-            provider = _build_llm_provider(llm_name)
-            commentary = provider.generate_commentary(aggregate, lang)
-        except LLMProviderError as exc:
-            click.echo(f"Warning: LLM commentary unavailable ({exc}); writing stats-only report.", err=True)
+    for warning in warnings:
+        click.echo(f"Warning: {warning}", err=True)
 
     try:
         write_report(aggregate, commentary, lang, output_path)

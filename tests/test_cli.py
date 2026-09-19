@@ -4,7 +4,7 @@ import textwrap
 import pytest
 from click.testing import CliRunner
 
-from chesswhisper.cli import _open_engine, cli
+from chesswhisper.cli import _open_engine, cli, run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
 
 SAMPLE_PGN = textwrap.dedent("""
@@ -241,3 +241,69 @@ def test_analyze_no_games_feature_player_fails_cleanly(tmp_path, monkeypatch):
     assert result.exit_code != 0
     assert "Error:" in result.output
     assert not output_path.exists()
+
+
+# --- run_analysis: the pure function shared by the CLI and the (future) web UI ---
+
+
+def test_run_analysis_returns_report_and_empty_commentary_with_none_llm(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    aggregate, commentary, warnings = run_analysis(str(pgn_path), "Alice", "en", "none")
+
+    assert aggregate.player == "Alice"
+    assert commentary == ""
+    assert warnings == []
+
+
+def test_run_analysis_raises_file_not_found_for_missing_pgn(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        run_analysis(str(tmp_path / "missing.pgn"), "Alice", "en", "none")
+
+
+def test_run_analysis_raises_value_error_for_unknown_player(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    with pytest.raises(ValueError):
+        run_analysis(str(pgn_path), "Nobody", "en", "none")
+
+
+def test_run_analysis_propagates_stockfish_provision_error(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+
+    def fail_provisioning(**kwargs):
+        raise StockfishProvisionError("no engine available")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", fail_provisioning)
+
+    with pytest.raises(StockfishProvisionError):
+        run_analysis(str(pgn_path), "Alice", "en", "none")
+
+
+def test_run_analysis_collects_skip_and_llm_warnings_instead_of_printing(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "games.pgn"
+    pgn_path.write_text(MULTI_GAME_PGN, encoding="utf-8")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    def boom(*args, **kwargs):
+        from chesswhisper.llm.base import LLMProviderError
+        raise LLMProviderError("no key")
+
+    monkeypatch.setattr("chesswhisper.cli._build_llm_provider", lambda name: type(
+        "P", (), {"generate_commentary": staticmethod(boom)}
+    )())
+
+    aggregate, commentary, warnings = run_analysis(str(pgn_path), "Alice", "en", "claude")
+
+    assert aggregate.player == "Alice"
+    assert commentary == ""
+    assert any("skipped" in w.lower() for w in warnings)
+    assert any("no key" in w for w in warnings)
