@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import secrets
 from pathlib import Path
 
@@ -28,6 +29,7 @@ def _get_or_create_secret_bytes(filename: str, generator) -> bytes:
         return path.read_bytes()
     value = generator()
     path.write_bytes(value)
+    os.chmod(path, 0o600)
     return value
 
 
