@@ -1,11 +1,13 @@
 import os
 import sys
+import tempfile
 
 import click
 from dotenv import find_dotenv, load_dotenv
 
 from chesswhisper.engine_analyzer import analyze_game
 from chesswhisper.engine_provision import StockfishProvisionError, get_stockfish_path
+from chesswhisper.game_sources import DEFAULT_MAX_GAMES, GameFetchError, fetch_pgn
 from chesswhisper.llm.base import LLMProviderError
 from chesswhisper.llm.none_provider import NoneProvider
 from chesswhisper.openings import load_eco_table
@@ -36,6 +38,23 @@ def _build_llm_provider(name: str, api_key: str | None = None):
         from chesswhisper.llm.openai_provider import OpenAIProvider
         return OpenAIProvider(api_key=api_key)
     raise ValueError(f"Unknown LLM provider: {name}")
+
+
+def _fetch_to_tempfile(platform, username, max_games):
+    """Fetches games and writes them to a temporary .pgn file.
+
+    Returns (temp_path, player, warnings). Raises GameFetchError. The caller
+    owns the returned file and must delete it.
+    """
+    fetched = fetch_pgn(platform, username, max_games)
+    fd, temp_path = tempfile.mkstemp(suffix=".pgn")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(fetched.pgn_text.encode("utf-8"))
+    except OSError:
+        os.remove(temp_path)
+        raise
+    return temp_path, fetched.player, fetched.warnings
 
 
 def run_analysis(
@@ -115,7 +134,10 @@ def cli():
 
 
 @cli.command()
-@click.argument("pgn_path", type=click.Path(exists=False))
+@click.argument("pgn_path", required=False, type=click.Path(exists=False))
+@click.option("--lichess", "lichess_user", default=None, help="Fetch this Lichess user's recent games instead of reading a PGN file.")
+@click.option("--chesscom", "chesscom_user", default=None, help="Fetch this chess.com user's recent games instead of reading a PGN file.")
+@click.option("--max", "max_games", default=None, type=int, help="Number of recent games to fetch, 1-50 (default 10). Only with --lichess/--chesscom.")
 @click.option("--player", default=None, help="Player name to analyze (matches PGN White/Black headers).")
 @click.option("--lang", type=click.Choice(["tr", "en"]), default="tr")
 @click.option("--llm", "llm_name", type=click.Choice(["claude", "openai", "none"]), default="none")
@@ -123,8 +145,19 @@ def cli():
 @click.option("--movetime", default=300, help="Engine think time per position, in milliseconds.")
 @click.option("--depth", default=None, type=int, help="Fixed search depth (overrides --movetime).")
 @click.option("--engine-path", default=None, help="Path to an existing Stockfish binary (skips auto-download).")
-def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth, engine_path):
-    if os.path.abspath(output_path) == os.path.abspath(pgn_path):
+def analyze(
+    pgn_path, lichess_user, chesscom_user, max_games, player, lang, llm_name, output_path, movetime, depth, engine_path
+):
+    sources_given = [s for s in (pgn_path, lichess_user, chesscom_user) if s is not None]
+    if len(sources_given) != 1:
+        click.echo("Error: provide exactly one of PGN_PATH, --lichess USER, or --chesscom USER.", err=True)
+        sys.exit(1)
+    fetching = pgn_path is None
+    if max_games is not None and not fetching:
+        click.echo("Error: --max only applies with --lichess or --chesscom.", err=True)
+        sys.exit(1)
+
+    if pgn_path is not None and os.path.abspath(output_path) == os.path.abspath(pgn_path):
         click.echo(
             f"Error: output path {output_path} is the same as the input PGN file; "
             "refusing to overwrite it. Use -o to choose a different output path.",
@@ -145,13 +178,32 @@ def analyze(pgn_path, player, lang, llm_name, output_path, movetime, depth, engi
         except OSError:
             pass
 
+    temp_path = None
     try:
-        aggregate, commentary, warnings = run_analysis(
-            pgn_path, player, lang, llm_name, movetime=movetime, depth=depth, engine_path=engine_path
-        )
-    except (OSError, ValueError, StockfishProvisionError) as exc:
-        click.echo(f"Error: {exc}", err=True)
-        sys.exit(1)
+        analysis_path = pgn_path
+        if fetching:
+            platform, username = ("lichess", lichess_user) if lichess_user is not None else ("chesscom", chesscom_user)
+            count = DEFAULT_MAX_GAMES if max_games is None else max_games
+            try:
+                temp_path, fetched_player, fetch_warnings = _fetch_to_tempfile(platform, username, count)
+            except (GameFetchError, OSError) as exc:
+                click.echo(f"Error: {exc}", err=True)
+                sys.exit(1)
+            for warning in fetch_warnings:
+                click.echo(f"Warning: {warning}", err=True)
+            analysis_path = temp_path
+            player = player or fetched_player
+
+        try:
+            aggregate, commentary, warnings = run_analysis(
+                analysis_path, player, lang, llm_name, movetime=movetime, depth=depth, engine_path=engine_path
+            )
+        except (OSError, ValueError, StockfishProvisionError) as exc:
+            click.echo(f"Error: {exc}", err=True)
+            sys.exit(1)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
 
     for warning in warnings:
         click.echo(f"Warning: {warning}", err=True)

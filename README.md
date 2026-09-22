@@ -36,6 +36,20 @@ chesswhisper analyze games.pgn --player "YourName" --lang tr --llm claude -o rep
 - `--depth` — fixed search depth; overrides `--movetime` when set.
 - `--engine-path` — path to an already-installed Stockfish binary (skips auto-download). `CHESSWHISPER_STOCKFISH_PATH` env var works the same way; a `stockfish` binary already on `PATH` is also picked up automatically.
 
+Instead of a PGN file, you can fetch a player's most recent games straight
+from Lichess or chess.com:
+
+```
+chesswhisper analyze --lichess YourLichessName --max 20 --lang en -o report.md
+chesswhisper analyze --chesscom YourChessComName --llm claude
+```
+
+- Give exactly one of `PGN_PATH`, `--lichess USER`, or `--chesscom USER`.
+- `--max N` — how many of the most recent games to fetch, 1-50 (default: `10`). Only valid with `--lichess`/`--chesscom`.
+- The username is also used as `--player` (matched case-insensitively); pass `--player` explicitly to override it.
+- Only public games are fetched (no login), and chess variants such as Chess960 are skipped.
+- Analysis time grows with the number of games; at the default 300 ms per position, tens of games can take several minutes.
+
 The first run downloads a matching Stockfish binary automatically and caches it locally, unless an existing installation is found via `--engine-path`, `CHESSWHISPER_STOCKFISH_PATH`, or `PATH`.
 
 ### API keys via `.env`

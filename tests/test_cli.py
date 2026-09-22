@@ -6,6 +6,7 @@ from click.testing import CliRunner
 
 from chesswhisper.cli import _open_engine, cli, run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
+from chesswhisper.game_sources import FetchResult, GameFetchError
 
 SAMPLE_PGN = textwrap.dedent("""
     [Event "Test"]
@@ -362,3 +363,129 @@ def test_create_admin_rejects_duplicate_username(tmp_path, monkeypatch):
 
     assert result.exit_code != 0
     assert "already" in result.output.lower() or "zaten" in result.output.lower()
+
+
+# --- fetching games from Lichess / chess.com ---
+
+
+def test_analyze_requires_exactly_one_game_source(tmp_path):
+    runner = CliRunner()
+
+    none_given = runner.invoke(cli, ["analyze"])
+    two_given = runner.invoke(cli, ["analyze", str(tmp_path / "g.pgn"), "--lichess", "alice"])
+    both_platforms = runner.invoke(cli, ["analyze", "--lichess", "alice", "--chesscom", "alice"])
+
+    for result in (none_given, two_given, both_platforms):
+        assert result.exit_code == 1
+        assert "exactly one of" in result.output
+
+
+def test_analyze_max_is_rejected_with_a_pgn_file(tmp_path):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+
+    result = CliRunner().invoke(cli, ["analyze", str(pgn_path), "--max", "5"])
+
+    assert result.exit_code == 1
+    assert "--max" in result.output
+
+
+def test_analyze_lichess_fetches_games_and_uses_the_fetched_player(tmp_path, monkeypatch):
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+    calls = {}
+
+    def fake_fetch(platform, username, max_games):
+        calls["args"] = (platform, username, max_games)
+        return FetchResult(pgn_text=SAMPLE_PGN, player="Alice", warnings=["only 1 game(s) found (requested 3)."])
+
+    monkeypatch.setattr("chesswhisper.cli.fetch_pgn", fake_fetch)
+    output_path = tmp_path / "report.md"
+
+    result = CliRunner().invoke(
+        cli,
+        ["analyze", "--lichess", "alice", "--max", "3", "--lang", "en", "-o", str(output_path)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls["args"] == ("lichess", "alice", 3)
+    assert "Warning: only 1 game(s) found" in result.output
+    assert "Alice" in output_path.read_text(encoding="utf-8")
+
+
+def test_analyze_chesscom_defaults_to_ten_games(tmp_path, monkeypatch):
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+    calls = {}
+
+    def fake_fetch(platform, username, max_games):
+        calls["args"] = (platform, username, max_games)
+        return FetchResult(pgn_text=SAMPLE_PGN, player="Alice")
+
+    monkeypatch.setattr("chesswhisper.cli.fetch_pgn", fake_fetch)
+
+    result = CliRunner().invoke(cli, ["analyze", "--chesscom", "alice", "-o", str(tmp_path / "r.md")])
+
+    assert result.exit_code == 0, result.output
+    assert calls["args"] == ("chesscom", "alice", 10)
+
+
+def test_analyze_player_option_overrides_the_fetched_player(tmp_path, monkeypatch):
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+    monkeypatch.setattr(
+        "chesswhisper.cli.fetch_pgn",
+        lambda platform, username, max_games: FetchResult(pgn_text=SAMPLE_PGN, player="Bob"),
+    )
+    captured = {}
+    real_run_analysis = run_analysis
+
+    def spy_run_analysis(pgn_path, player, *args, **kwargs):
+        captured["player"] = player
+        return real_run_analysis(pgn_path, player, *args, **kwargs)
+
+    monkeypatch.setattr("chesswhisper.cli.run_analysis", spy_run_analysis)
+
+    result = CliRunner().invoke(
+        cli, ["analyze", "--lichess", "bob", "--player", "Alice", "-o", str(tmp_path / "r.md")]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["player"] == "Alice"
+
+
+def test_analyze_fetch_error_exits_cleanly_without_running_the_engine(tmp_path, monkeypatch):
+    def fail_if_called(**kwargs):
+        raise AssertionError("the engine should not start when fetching fails")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", fail_if_called)
+
+    def fake_fetch(platform, username, max_games):
+        raise GameFetchError("Lichess user 'alice' not found.")
+
+    monkeypatch.setattr("chesswhisper.cli.fetch_pgn", fake_fetch)
+
+    result = CliRunner().invoke(cli, ["analyze", "--lichess", "alice", "-o", str(tmp_path / "r.md")])
+
+    assert result.exit_code == 1
+    assert "Error: Lichess user 'alice' not found." in result.output
+
+
+def test_analyze_removes_the_temporary_pgn_after_a_fetched_run(tmp_path, monkeypatch):
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+    monkeypatch.setattr(
+        "chesswhisper.cli.fetch_pgn",
+        lambda platform, username, max_games: FetchResult(pgn_text=SAMPLE_PGN, player="Alice"),
+    )
+    seen = {}
+    real_run_analysis = run_analysis
+
+    def spy_run_analysis(pgn_path, *args, **kwargs):
+        seen["path"] = pgn_path
+        seen["existed_during_run"] = os.path.exists(pgn_path)
+        return real_run_analysis(pgn_path, *args, **kwargs)
+
+    monkeypatch.setattr("chesswhisper.cli.run_analysis", spy_run_analysis)
+
+    result = CliRunner().invoke(cli, ["analyze", "--lichess", "alice", "-o", str(tmp_path / "r.md")])
+
+    assert result.exit_code == 0, result.output
+    assert seen["existed_during_run"] is True
+    assert not os.path.exists(seen["path"])
