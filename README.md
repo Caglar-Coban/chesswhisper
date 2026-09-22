@@ -94,6 +94,12 @@ The admin account additionally sees an **Admin** page listing every
 registered user, can view any user's history, delete a user, or reset a
 user's password.
 
+On the analysis form you can either upload a PGN file or pick **Lichess**
+or **chess.com**, type a username, and choose how many of that player's
+most recent games (1-50) to fetch and analyze; the username is used as the
+player name unless you fill in the player field yourself. Only public
+games are fetched, and more games means a longer wait.
+
 A few hardening details: accounts lock for 15 minutes after 5 consecutive
 failed login attempts, and every state-changing form (login, register,
 settings, analyze, history/user deletion, password reset) is protected

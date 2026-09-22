@@ -5,6 +5,7 @@ from datetime import timedelta
 import bleach
 import markdown as markdown_lib
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from starlette.responses import RedirectResponse
 
 from chesswhisper.cli import run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
+from chesswhisper.game_sources import DEFAULT_MAX_GAMES, GameFetchError, GameSourceUnavailable, fetch_pgn
 from chesswhisper.report_writer import render_markdown
 from chesswhisper.web.auth import (
     Forbidden,
@@ -35,6 +37,7 @@ from chesswhisper.web.security import (
 
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
+FETCH_SOURCES = ("lichess", "chesscom")
 
 
 def _naive_utcnow():
@@ -297,6 +300,9 @@ async def index(request: Request, current_user: User = Depends(get_current_user)
 async def analyze(
     request: Request,
     pgn: UploadFile | None = File(default=None),  # noqa: B008 - FastAPI's own idiom
+    source: str = Form(default="file"),
+    username: str = Form(default=""),
+    max_games: str = Form(default=str(DEFAULT_MAX_GAMES)),
     player: str = Form(default=""),
     lang: str = Form(default="tr"),
     llm: str = Form(default="none"),
@@ -304,8 +310,24 @@ async def analyze(
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
-    if pgn is None or not pgn.filename:
-        return _render_error(request, "Lütfen analiz edilecek bir PGN dosyası seçin.", 400, current_user)
+    fetching = source in FETCH_SOURCES
+    if source != "file" and not fetching:
+        return _render_error(request, "Geçersiz oyun kaynağı.", 400, current_user)
+
+    contents = b""
+    game_count = DEFAULT_MAX_GAMES
+    if fetching:
+        username = username.strip()
+        if not username:
+            return _render_error(request, "Lütfen bir kullanıcı adı girin.", 400, current_user)
+        try:
+            game_count = int(max_games)
+        except ValueError:
+            return _render_error(request, "Oyun sayısı geçerli bir tam sayı olmalı.", 400, current_user)
+    else:
+        if pgn is None or not pgn.filename:
+            return _render_error(request, "Lütfen analiz edilecek bir PGN dosyası seçin.", 400, current_user)
+        contents = await pgn.read()
 
     llm_api_key = None
     if llm != "none":
@@ -317,7 +339,18 @@ async def analyze(
             return RedirectResponse("/settings?message=missing_key", status_code=303)
         llm_api_key = decrypt_api_key(encrypted)
 
-    contents = await pgn.read()
+    fetch_warnings: list[str] = []
+    if fetching:
+        try:
+            fetched = await run_in_threadpool(fetch_pgn, source, username, game_count)
+        except GameSourceUnavailable as exc:
+            return _render_error(request, f"Oyunlar alınamadı: {exc}", 502, current_user)
+        except GameFetchError as exc:
+            return _render_error(request, str(exc), 400, current_user)
+        contents = fetched.pgn_text.encode("utf-8")
+        fetch_warnings = fetched.warnings
+        player = player or fetched.player
+
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".pgn", delete=False) as tmp:
@@ -355,7 +388,12 @@ async def analyze(
 
     return _render(
         request, "result.html",
-        {"report_html": report_html, "warnings": warnings, "current_user": current_user, "saved": True},
+        {
+            "report_html": report_html,
+            "warnings": fetch_warnings + warnings,
+            "current_user": current_user,
+            "saved": True,
+        },
     )
 
 

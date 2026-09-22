@@ -4,12 +4,30 @@
 <div class="card">
   <form id="analyze-form" method="post" action="/analyze" enctype="multipart/form-data" onsubmit="return handleSubmit()">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="pgn">PGN dosyası</label>
-    <input type="file" id="pgn" name="pgn" accept=".pgn" required>
-    <p class="hint">Chess.com veya Lichess'ten indirdiğin bir .pgn dosyası.</p>
+    <label for="source">Oyun kaynağı</label>
+    <select id="source" name="source" onchange="updateSource()">
+      <option value="file" selected>PGN dosyası</option>
+      <option value="lichess">Lichess kullanıcısı</option>
+      <option value="chesscom">chess.com kullanıcısı</option>
+    </select>
+
+    <div id="file-field">
+      <label for="pgn">PGN dosyası</label>
+      <input type="file" id="pgn" name="pgn" accept=".pgn" required>
+      <p class="hint">Chess.com veya Lichess'ten indirdiğin bir .pgn dosyası.</p>
+    </div>
+
+    <div id="fetch-fields" style="display: none;">
+      <label for="username">Kullanıcı adı</label>
+      <input type="text" id="username" name="username" placeholder="Platformdaki kullanıcı adın">
+      <label for="max_games">Oyun sayısı</label>
+      <input type="number" id="max_games" name="max_games" value="10" min="1" max="50">
+      <p class="hint">Son oynadığın oyunlar çekilir (en fazla 50, yalnızca herkese açık oyunlar). Ne kadar çok oyun seçersen analiz o kadar uzun sürer.</p>
+    </div>
 
     <label for="player">Oyuncu adı (opsiyonel)</label>
     <input type="text" id="player" name="player" placeholder="Boş bırakırsan otomatik tespit edilir">
+    <p class="hint">Kullanıcı adıyla oyun çekiyorsan boş bırakabilirsin; kullanıcı adın kullanılır.</p>
 
     <label for="lang">Rapor dili</label>
     <select id="lang" name="lang">
@@ -30,6 +48,15 @@
   </form>
 </div>
 <script>
+  function updateSource() {
+    var fetching = document.getElementById("source").value !== "file";
+    document.getElementById("file-field").style.display = fetching ? "none" : "block";
+    document.getElementById("fetch-fields").style.display = fetching ? "block" : "none";
+    document.getElementById("pgn").required = !fetching;
+    document.getElementById("username").required = fetching;
+  }
+  updateSource();
+
   function handleSubmit() {
     document.getElementById("submit-btn").disabled = true;
     document.getElementById("submit-btn").textContent = "Analiz ediliyor…";
