@@ -244,6 +244,35 @@ def test_analyze_no_games_feature_player_fails_cleanly(tmp_path, monkeypatch):
     assert not output_path.exists()
 
 
+def test_run_analysis_calls_on_progress_after_each_game(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "games.pgn"
+    pgn_path.write_text(MULTI_GAME_PGN, encoding="utf-8")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    progress_calls = []
+    run_analysis(
+        str(pgn_path), "Alice", "en", "none",
+        on_progress=lambda completed, total: progress_calls.append((completed, total)),
+    )
+
+    # MULTI_GAME_PGN has two games (Alice-Bob, Carol-Dave); with player="Alice"
+    # the first is analyzed and the second is skipped, but on_progress fires
+    # for both, in order, each reporting the fixed total of 2.
+    assert progress_calls == [(1, 2), (2, 2)]
+
+
+def test_run_analysis_without_on_progress_is_unaffected(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    aggregate, commentary, warnings = run_analysis(str(pgn_path), "Alice", "en", "none")
+
+    assert aggregate.player == "Alice"
+
+
 # --- run_analysis: the pure function shared by the CLI and the (future) web UI ---
 
 

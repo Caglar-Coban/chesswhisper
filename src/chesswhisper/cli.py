@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+from collections.abc import Callable
 
 import click
 from dotenv import find_dotenv, load_dotenv
@@ -66,6 +67,7 @@ def run_analysis(
     depth=None,
     engine_path=None,
     llm_api_key=None,
+    on_progress: Callable[[int, int], None] | None = None,
 ):
     """Runs the full analysis pipeline and returns (aggregate_report, commentary, warnings).
 
@@ -78,6 +80,12 @@ def run_analysis(
     llm_api_key, if given, is passed straight to the chosen LLM provider
     instead of letting it fall back to reading from the environment --
     used by the web UI to supply a specific logged-in user's own key.
+
+    on_progress, if given, is called once per game in the PGN -- whether
+    that game is analyzed or skipped for not featuring the tracked player --
+    as on_progress(games_processed, total_games), with total_games fixed
+    before the loop starts. The CLI does not pass this; the web UI uses it
+    to report progress on a background job.
     """
     warnings = []
 
@@ -94,17 +102,22 @@ def run_analysis(
 
     engine = _open_engine(engine_path=engine_path)
 
+    total_games = len(load_result.games)
     skipped_for_player = 0
     try:
         game_reports = []
-        for loaded in load_result.games:
+        for processed, loaded in enumerate(load_result.games, start=1):
             white = loaded.headers.get("White", "")
             black = loaded.headers.get("Black", "")
             if player not in (white, black):
                 skipped_for_player += 1
+                if on_progress is not None:
+                    on_progress(processed, total_games)
                 continue
             evals = analyze_game(loaded.game, engine, movetime_ms=movetime, depth=depth)
             game_reports.append(build_game_report(loaded, evals, player, eco_table))
+            if on_progress is not None:
+                on_progress(processed, total_games)
     finally:
         if hasattr(engine, "quit"):
             engine.quit()
