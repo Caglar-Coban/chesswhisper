@@ -31,7 +31,7 @@ class FakeEngine:
 @pytest.fixture
 def client(tmp_path):
     init_db(tmp_path / "web_app_test.db")
-    return CsrfClient(app, raise_server_exceptions=False)
+    return CsrfClient(app, raise_server_exceptions=False, follow_redirects=False)
 
 
 def test_analyze_without_file_returns_400(client):
@@ -61,11 +61,16 @@ def test_analyze_sanitizes_html_injected_via_pgn_headers(client, monkeypatch):
         data={"player": "<script>alert(1)</script>", "lang": "en", "llm": "none"},
     )
 
-    assert response.status_code == 200
-    assert "<script>" not in response.text
+    assert response.status_code == 303
+    job_id = response.headers["location"].rsplit("/", 1)[-1]
+    status = client.get(f"/analyze/status/{job_id}")
+    report = client.get(status.json()["redirect"])
+
+    assert report.status_code == 200
+    assert "<script>" not in report.text
 
 
-def test_analyze_engine_provisioning_failure_returns_500(client, monkeypatch):
+def test_analyze_engine_provisioning_failure_marks_the_job_as_an_error(client, monkeypatch):
     client.post("/register", data={"username": "alice", "password": "correct-horse"})
     from chesswhisper.engine_provision import StockfishProvisionError
 
@@ -80,5 +85,9 @@ def test_analyze_engine_provisioning_failure_returns_500(client, monkeypatch):
         data={"player": "Alice", "lang": "en", "llm": "none"},
     )
 
-    assert response.status_code == 500
-    assert "Hata" in response.text
+    assert response.status_code == 303
+    job_id = response.headers["location"].rsplit("/", 1)[-1]
+    status = client.get(f"/analyze/status/{job_id}")
+
+    assert status.json()["status"] == "error"
+    assert "Motor kurulum hatası" in status.json()["message"]

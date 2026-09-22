@@ -64,14 +64,20 @@ def test_analyze_saves_history_record_for_current_user(client, monkeypatch):
         data={"player": "Alice", "lang": "en", "llm": "none"},
     )
 
-    assert response.status_code == 200
-    assert "chesswhisper Analysis Report" in response.text
+    assert response.status_code == 303
+    job_id = response.headers["location"].rsplit("/", 1)[-1]
+    status = client.get(f"/analyze/status/{job_id}")
+    assert status.json()["status"] == "done"
 
     db = next(get_db())
     records = db.query(AnalysisRecord).all()
     assert len(records) == 1
     assert records[0].player_name == "Alice"
     assert records[0].games_count == 1
+
+    report = client.get(status.json()["redirect"])
+    assert report.status_code == 200
+    assert "chesswhisper Analysis Report" in report.text
 
 
 def test_analyze_without_configured_key_redirects_to_settings(client, monkeypatch):
@@ -101,7 +107,7 @@ def test_analyze_uses_current_users_decrypted_key(client, monkeypatch):
 
     captured = {}
 
-    def fake_run_analysis(pgn_path, player, lang, llm_name, llm_api_key=None, **kwargs):
+    def fake_run_analysis(pgn_path, player, lang, llm_name, llm_api_key=None, on_progress=None, **kwargs):
         captured["llm_api_key"] = llm_api_key
         from chesswhisper.stats_engine import PHASES, AggregateReport, ErrorCounts, TimeManagementStats
         return (
@@ -122,11 +128,11 @@ def test_analyze_uses_current_users_decrypted_key(client, monkeypatch):
         data={"player": "Alice", "lang": "en", "llm": "claude"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 303
     assert captured["llm_api_key"] == "sk-alices-key"
 
 
-def test_analyze_unknown_player_returns_400(client, monkeypatch):
+def test_analyze_unknown_player_marks_the_job_as_an_error(client, monkeypatch):
     monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
 
     response = client.post(
@@ -135,5 +141,9 @@ def test_analyze_unknown_player_returns_400(client, monkeypatch):
         data={"player": "Nobody", "lang": "en", "llm": "none"},
     )
 
-    assert response.status_code == 400
-    assert "Hata" in response.text
+    assert response.status_code == 303
+    job_id = response.headers["location"].rsplit("/", 1)[-1]
+    status = client.get(f"/analyze/status/{job_id}")
+
+    assert status.json()["status"] == "error"
+    assert "Nobody" in status.json()["message"]

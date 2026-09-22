@@ -79,13 +79,20 @@ def test_analyze_fetches_lichess_games_and_saves_history(client, monkeypatch):
         data={"source": "lichess", "username": " alice ", "max_games": "7", "lang": "en", "llm": "none"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 303
     assert calls["args"] == ("lichess", "alice", 7)
-    assert "chesswhisper Analysis Report" in response.text
-    assert "only 1 game(s) found" in response.text
+    job_id = response.headers["location"].rsplit("/", 1)[-1]
+    status = client.get(f"/analyze/status/{job_id}")
+    assert status.json()["status"] == "done"
+
     records = next(get_db()).query(AnalysisRecord).all()
     assert len(records) == 1
     assert records[0].player_name == "Alice"
+
+    report = client.get(status.json()["redirect"])
+    assert report.status_code == 200
+    assert "chesswhisper Analysis Report" in report.text
+    assert "only 1 game(s) found" in report.text
 
 
 def test_analyze_fetch_defaults_player_to_the_fetched_spelling(client, monkeypatch):
@@ -180,6 +187,22 @@ def test_analyze_source_unavailable_returns_502(client, monkeypatch):
     assert "rate limiting" in response.text
 
 
+def test_analyze_fetch_error_does_not_create_a_job(client, monkeypatch):
+    def fake_fetch(platform, username, max_games):
+        raise GameFetchError("Lichess user 'alice' not found.")
+
+    monkeypatch.setattr("chesswhisper.web.app.fetch_pgn", fake_fetch)
+
+    def fail_if_job_created(*args, **kwargs):
+        raise AssertionError("a job should not have been created")
+
+    monkeypatch.setattr("chesswhisper.web.app.jobs.create_job", fail_if_job_created)
+
+    response = client.post("/analyze", data={"source": "lichess", "username": "alice", "max_games": "5", "llm": "none"})
+
+    assert response.status_code == 400
+
+
 def test_analyze_fetch_with_missing_api_key_redirects_before_fetching(client, monkeypatch):
     monkeypatch.setattr("chesswhisper.web.app.fetch_pgn", fail_if_called)
 
@@ -201,5 +224,10 @@ def test_analyze_file_upload_still_works_when_source_is_file(client, monkeypatch
         data={"source": "file", "player": "Alice", "lang": "en", "llm": "none"},
     )
 
-    assert response.status_code == 200
-    assert "chesswhisper Analysis Report" in response.text
+    assert response.status_code == 303
+    job_id = response.headers["location"].rsplit("/", 1)[-1]
+    status = client.get(f"/analyze/status/{job_id}")
+    report = client.get(status.json()["redirect"])
+
+    assert report.status_code == 200
+    assert "chesswhisper Analysis Report" in report.text
