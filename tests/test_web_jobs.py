@@ -74,11 +74,25 @@ def test_create_job_prunes_entries_older_than_one_hour(monkeypatch):
     monkeypatch.setattr("chesswhisper.web.jobs.time.monotonic", lambda: fake_now[0])
 
     old_job = jobs.create_job(user_id=1)
+    jobs.mark_done(old_job.id, record_id=1, warnings=[])
     fake_now[0] += jobs._JOB_TTL_SECONDS + 1
 
     new_job = jobs.create_job(user_id=2)
 
     assert jobs.get_job(old_job.id) is None
+    assert jobs.get_job(new_job.id) is new_job
+
+
+def test_create_job_never_prunes_a_still_running_job_no_matter_how_old(monkeypatch):
+    fake_now = [1000.0]
+    monkeypatch.setattr("chesswhisper.web.jobs.time.monotonic", lambda: fake_now[0])
+
+    old_job = jobs.create_job(user_id=1)
+    fake_now[0] += jobs._JOB_TTL_SECONDS + 1
+
+    new_job = jobs.create_job(user_id=2)
+
+    assert jobs.get_job(old_job.id) is old_job
     assert jobs.get_job(new_job.id) is new_job
 
 

@@ -52,6 +52,11 @@ def _job_id_from_redirect(response):
     return response.headers["location"].rsplit("/", 1)[-1]
 
 
+def _real_start_background(target):
+    import threading
+    threading.Thread(target=target, daemon=True).start()
+
+
 def _fail_if_job_created(*args, **kwargs):
     raise AssertionError("a job should not have been created")
 
@@ -90,6 +95,37 @@ def test_analyze_job_completes_and_status_redirects_to_history(client, monkeypat
     records = db.query(AnalysisRecord).all()
     assert len(records) == 1
     assert body["redirect"] == f"/history/{records[0].id}?job={job_id}"
+
+
+def test_analyze_runs_on_a_real_background_thread(client, monkeypatch):
+    import time as time_module
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+    # Undo the autouse inline-execution patch for this one test -- we want
+    # to prove the real threading.Thread path works, not just the seam.
+    monkeypatch.setattr("chesswhisper.web.app._start_background", _real_start_background)
+
+    response = client.post(
+        "/analyze",
+        files={"pgn": ("game.pgn", SAMPLE_PGN, "application/octet-stream")},
+        data={"player": "Alice", "lang": "en", "llm": "none"},
+    )
+    job_id = _job_id_from_redirect(response)
+
+    deadline = time_module.monotonic() + 5.0
+    status_body = None
+    while time_module.monotonic() < deadline:
+        status_body = client.get(f"/analyze/status/{job_id}").json()
+        if status_body["status"] != "running":
+            break
+        time_module.sleep(0.05)
+
+    assert status_body is not None
+    assert status_body["status"] == "done", f"job did not complete in time: {status_body}"
+
+    db = next(get_db())
+    records = db.query(AnalysisRecord).all()
+    assert len(records) == 1
 
 
 def test_history_detail_shows_warnings_only_via_the_job_query_param(client, monkeypatch):

@@ -25,7 +25,7 @@
           document.getElementById("progress-fill").style.width = pct + "%";
           setTimeout(poll, 1000);
         } else if (data.status === "done") {
-          window.location = data.redirect;
+          window.location.replace(data.redirect);
         } else if (data.status === "error") {
           document.getElementById("progress-text").style.display = "none";
           document.getElementById("error-banner").style.display = "block";

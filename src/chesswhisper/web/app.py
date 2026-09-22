@@ -440,9 +440,10 @@ async def analyze(
         tmp_path = tmp.name
 
     job = jobs.create_job(current_user.id)
+    user_id = current_user.id
     _start_background(
         lambda: _run_analysis_job(
-            job.id, current_user.id, tmp_path, player or None, lang, llm, llm_api_key, fetch_warnings
+            job.id, user_id, tmp_path, player or None, lang, llm, llm_api_key, fetch_warnings
         )
     )
     return RedirectResponse(f"/analyze/progress/{job.id}", status_code=303)

@@ -40,7 +40,11 @@ _lock = threading.Lock()
 
 
 def _prune_expired(now: float) -> None:
-    expired = [job_id for job_id, job in _jobs.items() if now - job.created_at > _JOB_TTL_SECONDS]
+    expired = [
+        job_id
+        for job_id, job in _jobs.items()
+        if job.status != "running" and now - job.created_at > _JOB_TTL_SECONDS
+    ]
     for job_id in expired:
         del _jobs[job_id]
 
@@ -70,14 +74,14 @@ def mark_done(job_id: str, record_id: int, warnings: list[str]) -> None:
     with _lock:
         job = _jobs.get(job_id)
         if job is not None:
-            job.status = "done"
             job.record_id = record_id
             job.warnings = warnings
+            job.status = "done"
 
 
 def mark_error(job_id: str, message: str) -> None:
     with _lock:
         job = _jobs.get(job_id)
         if job is not None:
-            job.status = "error"
             job.error_message = message
+            job.status = "error"
