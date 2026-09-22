@@ -90,6 +90,10 @@ register their own account. Each user sets their own Anthropic/OpenAI API
 key under **Settings** (encrypted at rest, never in an environment
 variable shared across users) and every analysis they run is saved to
 their **History**, where they can also delete their own past records.
+Submitting the analyze form takes you to a progress page showing how many
+of your games have been analyzed so far, then lands you on the finished
+report once it's done — the page is safe to leave and revisit from
+**History** if you navigate away.
 The admin account additionally sees an **Admin** page listing every
 registered user, can view any user's history, delete a user, or reset a
 user's password.

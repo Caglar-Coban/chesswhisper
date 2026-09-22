@@ -1,5 +1,7 @@
 import re
+import sys
 
+import pytest
 from fastapi.testclient import TestClient
 
 _CSRF_RE = re.compile(r'name="csrf_token" value="([^"]*)"')
@@ -34,3 +36,17 @@ class CsrfClient(TestClient):
             if match:
                 return match.group(1)
         raise AssertionError("could not obtain a csrf_token from any known page")
+
+
+@pytest.fixture(autouse=True)
+def _run_background_jobs_inline(monkeypatch):
+    """chesswhisper.web.app starts analysis jobs on a background thread;
+    tests need deterministic, synchronous execution instead of racing a
+    real thread. This patches that one seam -- but only if the module is
+    already imported (checked via sys.modules, which never triggers an
+    import itself), so a CLI-only test run never has to import or
+    initialize the FastAPI app.
+    """
+    module = sys.modules.get("chesswhisper.web.app")
+    if module is not None:
+        monkeypatch.setattr(module, "_start_background", lambda target: target())

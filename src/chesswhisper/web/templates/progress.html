@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Analiz sürüyor{% endblock %}
+{% block content %}
+<div class="card">
+  <p id="progress-text">Analiz başlıyor…</p>
+  <div class="progress-track">
+    <div class="progress-fill" id="progress-fill" style="width: 0%;"></div>
+  </div>
+  <div class="banner error" id="error-banner" style="display: none;">
+    <strong>Hata:</strong> <span id="error-message"></span>
+    <p><a class="back-link" href="/">&larr; Yeni analiz</a></p>
+  </div>
+</div>
+<script>
+  var jobId = "{{ job_id }}";
+
+  function poll() {
+    fetch("/analyze/status/" + jobId)
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (data.status === "running") {
+          document.getElementById("progress-text").textContent =
+            data.total > 0 ? data.completed + " / " + data.total + " oyun analiz edildi" : "Analiz başlıyor…";
+          var pct = data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0;
+          document.getElementById("progress-fill").style.width = pct + "%";
+          setTimeout(poll, 1000);
+        } else if (data.status === "done") {
+          window.location = data.redirect;
+        } else if (data.status === "error") {
+          document.getElementById("progress-text").style.display = "none";
+          document.getElementById("error-banner").style.display = "block";
+          document.getElementById("error-message").textContent = data.message;
+        }
+      })
+      .catch(function () {
+        setTimeout(poll, 1000);
+      });
+  }
+  poll();
+</script>
+{% endblock %}

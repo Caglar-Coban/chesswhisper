@@ -1,12 +1,14 @@
 import os
 import tempfile
+import threading
+from collections.abc import Callable
 from datetime import timedelta
 
 import bleach
 import markdown as markdown_lib
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
@@ -22,6 +24,7 @@ from chesswhisper.game_sources import (
     fetch_pgn,
 )
 from chesswhisper.report_writer import render_markdown
+from chesswhisper.web import jobs
 from chesswhisper.web.auth import (
     Forbidden,
     RedirectToLogin,
@@ -98,6 +101,63 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> HTML
 def _report_to_safe_html(report_markdown: str) -> str:
     raw_html = markdown_lib.markdown(report_markdown, extensions=["tables"])
     return bleach.clean(raw_html, tags=_ALLOWED_TAGS, attributes=_ALLOWED_ATTRS, strip=True)
+
+
+def _start_background(target: Callable[[], None]) -> None:
+    threading.Thread(target=target, daemon=True).start()
+
+
+def _run_analysis_job(
+    job_id: str,
+    user_id: int,
+    tmp_path: str,
+    player: str | None,
+    lang: str,
+    llm: str,
+    llm_api_key: str | None,
+    fetch_warnings: list[str],
+) -> None:
+    db = next(get_db())
+    try:
+        try:
+            aggregate, commentary, warnings = run_analysis(
+                tmp_path, player, lang, llm,
+                llm_api_key=llm_api_key,
+                on_progress=lambda completed, total: jobs.update_progress(job_id, completed, total),
+            )
+        except (OSError, ValueError) as exc:
+            jobs.mark_error(job_id, str(exc))
+            return
+        except StockfishProvisionError as exc:
+            jobs.mark_error(job_id, f"Motor kurulum hatası: {exc}")
+            return
+
+        report_markdown = render_markdown(aggregate, commentary, lang)
+        record = AnalysisRecord(
+            user_id=user_id,
+            player_name=aggregate.player,
+            lang=lang,
+            llm_used=llm,
+            games_count=len(aggregate.games),
+            overall_acpl=aggregate.overall_acpl,
+            overall_accuracy=aggregate.overall_accuracy,
+            report_markdown=report_markdown,
+        )
+        db.add(record)
+        db.commit()
+        jobs.mark_done(job_id, record.id, fetch_warnings + warnings)
+    except Exception:
+        # Last-resort safety net: without this, an exception type this
+        # function doesn't already handle (e.g. a database error on commit)
+        # would propagate out of the background thread silently, leaving
+        # the job stuck in "running" forever from the client's point of
+        # view. Message text matches the existing top-level
+        # _unhandled_exception_handler for the same failure class.
+        jobs.mark_error(job_id, "Beklenmeyen bir hata oluştu.")
+    finally:
+        db.close()
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 @app.get("/register", response_class=HTMLResponse, response_model=None)
@@ -273,10 +333,25 @@ async def history_detail(
     if record is None or record.user_id != current_user.id:
         return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
 
+    warnings: list[str] = []
+    job_id = request.query_params.get("job")
+    if job_id is not None:
+        job = jobs.get_job(job_id)
+        if (
+            job is not None
+            and job.user_id == current_user.id
+            and job.status == "done"
+            and job.record_id == record_id
+        ):
+            warnings = job.warnings
+
     report_html = _report_to_safe_html(record.report_markdown)
     return _render(
         request, "history_detail.html",
-        {"current_user": current_user, "report_html": report_html, "back_url": "/history"},
+        {
+            "current_user": current_user, "report_html": report_html,
+            "back_url": "/history", "warnings": warnings,
+        },
     )
 
 
@@ -360,50 +435,50 @@ async def analyze(
         fetch_warnings = fetched.warnings
         player = player or fetched.player
 
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".pgn", delete=False) as tmp:
-            tmp.write(contents)
-            tmp_path = tmp.name
+    with tempfile.NamedTemporaryFile(suffix=".pgn", delete=False) as tmp:
+        tmp.write(contents)
+        tmp_path = tmp.name
 
-        try:
-            aggregate, commentary, warnings = run_analysis(
-                tmp_path, player or None, lang, llm, llm_api_key=llm_api_key
-            )
-        except (OSError, ValueError) as exc:
-            return _render_error(request, str(exc), 400, current_user)
-        except StockfishProvisionError as exc:
-            return _render_error(request, f"Motor kurulum hatası: {exc}", 500, current_user)
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
-    report_markdown = render_markdown(aggregate, commentary, lang)
-
-    record = AnalysisRecord(
-        user_id=current_user.id,
-        player_name=aggregate.player,
-        lang=lang,
-        llm_used=llm,
-        games_count=len(aggregate.games),
-        overall_acpl=aggregate.overall_acpl,
-        overall_accuracy=aggregate.overall_accuracy,
-        report_markdown=report_markdown,
+    job = jobs.create_job(current_user.id)
+    _start_background(
+        lambda: _run_analysis_job(
+            job.id, current_user.id, tmp_path, player or None, lang, llm, llm_api_key, fetch_warnings
+        )
     )
-    db.add(record)
-    db.commit()
+    return RedirectResponse(f"/analyze/progress/{job.id}", status_code=303)
 
-    report_html = _report_to_safe_html(report_markdown)
 
-    return _render(
-        request, "result.html",
-        {
-            "report_html": report_html,
-            "warnings": fetch_warnings + warnings,
-            "current_user": current_user,
-            "saved": True,
-        },
-    )
+@app.get("/analyze/progress/{job_id}", response_class=HTMLResponse, response_model=None)
+async def analyze_progress(
+    request: Request,
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+) -> HTMLResponse:
+    job = jobs.get_job(job_id)
+    if job is None:
+        return _render_error(request, "Analiz bulunamadı.", 404, current_user)
+    if job.user_id != current_user.id:
+        raise Forbidden()
+    return _render(request, "progress.html", {"current_user": current_user, "job_id": job_id})
+
+
+@app.get("/analyze/status/{job_id}", response_model=None)
+async def analyze_status(
+    job_id: str,
+    current_user: User = Depends(get_current_user),
+) -> JSONResponse:
+    job = jobs.get_job(job_id)
+    if job is None:
+        return JSONResponse({"status": "error", "message": "Analiz bulunamadı."}, status_code=404)
+    if job.user_id != current_user.id:
+        return JSONResponse({"status": "error", "message": "Yetkisiz."}, status_code=403)
+
+    body: dict[str, object] = {"status": job.status, "completed": job.completed, "total": job.total}
+    if job.status == "done":
+        body["redirect"] = f"/history/{job.record_id}?job={job.id}"
+    elif job.status == "error":
+        body["message"] = job.error_message
+    return JSONResponse(body)
 
 
 @app.get("/admin", response_class=HTMLResponse)
