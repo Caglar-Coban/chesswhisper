@@ -111,6 +111,7 @@ def _fetch_chesscom(username: str, max_games: int, warnings: list[str]) -> list[
     _ensure_ok(resp, label)
     archives = _json_object(resp, label).get("archives", [])
     if not isinstance(archives, list):
+        warnings.append(f"{label} returned archives in an unexpected format.")
         return []
 
     games: list[chess.pgn.Game] = []
@@ -125,6 +126,7 @@ def _fetch_chesscom(username: str, max_games: int, warnings: list[str]) -> list[
         _ensure_ok(resp, label)
         entries = _json_object(resp, label).get("games", [])
         if not isinstance(entries, list):
+            warnings.append(f"{label} archive {_month_label(url)} had an unexpected format and was skipped.")
             continue
         for entry in reversed(entries):  # the API lists a month oldest-first
             if not isinstance(entry, dict) or entry.get("rules") != "chess":

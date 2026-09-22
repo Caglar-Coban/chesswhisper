@@ -14,7 +14,13 @@ from starlette.responses import RedirectResponse
 
 from chesswhisper.cli import run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
-from chesswhisper.game_sources import DEFAULT_MAX_GAMES, GameFetchError, GameSourceUnavailable, fetch_pgn
+from chesswhisper.game_sources import (
+    DEFAULT_MAX_GAMES,
+    MAX_GAMES_LIMIT,
+    GameFetchError,
+    GameSourceUnavailable,
+    fetch_pgn,
+)
 from chesswhisper.report_writer import render_markdown
 from chesswhisper.web.auth import (
     Forbidden,
@@ -293,7 +299,10 @@ async def history_delete(
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, current_user: User = Depends(get_current_user)) -> HTMLResponse:
-    return _render(request, "index.html", {"current_user": current_user})
+    return _render(
+        request, "index.html",
+        {"current_user": current_user, "default_max_games": DEFAULT_MAX_GAMES, "max_games_limit": MAX_GAMES_LIMIT},
+    )
 
 
 @app.post("/analyze", response_class=HTMLResponse, response_model=None)

@@ -6,7 +6,7 @@ from click.testing import CliRunner
 
 from chesswhisper.cli import _open_engine, cli, run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
-from chesswhisper.game_sources import FetchResult, GameFetchError
+from chesswhisper.game_sources import DEFAULT_MAX_GAMES, MAX_GAMES_LIMIT, FetchResult, GameFetchError
 
 SAMPLE_PGN = textwrap.dedent("""
     [Event "Test"]
@@ -390,6 +390,17 @@ def test_analyze_max_is_rejected_with_a_pgn_file(tmp_path):
     assert "--max" in result.output
 
 
+def test_analyze_max_help_text_matches_the_shared_constants():
+    result = CliRunner().invoke(cli, ["analyze", "--help"])
+    # Click wraps help text across lines, so compare against the collapsed form
+    # rather than depending on exact line breaks.
+    collapsed = " ".join(result.output.split())
+
+    assert result.exit_code == 0, result.output
+    assert f"1-{MAX_GAMES_LIMIT}" in collapsed
+    assert f"default {DEFAULT_MAX_GAMES}" in collapsed
+
+
 def test_analyze_lichess_fetches_games_and_uses_the_fetched_player(tmp_path, monkeypatch):
     monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
     calls = {}
@@ -410,6 +421,24 @@ def test_analyze_lichess_fetches_games_and_uses_the_fetched_player(tmp_path, mon
     assert calls["args"] == ("lichess", "alice", 3)
     assert "Warning: only 1 game(s) found" in result.output
     assert "Alice" in output_path.read_text(encoding="utf-8")
+
+
+def test_analyze_strips_whitespace_from_a_fetched_username(tmp_path, monkeypatch):
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+    calls = {}
+
+    def fake_fetch(platform, username, max_games):
+        calls["args"] = (platform, username, max_games)
+        return FetchResult(pgn_text=SAMPLE_PGN, player="Alice")
+
+    monkeypatch.setattr("chesswhisper.cli.fetch_pgn", fake_fetch)
+
+    result = CliRunner().invoke(
+        cli, ["analyze", "--lichess", "  alice  ", "-o", str(tmp_path / "r.md")]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls["args"] == ("lichess", "alice", DEFAULT_MAX_GAMES)
 
 
 def test_analyze_chesscom_defaults_to_ten_games(tmp_path, monkeypatch):

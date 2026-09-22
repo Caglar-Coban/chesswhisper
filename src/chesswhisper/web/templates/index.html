@@ -21,8 +21,8 @@
       <label for="username">Kullanıcı adı</label>
       <input type="text" id="username" name="username" placeholder="Platformdaki kullanıcı adın">
       <label for="max_games">Oyun sayısı</label>
-      <input type="number" id="max_games" name="max_games" value="10" min="1" max="50">
-      <p class="hint">Son oynadığın oyunlar çekilir (en fazla 50, yalnızca herkese açık oyunlar). Ne kadar çok oyun seçersen analiz o kadar uzun sürer.</p>
+      <input type="number" id="max_games" name="max_games" value="{{ default_max_games }}" min="1" max="{{ max_games_limit }}">
+      <p class="hint">Son oynadığın oyunlar çekilir (en fazla {{ max_games_limit }}, yalnızca herkese açık oyunlar). Ne kadar çok oyun seçersen analiz o kadar uzun sürer.</p>
     </div>
 
     <label for="player">Oyuncu adı (opsiyonel)</label>

@@ -54,6 +54,16 @@ def test_index_offers_game_source_choices(client):
     assert 'name="pgn"' in response.text
 
 
+def test_index_max_games_field_matches_the_shared_constants(client):
+    from chesswhisper.game_sources import DEFAULT_MAX_GAMES, MAX_GAMES_LIMIT
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert f'value="{DEFAULT_MAX_GAMES}"' in response.text
+    assert f'max="{MAX_GAMES_LIMIT}"' in response.text
+
+
 def test_analyze_fetches_lichess_games_and_saves_history(client, monkeypatch):
     monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
     calls = {}

@@ -363,3 +363,26 @@ def test_chesscom_unreadable_json_raises_source_unavailable(mocker):
 
     with pytest.raises(GameSourceUnavailable, match="couldn't read"):
         fetch_pgn("chesscom", "caglar", 5)
+
+
+def test_chesscom_non_list_archives_raises_fetch_error(mocker):
+    install_fake_get(mocker, {CHESSCOM_ARCHIVES_URL: FakeResponse(json_data={"archives": "not-a-list"})})
+
+    with pytest.raises(GameFetchError, match="No standard-chess games"):
+        fetch_pgn("chesscom", "caglar", 5)
+
+
+def test_chesscom_non_list_games_in_a_month_is_skipped_with_a_warning(mocker):
+    install_fake_get(
+        mocker,
+        {
+            CHESSCOM_ARCHIVES_URL: archives_response("2026/08", "2026/09"),
+            month_url("2026/09"): FakeResponse(json_data={"games": "not-a-list"}),
+            month_url("2026/08"): month_response(("aug-1", "chess")),
+        },
+    )
+
+    result = fetch_pgn("chesscom", "caglar", 1)
+
+    assert events_in(result.pgn_text) == ["aug-1"]
+    assert any("2026/09" in warning and "unexpected format" in warning for warning in result.warnings)

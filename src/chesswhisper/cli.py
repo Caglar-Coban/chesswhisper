@@ -7,7 +7,7 @@ from dotenv import find_dotenv, load_dotenv
 
 from chesswhisper.engine_analyzer import analyze_game
 from chesswhisper.engine_provision import StockfishProvisionError, get_stockfish_path
-from chesswhisper.game_sources import DEFAULT_MAX_GAMES, GameFetchError, fetch_pgn
+from chesswhisper.game_sources import DEFAULT_MAX_GAMES, MAX_GAMES_LIMIT, GameFetchError, fetch_pgn
 from chesswhisper.llm.base import LLMProviderError
 from chesswhisper.llm.none_provider import NoneProvider
 from chesswhisper.openings import load_eco_table
@@ -137,7 +137,11 @@ def cli():
 @click.argument("pgn_path", required=False, type=click.Path(exists=False))
 @click.option("--lichess", "lichess_user", default=None, help="Fetch this Lichess user's recent games instead of reading a PGN file.")
 @click.option("--chesscom", "chesscom_user", default=None, help="Fetch this chess.com user's recent games instead of reading a PGN file.")
-@click.option("--max", "max_games", default=None, type=int, help="Number of recent games to fetch, 1-50 (default 10). Only with --lichess/--chesscom.")
+@click.option(
+    "--max", "max_games", default=None, type=int,
+    help=f"Number of recent games to fetch, 1-{MAX_GAMES_LIMIT} (default {DEFAULT_MAX_GAMES}). "
+    "Only with --lichess/--chesscom.",
+)
 @click.option("--player", default=None, help="Player name to analyze (matches PGN White/Black headers).")
 @click.option("--lang", type=click.Choice(["tr", "en"]), default="tr")
 @click.option("--llm", "llm_name", type=click.Choice(["claude", "openai", "none"]), default="none")
@@ -182,7 +186,9 @@ def analyze(
     try:
         analysis_path = pgn_path
         if fetching:
-            platform, username = ("lichess", lichess_user) if lichess_user is not None else ("chesscom", chesscom_user)
+            platform, username = (
+                ("lichess", lichess_user.strip()) if lichess_user is not None else ("chesscom", chesscom_user.strip())
+            )
             count = DEFAULT_MAX_GAMES if max_games is None else max_games
             try:
                 temp_path, fetched_player, fetch_warnings = _fetch_to_tempfile(platform, username, count)
