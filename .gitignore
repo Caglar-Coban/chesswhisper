@@ -16,3 +16,6 @@ stockfish*
 # Generated reports (user-run output, not source)
 /report.md
 /*.pgn
+
+# Local git worktrees for feature branches
+.worktrees/
