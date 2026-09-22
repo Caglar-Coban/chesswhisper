@@ -18,6 +18,9 @@ _USERNAME_RE = re.compile(r"[A-Za-z0-9_-]{2,30}")
 _PLATFORM_LABELS = {"lichess": "Lichess", "chesscom": "chess.com"}
 _LICHESS_GAMES_URL = "https://lichess.org/api/games/user/{username}"
 _LICHESS_PERF_TYPES = "ultraBullet,bullet,blitz,rapid,classical,correspondence"
+MAX_CHESSCOM_ARCHIVES = 6
+_CHESSCOM_API_PREFIX = "https://api.chess.com/pub/player/"
+_CHESSCOM_ARCHIVES_URL = _CHESSCOM_API_PREFIX + "{username}/games/archives"
 
 
 class GameFetchError(Exception):
@@ -96,9 +99,49 @@ def _fetch_lichess(username: str, max_games: int, warnings: list[str]) -> list[c
     return _parse_games(resp.content.decode("utf-8", errors="replace"))
 
 
+def _month_label(archive_url: str) -> str:
+    return "/".join(archive_url.rstrip("/").split("/")[-2:])
+
+
+def _fetch_chesscom(username: str, max_games: int, warnings: list[str]) -> list[chess.pgn.Game]:
+    label = _PLATFORM_LABELS["chesscom"]
+    resp = _get(_CHESSCOM_ARCHIVES_URL.format(username=quote(username, safe="")), label)
+    if resp.status_code == 404:
+        raise GameFetchError(f"chess.com user {username!r} not found.")
+    _ensure_ok(resp, label)
+    archives = _json_object(resp, label).get("archives", [])
+    if not isinstance(archives, list):
+        return []
+
+    games: list[chess.pgn.Game] = []
+    for url in reversed(archives[-MAX_CHESSCOM_ARCHIVES:]):  # newest month first
+        if not isinstance(url, str) or not url.startswith(_CHESSCOM_API_PREFIX):
+            continue
+        resp = _get(url, label)
+        if resp.status_code == 404:
+            # Observed live: the current month's URL can 404 while earlier months are fine.
+            warnings.append(f"chess.com archive {_month_label(url)} was unavailable and was skipped.")
+            continue
+        _ensure_ok(resp, label)
+        entries = _json_object(resp, label).get("games", [])
+        if not isinstance(entries, list):
+            continue
+        for entry in reversed(entries):  # the API lists a month oldest-first
+            if not isinstance(entry, dict) or entry.get("rules") != "chess":
+                continue
+            pgn = entry.get("pgn")
+            if not isinstance(pgn, str) or not pgn.strip():
+                continue
+            games.extend(_parse_games(pgn))
+            if len(games) >= max_games:
+                return games[:max_games]
+    return games
+
+
 # Each fetcher returns games newest-first and may append to `warnings`.
 _FETCHERS: dict[str, Callable[[str, int, list[str]], list[chess.pgn.Game]]] = {
     "lichess": _fetch_lichess,
+    "chesscom": _fetch_chesscom,
 }
 
 

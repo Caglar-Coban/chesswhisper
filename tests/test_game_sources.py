@@ -204,3 +204,162 @@ def test_lichess_games_not_naming_the_user_raises_fetch_error(mocker):
 
     with pytest.raises(GameFetchError, match="none of them names"):
         fetch_pgn("lichess", "caglar", 5)
+
+
+# --- chess.com ---
+
+CHESSCOM_ARCHIVES_URL = "https://api.chess.com/pub/player/caglar/games/archives"
+
+
+def month_url(month):
+    return f"https://api.chess.com/pub/player/caglar/games/{month}"
+
+
+def month_response(*games):
+    """`games` are (event, rules) pairs given oldest-first, like the real API."""
+    entries = [
+        {"rules": rules, "pgn": make_pgn(event=event), "end_time": index}
+        for index, (event, rules) in enumerate(games)
+    ]
+    return FakeResponse(json_data={"games": entries})
+
+
+def archives_response(*months):
+    return FakeResponse(json_data={"archives": [month_url(month) for month in months]})
+
+
+def events_in(pgn_text):
+    return sorted(line.split('"')[1] for line in pgn_text.splitlines() if line.startswith("[Event "))
+
+
+def test_chesscom_walks_months_newest_first_and_takes_latest_games(mocker):
+    calls = install_fake_get(
+        mocker,
+        {
+            CHESSCOM_ARCHIVES_URL: archives_response("2026/07", "2026/08", "2026/09"),
+            month_url("2026/09"): month_response(("sep-1", "chess"), ("sep-2", "chess")),
+            month_url("2026/08"): month_response(("aug-1", "chess"), ("aug-2", "chess"), ("aug-3", "chess")),
+        },
+    )
+
+    result = fetch_pgn("chesscom", "caglar", 4)
+
+    assert events_in(result.pgn_text) == ["aug-2", "aug-3", "sep-1", "sep-2"]
+    assert result.player == "Caglar"
+    assert result.warnings == []
+    requested = [call["url"] for call in calls]
+    assert requested == [CHESSCOM_ARCHIVES_URL, month_url("2026/09"), month_url("2026/08")]
+    assert all(call["headers"]["User-Agent"].startswith("chesswhisper") for call in calls)
+    assert all(call["timeout"] == 30 for call in calls)
+
+
+def test_chesscom_keeps_only_standard_rules(mocker):
+    install_fake_get(
+        mocker,
+        {
+            CHESSCOM_ARCHIVES_URL: archives_response("2026/09"),
+            month_url("2026/09"): month_response(("std", "chess"), ("960", "chess960"), ("crazy", "crazyhouse")),
+        },
+    )
+
+    result = fetch_pgn("chesscom", "caglar", 10)
+
+    assert events_in(result.pgn_text) == ["std"]
+
+
+def test_chesscom_looks_back_at_most_six_archives(mocker):
+    months = [f"2026/{month:02d}" for month in range(1, 9)]  # 8 archives, oldest first
+    routes = {CHESSCOM_ARCHIVES_URL: archives_response(*months)}
+    for month in months[-6:]:
+        routes[month_url(month)] = month_response()
+    calls = install_fake_get(mocker, routes)
+
+    with pytest.raises(GameFetchError, match="No standard-chess games"):
+        fetch_pgn("chesscom", "caglar", 5)
+
+    assert len(calls) == 1 + 6
+    assert month_url("2026/02") not in [call["url"] for call in calls]
+
+
+def test_chesscom_unknown_user_raises_plain_fetch_error(mocker):
+    install_fake_get(mocker, {CHESSCOM_ARCHIVES_URL: FakeResponse(status_code=404)})
+
+    with pytest.raises(GameFetchError, match="not found") as excinfo:
+        fetch_pgn("chesscom", "caglar", 5)
+
+    assert not isinstance(excinfo.value, GameSourceUnavailable)
+
+
+def test_chesscom_skips_a_month_that_404s_with_a_warning(mocker):
+    install_fake_get(
+        mocker,
+        {
+            CHESSCOM_ARCHIVES_URL: archives_response("2026/08", "2026/09"),
+            month_url("2026/09"): FakeResponse(status_code=404),
+            month_url("2026/08"): month_response(("aug-1", "chess")),
+        },
+    )
+
+    result = fetch_pgn("chesscom", "caglar", 1)
+
+    assert events_in(result.pgn_text) == ["aug-1"]
+    assert any("2026/09" in warning and "skipped" in warning for warning in result.warnings)
+
+
+def test_chesscom_rate_limited_month_raises_source_unavailable(mocker):
+    install_fake_get(
+        mocker,
+        {
+            CHESSCOM_ARCHIVES_URL: archives_response("2026/09"),
+            month_url("2026/09"): FakeResponse(status_code=429),
+        },
+    )
+
+    with pytest.raises(GameSourceUnavailable, match="rate"):
+        fetch_pgn("chesscom", "caglar", 5)
+
+
+def test_chesscom_empty_archive_list_raises_fetch_error(mocker):
+    install_fake_get(mocker, {CHESSCOM_ARCHIVES_URL: FakeResponse(json_data={"archives": []})})
+
+    with pytest.raises(GameFetchError, match="No standard-chess games"):
+        fetch_pgn("chesscom", "caglar", 5)
+
+
+def test_chesscom_never_requests_archive_urls_outside_the_api_host(mocker):
+    install_fake_get(
+        mocker,
+        {
+            CHESSCOM_ARCHIVES_URL: FakeResponse(
+                json_data={"archives": [month_url("2026/08"), "https://evil.example/2026/09"]}
+            ),
+            month_url("2026/08"): month_response(("aug-1", "chess")),
+        },
+    )
+
+    result = fetch_pgn("chesscom", "caglar", 5)  # a request to evil.example would KeyError
+
+    assert events_in(result.pgn_text) == ["aug-1"]
+
+
+def test_chesscom_skips_entries_without_a_pgn(mocker):
+    good = {"rules": "chess", "pgn": make_pgn(event="good"), "end_time": 1}
+    no_pgn = {"rules": "chess", "end_time": 2}
+    install_fake_get(
+        mocker,
+        {
+            CHESSCOM_ARCHIVES_URL: archives_response("2026/09"),
+            month_url("2026/09"): FakeResponse(json_data={"games": [good, no_pgn]}),
+        },
+    )
+
+    result = fetch_pgn("chesscom", "caglar", 5)
+
+    assert events_in(result.pgn_text) == ["good"]
+
+
+def test_chesscom_unreadable_json_raises_source_unavailable(mocker):
+    install_fake_get(mocker, {CHESSCOM_ARCHIVES_URL: FakeResponse(json_data=None)})
+
+    with pytest.raises(GameSourceUnavailable, match="couldn't read"):
+        fetch_pgn("chesscom", "caglar", 5)
