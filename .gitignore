@@ -19,3 +19,6 @@ stockfish*
 
 # Local git worktrees for feature branches
 .worktrees/
+
+# Scratch database used by the Alembic CLI (see alembic.ini)
+/dev.db

@@ -127,6 +127,22 @@ pytest -v               # tests
 CI (`.github/workflows/ci.yml`) runs all three on every push and PR, across
 Python 3.11/3.12 on Linux and Windows.
 
+### Schema changes
+
+The web UI's SQLite schema is managed by Alembic; migrations live in
+`src/chesswhisper/web/migrations/versions/` and run automatically every
+time the app starts, so existing databases upgrade themselves. To change
+the schema:
+
+```
+alembic upgrade head                           # bring the scratch dev.db up to date
+# edit src/chesswhisper/web/models.py
+alembic revision --autogenerate -m "what changed"
+```
+
+Review the generated file in `versions/` before committing it. `pytest`
+fails if the models and the migrations disagree.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
