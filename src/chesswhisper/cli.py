@@ -241,6 +241,8 @@ def analyze(
 def serve(host, port):
     try:
         import uvicorn
+
+        from chesswhisper.web.db import init_db
     except ImportError:
         click.echo(
             'Error: the web UI requires extra dependencies. Install them with: pip install -e ".[web]"',
@@ -248,6 +250,9 @@ def serve(host, port):
         )
         sys.exit(1)
 
+    # Migrate once, up front: a schema problem stops startup with a clear
+    # traceback instead of surfacing as a 500 on the first request.
+    init_db()
     click.echo(f"chesswhisper web UI running at http://{host}:{port}")
     uvicorn.run("chesswhisper.web.app:app", host=host, port=port)
 

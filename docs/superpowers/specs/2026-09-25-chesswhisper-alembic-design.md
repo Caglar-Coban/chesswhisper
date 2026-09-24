@@ -116,12 +116,21 @@ is removed.
 Alembic's default `fileConfig` logging setup is skipped when there is no
 ini file, so calling `init_db` does not reconfigure the app's logging.
 
-### 4.5 Error handling
+### 4.5 Error handling and concurrency
 
 A failing migration raises out of `init_db`, so the app fails to start
-with Alembic's traceback. The transaction wrapping the run rolls back
-what SQLite can roll back. This is intentional: a half-migrated schema
-must not serve requests. No retry or repair logic.
+with Alembic's traceback, and the database is left exactly as it was.
+Python's `sqlite3` driver never emits BEGIN before DDL, so migrations run
+on a private, NullPool engine that takes over transaction control
+(SQLAlchemy's documented pysqlite recipe: driver `isolation_level = None`
+plus `BEGIN IMMEDIATE` on begin). The stamp and the whole upgrade then
+form one real transaction. `BEGIN IMMEDIATE` also makes a second process
+that starts at the same moment wait for the first one's migration.
+
+Within one process, Alembic's command API is not thread-safe. `init_db`
+and `get_db()`'s lazy init therefore share a lock, and `chesswhisper
+serve` calls `init_db()` before starting uvicorn, so migrations normally
+run once at startup and never inside a request. No retry or repair logic.
 
 ## 5. Testing
 

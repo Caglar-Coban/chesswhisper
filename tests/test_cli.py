@@ -547,3 +547,14 @@ def test_analyze_removes_the_temporary_pgn_after_a_fetched_run(tmp_path, monkeyp
     assert result.exit_code == 0, result.output
     assert seen["existed_during_run"] is True
     assert not os.path.exists(seen["path"])
+
+
+def test_serve_migrates_the_database_before_starting_the_server(mocker):
+    calls = []
+    mocker.patch("chesswhisper.web.db.init_db", side_effect=lambda: calls.append("init_db"))
+    mocker.patch("uvicorn.run", side_effect=lambda *a, **k: calls.append("uvicorn.run"))
+
+    result = CliRunner().invoke(cli, ["serve"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["init_db", "uvicorn.run"]

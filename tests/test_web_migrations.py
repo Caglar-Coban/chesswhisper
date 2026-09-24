@@ -1,4 +1,7 @@
 import logging
+import shutil
+import textwrap
+import threading
 
 import pytest
 from alembic import command
@@ -7,6 +10,7 @@ from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect, text
 
+from chesswhisper.web import db as db_module
 from chesswhisper.web import models  # noqa: F401 -- registers tables on Base.metadata
 from chesswhisper.web.db import BASELINE_REVISION, Base, get_db, init_db, migrations_dir
 
@@ -130,3 +134,90 @@ def test_cli_mode_without_url_refuses_to_guess_a_database():
 
     with pytest.raises(RuntimeError, match="sqlalchemy.url"):
         command.upgrade(config, "head")
+
+
+def _migrations_with_failing_revision(tmp_path):
+    """A copy of the real migrations plus a 0002 that does DDL, then raises."""
+    directory = tmp_path / "migrations"
+    shutil.copytree(migrations_dir(), directory, ignore=shutil.ignore_patterns("__pycache__"))
+    (directory / "versions" / "0002_boom.py").write_text(
+        textwrap.dedent(
+            '''
+            import sqlalchemy as sa
+            from alembic import op
+
+            revision = "0002_boom"
+            down_revision = "0001_baseline"
+            branch_labels = None
+            depends_on = None
+
+
+            def upgrade() -> None:
+                with op.batch_alter_table("analysis_records") as batch_op:
+                    batch_op.add_column(sa.Column("blunders", sa.Text(), nullable=True))
+                op.create_table("extra", sa.Column("id", sa.Integer(), primary_key=True))
+                raise RuntimeError("boom")
+
+
+            def downgrade() -> None:
+                pass
+            '''
+        ),
+        encoding="utf-8",
+    )
+    return directory
+
+
+def test_failed_migration_rolls_back_its_ddl(tmp_path, monkeypatch):
+    db_path = tmp_path / "rollback.db"
+    init_db(db_path)
+    failing = _migrations_with_failing_revision(tmp_path)
+    monkeypatch.setattr(db_module, "migrations_dir", lambda: failing)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        init_db(db_path)
+
+    engine = _engine(db_path)
+    assert "extra" not in inspect(engine).get_table_names()
+    assert "blunders" not in {c["name"] for c in inspect(engine).get_columns("analysis_records")}
+    assert _versions(engine) == [HEAD]
+
+
+def test_failed_first_start_leaves_the_database_startable(tmp_path, monkeypatch):
+    db_path = tmp_path / "first.db"
+    failing = _migrations_with_failing_revision(tmp_path)
+    monkeypatch.setattr(db_module, "migrations_dir", lambda: failing)
+    with pytest.raises(RuntimeError, match="boom"):
+        init_db(db_path)
+    monkeypatch.undo()
+
+    init_db(db_path)
+
+    assert _versions(_engine(db_path)) == [HEAD]
+
+
+def _open_session_after(barrier, errors):
+    try:
+        barrier.wait()
+        db_gen = get_db()
+        next(db_gen)
+        db_gen.close()
+    except Exception as exc:  # collected for the caller's assertion
+        errors.append(exc)
+
+
+def test_concurrent_lazy_get_db_migrates_exactly_once(tmp_path, monkeypatch):
+    for trial in range(5):
+        db_path = tmp_path / f"race{trial}.db"
+        monkeypatch.setattr(db_module, "_default_db_path", lambda path=db_path: path)
+        monkeypatch.setattr(db_module, "_SessionLocal", None)
+        barrier = threading.Barrier(4)
+        errors: list[Exception] = []
+        threads = [threading.Thread(target=_open_session_after, args=(barrier, errors)) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert errors == []
+        assert _versions(_engine(db_path)) == [HEAD]
