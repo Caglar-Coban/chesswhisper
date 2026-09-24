@@ -1,36 +1,266 @@
 {% extends "base.html" %}
 {% block title %}chesswhisper — Geçmiş{% endblock %}
 {% block content %}
-<div class="card">
-  {% if viewing_as_admin %}
-  <p class="hint">{{ target_username }} kullanıcısının analiz geçmişini görüntülüyorsun.</p>
-  {% endif %}
-  {% if records %}
-  <table>
-    <thead><tr><th>Tarih</th><th>Oyuncu</th><th>Doğruluk</th><th>ACPL</th><th>Oyun</th><th></th></tr></thead>
-    <tbody>
-      {% for r in records %}
-      <tr>
-        <td>{{ r.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
-        <td>{{ r.player_name }}</td>
-        <td>{{ "%.1f"|format(r.overall_accuracy) }}%</td>
-        <td>{{ "%.1f"|format(r.overall_acpl) }}</td>
-        <td>{{ r.games_count }}</td>
-        <td>
-          <a href="{{ detail_url_prefix }}/{{ r.id }}">Görüntüle</a>
-          {% if not viewing_as_admin %}
-          <form method="post" action="/history/{{ r.id }}/delete" style="display:inline; margin-left:8px;">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="link-button">Sil</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{% if viewing_as_admin %}
+<p class="hint page-note">{{ target_username }} kullanıcısının analiz geçmişini görüntülüyorsun.</p>
+{% endif %}
+
+{% if trend %}
+<section class="card trend-card" aria-labelledby="trend-title">
+  <div class="trend-head">
+    <div>
+      <h2 id="trend-title" class="section-title">Eğilim</h2>
+      <p class="hint trend-sub">Analizler eskiden yeniye. Bir noktaya tıklayınca raporu açılır.</p>
+    </div>
+    {% if trend.players|length > 1 %}
+    <form method="get" action="{{ request.url.path }}" class="player-picker">
+      <label for="trend-player">Oyuncu</label>
+      <select id="trend-player" name="player">
+        {% for name in trend.players %}
+        <option value="{{ name }}"{% if name == trend.selected %} selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+      <noscript><button type="submit" class="secondary-button">Göster</button></noscript>
+    </form>
+    {% else %}
+    <p class="trend-player-name">{{ trend.selected }}</p>
+    {% endif %}
+  </div>
+
+  {% if trend.has_enough_points %}
+  <div class="trend-charts" id="trend-charts" data-detail-prefix="{{ detail_url_prefix }}">
+    <figure class="trend-chart">
+      <figcaption><span class="metric">Doğruluk</span> <span class="metric-note">% · yüksek daha iyi</span></figcaption>
+      <svg id="trend-accuracy" tabindex="0" role="img"></svg>
+    </figure>
+    <figure class="trend-chart">
+      <figcaption><span class="metric">ACPL</span> <span class="metric-note">ortalama kayıp · düşük daha iyi</span></figcaption>
+      <svg id="trend-acpl" tabindex="0" role="img"></svg>
+    </figure>
+    <div class="trend-tooltip" id="trend-tooltip" hidden></div>
+  </div>
+  <script type="application/json" id="trend-data">{{ trend.chart_data()|tojson }}</script>
   {% else %}
-  <p>Henüz kaydedilmiş bir analiz yok.</p>
+  <p class="trend-empty">Eğilim için en az 2 analiz gerekli. {{ trend.selected }} için şu an {{ trend.points|length }} analiz var.</p>
   {% endif %}
-</div>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2 class="section-title">Analizler</h2>
+  {% if records %}
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead>
+        <tr><th>Tarih</th><th>Oyuncu</th><th class="num">Doğruluk</th><th class="num">ACPL</th><th class="num">Oyun</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in records %}
+        <tr>
+          <td class="nowrap">{{ r.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+          <td>{{ r.player_name }}</td>
+          <td class="num">{{ "%.1f"|format(r.overall_accuracy) }}%</td>
+          <td class="num">{{ "%.1f"|format(r.overall_acpl) }}</td>
+          <td class="num">{{ r.games_count }}</td>
+          <td class="row-actions">
+            <a href="{{ detail_url_prefix }}/{{ r.id }}">Görüntüle</a>
+            {% if not viewing_as_admin %}
+            <form method="post" action="/history/{{ r.id }}/delete">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="link-button danger">Sil</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="trend-empty">Henüz kaydedilmiş bir analiz yok. <a href="/">İlk analizini başlat</a>.</p>
+  {% endif %}
+</section>
+
+{% if trend %}
+<script>
+(function () {
+  var picker = document.getElementById("trend-player");
+  if (picker) {
+    picker.addEventListener("change", function () { picker.form.submit(); });
+  }
+
+  var dataEl = document.getElementById("trend-data");
+  if (!dataEl) return;
+  var data = JSON.parse(dataEl.textContent);
+  var points = data.points;
+  var wrap = document.getElementById("trend-charts");
+  var tooltip = document.getElementById("trend-tooltip");
+  var detailPrefix = wrap.getAttribute("data-detail-prefix");
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  var HEIGHT = 150;
+  var MARGIN = { top: 12, right: 52, bottom: 26, left: 40 };
+
+  var charts = [
+    { svg: document.getElementById("trend-accuracy"), key: "accuracy", axis: data.accuracy_axis,
+      name: "Doğruluk", format: function (v) { return v.toFixed(1) + "%"; } },
+    { svg: document.getElementById("trend-acpl"), key: "acpl", axis: data.acpl_axis,
+      name: "ACPL", format: function (v) { return v.toFixed(1); } }
+  ];
+  var active = null;
+
+  function el(name, attrs, parent) {
+    var node = document.createElementNS(SVG_NS, name);
+    for (var k in attrs) node.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+
+  function tickText(v) {
+    return Math.round(v) === v ? String(v) : v.toFixed(1);
+  }
+
+  function xAt(i, width) {
+    var inner = width - MARGIN.left - MARGIN.right;
+    return MARGIN.left + (points.length === 1 ? inner / 2 : (i * inner) / (points.length - 1));
+  }
+
+  function yAt(v, axis) {
+    var inner = HEIGHT - MARGIN.top - MARGIN.bottom;
+    return MARGIN.top + inner - ((v - axis.low) / (axis.high - axis.low)) * inner;
+  }
+
+  function draw(chart) {
+    var svg = chart.svg;
+    var width = svg.parentNode.clientWidth;
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", HEIGHT);
+    svg.setAttribute("viewBox", "0 0 " + width + " " + HEIGHT);
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    var first = points[0][chart.key], last = points[points.length - 1][chart.key];
+    svg.setAttribute("aria-label", data.player + " — " + chart.name + ": " + points.length +
+      " analizde " + chart.format(first) + " değerinden " + chart.format(last) + " değerine.");
+
+    chart.axis.ticks.forEach(function (t) {
+      var y = yAt(t, chart.axis);
+      el("line", { x1: MARGIN.left, x2: width - MARGIN.right, y1: y, y2: y, "class": "grid" }, svg);
+      el("text", { x: MARGIN.left - 8, y: y, "class": "tick", "text-anchor": "end",
+        "dominant-baseline": "middle" }, svg).textContent = tickText(t);
+    });
+
+    var firstLabel = el("text", { x: xAt(0, width), y: HEIGHT - 6, "class": "tick", "text-anchor": "start" }, svg);
+    firstLabel.textContent = points[0].label;
+    var lastLabel = el("text", { x: xAt(points.length - 1, width), y: HEIGHT - 6, "class": "tick",
+      "text-anchor": "end" }, svg);
+    lastLabel.textContent = points[points.length - 1].label;
+
+    chart.crosshair = el("line", { y1: MARGIN.top, y2: HEIGHT - MARGIN.bottom, "class": "crosshair",
+      visibility: "hidden" }, svg);
+
+    var d = points.map(function (p, i) {
+      return (i ? "L" : "M") + xAt(i, width).toFixed(1) + " " + yAt(p[chart.key], chart.axis).toFixed(1);
+    }).join(" ");
+    el("path", { d: d, "class": "series-line" }, svg);
+
+    var showAllDots = points.length <= 30;
+    chart.dots = points.map(function (p, i) {
+      var isLast = i === points.length - 1;
+      return el("circle", { cx: xAt(i, width), cy: yAt(p[chart.key], chart.axis), r: 4,
+        "class": "series-dot", visibility: showAllDots || isLast ? "visible" : "hidden" }, svg);
+    });
+
+    var endX = xAt(points.length - 1, width), endY = yAt(last, chart.axis);
+    el("text", { x: endX + 10, y: endY, "class": "end-label", "dominant-baseline": "middle" }, svg)
+      .textContent = chart.format(last);
+
+    var hit = el("rect", { x: MARGIN.left - 12, y: 0, width: width - MARGIN.left - MARGIN.right + 24,
+      height: HEIGHT, "class": "hit" }, svg);
+    hit.addEventListener("pointermove", function (e) { setActive(indexAt(e, svg, width)); });
+    hit.addEventListener("pointerleave", function () { setActive(null); });
+    hit.addEventListener("click", function (e) { open(indexAt(e, svg, width)); });
+  }
+
+  function indexAt(event, svg, width) {
+    var box = svg.getBoundingClientRect();
+    var x = event.clientX - box.left;
+    var inner = width - MARGIN.left - MARGIN.right;
+    if (points.length === 1) return 0;
+    var i = Math.round(((x - MARGIN.left) / inner) * (points.length - 1));
+    return Math.max(0, Math.min(points.length - 1, i));
+  }
+
+  function open(i) {
+    if (i === null) return;
+    window.location.href = detailPrefix + "/" + points[i].id;
+  }
+
+  function row(value, label) {
+    var line = document.createElement("div");
+    var strong = document.createElement("strong");
+    strong.textContent = value;
+    var span = document.createElement("span");
+    span.textContent = " " + label;
+    line.appendChild(strong);
+    line.appendChild(span);
+    return line;
+  }
+
+  function setActive(i) {
+    active = i;
+    charts.forEach(function (chart) {
+      chart.dots.forEach(function (dot, j) { dot.classList.toggle("is-active", j === i); });
+      if (i === null) {
+        chart.crosshair.setAttribute("visibility", "hidden");
+      } else {
+        var x = xAt(i, chart.svg.parentNode.clientWidth);
+        chart.crosshair.setAttribute("x1", x);
+        chart.crosshair.setAttribute("x2", x);
+        chart.crosshair.setAttribute("visibility", "visible");
+      }
+    });
+    if (i === null) { tooltip.hidden = true; return; }
+
+    var p = points[i];
+    while (tooltip.firstChild) tooltip.removeChild(tooltip.firstChild);
+    var date = document.createElement("div");
+    date.className = "tooltip-date";
+    date.textContent = p.label;
+    tooltip.appendChild(date);
+    tooltip.appendChild(row(p.accuracy.toFixed(1) + "%", "doğruluk"));
+    tooltip.appendChild(row(p.acpl.toFixed(1), "ACPL"));
+    tooltip.appendChild(row(String(p.games), "oyun"));
+    tooltip.hidden = false;
+
+    // Beside the crosshair, never on it, so the hovered points stay visible.
+    var x = xAt(i, wrap.clientWidth);
+    var gap = 14;
+    var left = x + gap + tooltip.offsetWidth <= wrap.clientWidth ? x + gap : x - gap - tooltip.offsetWidth;
+    tooltip.style.left = Math.max(0, left) + "px";
+  }
+
+  charts.forEach(function (chart) {
+    chart.svg.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        var start = active === null ? points.length - 1 : active + (e.key === "ArrowRight" ? 1 : -1);
+        setActive(Math.max(0, Math.min(points.length - 1, start)));
+      } else if (e.key === "Enter") {
+        open(active);
+      } else if (e.key === "Escape") {
+        setActive(null);
+      }
+    });
+    chart.svg.addEventListener("focus", function () { setActive(points.length - 1); });
+    chart.svg.addEventListener("blur", function () { setActive(null); });
+  });
+
+  function drawAll() {
+    charts.forEach(draw);
+    if (active !== null) setActive(active);
+  }
+  drawAll();
+  if (window.ResizeObserver) new ResizeObserver(drawAll).observe(wrap);
+})();
+</script>
+{% endif %}
 {% endblock %}

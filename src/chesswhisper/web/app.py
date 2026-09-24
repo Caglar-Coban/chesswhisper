@@ -43,6 +43,7 @@ from chesswhisper.web.security import (
     hash_password,
     verify_password,
 )
+from chesswhisper.web.trend import build_trend
 
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
@@ -304,6 +305,7 @@ async def settings_submit(
 @app.get("/history", response_class=HTMLResponse)
 async def history_list(
     request: Request,
+    player: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
@@ -317,6 +319,7 @@ async def history_list(
         request, "history_list.html",
         {
             "current_user": current_user, "records": records,
+            "trend": build_trend(records, player),
             "detail_url_prefix": "/history", "viewing_as_admin": False,
         },
     )
@@ -498,6 +501,7 @@ async def admin_users_list(
 async def admin_user_history(
     request: Request,
     user_id: int,
+    player: str | None = None,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
@@ -515,6 +519,7 @@ async def admin_user_history(
         request, "history_list.html",
         {
             "current_user": current_user, "records": records,
+            "trend": build_trend(records, player),
             "detail_url_prefix": f"/admin/users/{user_id}/history",
             "viewing_as_admin": True, "target_username": target.username,
         },

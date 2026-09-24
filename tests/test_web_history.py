@@ -1,3 +1,7 @@
+import json
+import re
+from datetime import datetime
+
 import pytest
 from conftest import CsrfClient
 
@@ -103,3 +107,76 @@ def test_history_detail_404s_for_another_users_record(client):
     response = client.get(f"/history/{bob_record_id}")
 
     assert response.status_code == 404
+
+
+def _seed_trend_record(username, player_name, day, accuracy, acpl):
+    db = next(get_db())
+    user = db.query(User).filter_by(username=username).one()
+    db.add(
+        AnalysisRecord(
+            user_id=user.id, player_name=player_name, lang="tr", llm_used="none",
+            games_count=4, overall_acpl=acpl, overall_accuracy=accuracy,
+            report_markdown="# r", created_at=datetime(2026, 9, day, 12, 0),
+        )
+    )
+    db.commit()
+
+
+def _trend_data(response):
+    match = re.search(r'<script type="application/json" id="trend-data">(.*?)</script>', response.text, re.S)
+    assert match, "trend data block missing"
+    return json.loads(match.group(1))
+
+
+def test_history_trend_shows_most_analyzed_player_chronologically(client):
+    _seed_trend_record("alice", "Alice", 3, accuracy=81.0, acpl=40.0)
+    _seed_trend_record("alice", "Alice", 1, accuracy=74.0, acpl=55.0)
+    _seed_trend_record("alice", "Friend", 2, accuracy=60.0, acpl=90.0)
+
+    response = client.get("/history")
+
+    data = _trend_data(response)
+    assert data["player"] == "Alice"
+    assert [p["accuracy"] for p in data["points"]] == [74.0, 81.0]
+    assert data["accuracy_axis"]["low"] <= 74.0
+    assert '<option value="Friend"' in response.text
+
+
+def test_history_trend_player_query_param_selects_player(client):
+    _seed_trend_record("alice", "Alice", 1, accuracy=74.0, acpl=55.0)
+    _seed_trend_record("alice", "Alice", 2, accuracy=81.0, acpl=40.0)
+    _seed_trend_record("alice", "Alice", 5, accuracy=83.0, acpl=38.0)
+    _seed_trend_record("alice", "Friend", 3, accuracy=60.0, acpl=90.0)
+    _seed_trend_record("alice", "Friend", 4, accuracy=65.0, acpl=80.0)
+
+    assert _trend_data(client.get("/history?player=Friend"))["player"] == "Friend"
+    assert _trend_data(client.get("/history?player=Nobody"))["player"] == "Alice"
+
+
+def test_history_trend_never_includes_another_users_players(client):
+    db = next(get_db())
+    db.add(User(username="bob", password_hash=hash_password("correct-horse"), is_admin=False))
+    db.commit()
+    _seed_trend_record("alice", "Alice", 1, accuracy=74.0, acpl=55.0)
+    _seed_trend_record("alice", "Alice", 2, accuracy=81.0, acpl=40.0)
+    _seed_trend_record("bob", "BobPlayer", 3, accuracy=99.0, acpl=5.0)
+
+    response = client.get("/history?player=BobPlayer")
+
+    assert _trend_data(response)["player"] == "Alice"
+    assert "BobPlayer" not in response.text
+
+
+def test_history_trend_needs_two_analyses(client):
+    _seed_trend_record("alice", "Alice", 1, accuracy=74.0, acpl=55.0)
+
+    response = client.get("/history")
+
+    assert 'id="trend-data"' not in response.text
+    assert "en az 2 analiz" in response.text
+
+
+def test_history_without_records_has_no_trend_card(client):
+    response = client.get("/history")
+
+    assert "Eğilim" not in response.text
