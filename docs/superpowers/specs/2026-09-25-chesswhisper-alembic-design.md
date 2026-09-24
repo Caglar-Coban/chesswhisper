@@ -72,8 +72,11 @@ the wheel.
   `chesswhisper.web.models` so all tables are registered.
 - Online mode only matters at runtime. If the caller put a live
   `Connection` in `config.attributes["connection"]`, `env.py` uses it.
-  Otherwise it builds an engine from `sqlalchemy.url`: from `alembic.ini`
-  in dev, falling back to the default app-data DB path.
+  Otherwise it builds an engine from `alembic.ini`'s `sqlalchemy.url`,
+  which points at a gitignored scratch `dev.db` in the repo root. If no
+  URL is set it raises `RuntimeError`. It never falls back to the app's
+  real database, so developer CLI commands can't create or touch a
+  user's data.
 - `context.configure(..., render_as_batch=True)` so future
   `ALTER`-style migrations work on SQLite.
 - Offline mode (`--sql`) is supported in the standard way for
@@ -107,7 +110,7 @@ The migrations directory is located with
 `importlib.resources.files("chesswhisper.web") / "migrations"` (a real
 filesystem path for both editable and wheel installs), so there is no
 dependency on the working directory. The logic lives in a small helper
-(e.g. `_run_migrations(engine)`) in `db.py`. `Base.metadata.create_all`
+(`run_migrations(engine)`) in `db.py`. `Base.metadata.create_all`
 is removed.
 
 Alembic's default `fileConfig` logging setup is skipped when there is no
