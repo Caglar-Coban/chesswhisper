@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from chesswhisper.web.db import Base, utcnow
@@ -48,8 +48,10 @@ class AnalysisRecord(Base):
     lang: Mapped[str] = mapped_column(String(8))
     llm_used: Mapped[str] = mapped_column(String(20))
     games_count: Mapped[int]
-    overall_acpl: Mapped[float]
-    overall_accuracy: Mapped[float]
+    # Explicit Float: SQLAlchemy 2.1 maps a bare Mapped[float] to Double, which
+    # would drift from the migrations' sa.Float under different SQLAlchemy versions.
+    overall_acpl: Mapped[float] = mapped_column(Float)
+    overall_accuracy: Mapped[float] = mapped_column(Float)
     report_markdown: Mapped[str] = mapped_column(Text)
     # JSON list from stats_engine.critical_moves(); None for records saved
     # before it existed or with no blunders/mistakes.
