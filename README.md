@@ -94,6 +94,14 @@ Submitting the analyze form takes you to a progress page showing how many
 of your games have been analyzed so far, then lands you on the finished
 report once it's done — the page is safe to leave and revisit from
 **History** if you navigate away.
+**History** opens with a trend chart of accuracy and ACPL over time for
+one player (a picker switches players when you've analyzed more than
+one); hovering or arrow-keying shows each analysis's numbers, and
+clicking a point opens its report. Each report starts with the
+analysis's most costly blunders and mistakes (up to 12, across all
+games) drawn on boards: the move you played as a red arrow, the
+engine's preferred move as a green one, and the evaluation swing below.
+Reports saved before this feature existed have no boards.
 The admin account additionally sees an **Admin** page listing every
 registered user, can view any user's history, delete a user, or reset a
 user's password.
@@ -118,7 +126,7 @@ not the open internet.
 ## Development
 
 ```
-pip install -e ".[dev]"
+pip install -e ".[dev,web]"
 ruff check src tests   # lint
 mypy src                # type-check
 pytest -v               # tests
