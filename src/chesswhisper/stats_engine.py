@@ -368,7 +368,8 @@ def critical_moves(game_reports: list, limit: int = CRITICAL_MOVES_LIMIT) -> lis
             "opponent": report.opponent,
             "your_color": report.your_color,
             "ply": ev.ply,
-            "move_number": (ev.ply + 1) // 2,
+            # From the position, not the ply: games set up from a FEN start mid-game.
+            "move_number": chess.Board(ev.fen_before).fullmove_number,
             "san": ev.move_san,
             "uci": ev.move_uci,
             "best_uci": ev.best_move_uci,

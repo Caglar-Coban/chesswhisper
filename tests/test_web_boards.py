@@ -62,6 +62,7 @@ def test_only_the_played_arrow_when_engine_agrees_or_has_no_move():
     for card in (same, none):
         assert "#c0392b" in card.svg
         assert "#2e8b57" not in card.svg
+        assert card.best_san is None
 
 
 def test_board_is_seen_from_the_players_side():

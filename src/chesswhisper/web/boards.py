@@ -75,7 +75,8 @@ def _card(entry: dict) -> BoardCard:
         opponent=str(entry["opponent"]),
         move_label=_move_label(int(entry["move_number"]), entry["your_color"], str(entry["san"])),
         classification=str(entry["classification"]),
-        best_san=entry["best_san"],
+        # A "better move" that is the move played would contradict the card.
+        best_san=entry["best_san"] if entry["best_uci"] != entry["uci"] else None,
         eval_before=format_eval(int(entry["cp_before"])),
         eval_after=format_eval(int(entry["cp_after"])),
         svg=svg,

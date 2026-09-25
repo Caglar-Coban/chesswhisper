@@ -107,3 +107,18 @@ def test_best_san_is_none_for_a_missing_or_illegal_best_move():
 
     assert critical_moves([no_best])[0]["best_san"] is None
     assert critical_moves([illegal_best])[0]["best_san"] is None
+
+
+def test_move_number_follows_the_position_for_games_set_up_from_a_fen():
+    board = chess.Board("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 5 24")
+    move = board.parse_san("Nf6")
+    fen_before = board.fen()
+    board.push(move)
+    evals = [
+        PositionEval(ply=1, move_san="Nf6", color=False, cp_before=0, cp_after=-400,
+                     fen_after=board.fen(), fen_before=fen_before, move_uci=move.uci()),
+    ]
+
+    [entry] = critical_moves([_report(0, evals, white="Bob", black="Alice")])
+
+    assert entry["move_number"] == 24

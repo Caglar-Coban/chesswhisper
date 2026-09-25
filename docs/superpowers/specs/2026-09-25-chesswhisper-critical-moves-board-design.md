@@ -90,7 +90,7 @@ dicts:
  "cp_loss", "classification"}
 ```
 
-`move_number` is `(ply + 1) // 2`. `best_san` is computed from
+`move_number` is `chess.Board(fen_before).fullmove_number` (not derived from `ply`, so games set up from a FEN mid-game get the right number). When `best_uci` equals the played `uci`, the card shows no "Daha iyisi" line. `best_san` is computed from
 `fen_before` + `best_uci` (`None` if `best_uci` is missing or not legal
 in that position). Five per game is enough: a game's sixth-worst move
 can never be in the analysis-wide top 12 ahead of that game's top five.
