@@ -118,3 +118,42 @@ def test_parse_clock_seconds_various_formats():
     assert parse_clock_seconds("[%clk 1:00:00]") == 3600.0
     assert parse_clock_seconds("no clock here") is None
     assert parse_clock_seconds("") is None
+
+
+class PvFakeEngine(FakeEngine):
+    """FakeEngine that also returns a principal variation (one UCI move, or None) per call."""
+
+    def __init__(self, scores: list[int], pvs: list[str | None]):
+        super().__init__(scores)
+        self._pvs = iter(pvs)
+
+    def analyse(self, board, limit, **kwargs):
+        info = super().analyse(board, limit, **kwargs)
+        pv = next(self._pvs)
+        if pv is not None:
+            info["pv"] = [chess.Move.from_uci(pv)]
+        return info
+
+
+def test_analyze_game_records_position_played_move_and_engine_best_move():
+    game = _parse(SIMPLE_GAME)
+    # One PV per analyse() call: before e4, before e5, before Nf3, after Nf3.
+    engine = PvFakeEngine([0, 30, 20, 50], ["d2d4", "c7c5", "g1f3", None])
+
+    evals = analyze_game(game, engine, movetime_ms=10)
+
+    assert evals[0].fen_before == chess.STARTING_FEN
+    assert evals[0].move_uci == "e2e4"
+    assert evals[0].best_move_uci == "d2d4"
+    assert evals[1].fen_before == evals[0].fen_after
+    assert evals[1].move_uci == "e7e5"
+    assert evals[1].best_move_uci == "c7c5"
+    assert evals[2].move_uci == "g1f3"
+    assert evals[2].best_move_uci == "g1f3"
+
+
+def test_analyze_game_leaves_best_move_empty_when_engine_returns_no_pv():
+    evals = analyze_game(_parse(SIMPLE_GAME), FakeEngine([0, 30, 20, 50]), movetime_ms=10)
+
+    assert [e.best_move_uci for e in evals] == [None, None, None]
+    assert [e.move_uci for e in evals] == ["e2e4", "e7e5", "g1f3"]

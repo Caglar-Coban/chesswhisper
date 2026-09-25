@@ -19,6 +19,11 @@ class PositionEval:
     cp_after: int
     fen_after: str
     clock_seconds: float | None = None
+    # Position the move was played from, the move itself, and the engine's
+    # preferred move there -- what a board diagram of this move needs.
+    fen_before: str | None = None
+    move_uci: str | None = None
+    best_move_uci: str | None = None
 
 
 def parse_clock_seconds(comment: str) -> float | None:
@@ -42,18 +47,20 @@ def analyze_game(
     board = game.board()
     results: list[PositionEval] = []
 
-    prev_score = engine.analyse(board, limit, game=game)["score"]
+    info_before = engine.analyse(board, limit, game=game)
 
     for ply, node in enumerate(game.mainline(), start=1):
         move = node.move
         mover = board.turn
         san = board.san(move)
-        cp_before = prev_score.pov(mover).score(mate_score=100_000)
+        fen_before = board.fen()
+        cp_before = info_before["score"].pov(mover).score(mate_score=100_000)
+        pv = info_before.get("pv")
+        best_move_uci = pv[0].uci() if pv else None
 
         board.push(move)
         info_after = engine.analyse(board, limit, game=game)
-        current_score = info_after["score"]
-        cp_after = current_score.pov(mover).score(mate_score=100_000)
+        cp_after = info_after["score"].pov(mover).score(mate_score=100_000)
 
         results.append(
             PositionEval(
@@ -64,8 +71,11 @@ def analyze_game(
                 cp_after=cp_after,
                 fen_after=board.fen(),
                 clock_seconds=parse_clock_seconds(node.comment),
+                fen_before=fen_before,
+                move_uci=move.uci(),
+                best_move_uci=best_move_uci,
             )
         )
-        prev_score = current_score
+        info_before = info_after
 
     return results
