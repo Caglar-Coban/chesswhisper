@@ -1,3 +1,6 @@
+import json
+
+import chess
 import pytest
 from conftest import CsrfClient
 
@@ -125,3 +128,27 @@ def test_admin_reset_password_rejects_short_password(clients):
     db2 = next(get_db())
     alice2 = db2.get(User, alice.id)
     assert alice2.password_hash == original_hash
+
+
+def test_admin_report_view_shows_critical_move_boards(clients):
+    admin_client, _ = clients
+    board = chess.Board()
+    board.push_san("e4")
+    db = next(get_db())
+    alice = db.query(User).filter_by(username="alice").one()
+    record = AnalysisRecord(
+        user_id=alice.id, player_name="Alice", lang="en", llm_used="none", games_count=1,
+        overall_acpl=10.0, overall_accuracy=95.0, report_markdown="# r",
+        critical_moves_json=json.dumps([{
+            "game_index": 0, "opponent": "Bob", "your_color": "black", "ply": 2, "move_number": 1,
+            "san": "f6", "uci": "f7f6", "best_uci": None, "best_san": None, "fen_before": board.fen(),
+            "cp_before": -30, "cp_after": -420, "cp_loss": 390, "classification": "blunder",
+        }]),
+    )
+    db.add(record)
+    db.commit()
+
+    response = admin_client.get(f"/admin/users/{alice.id}/history/{record.id}")
+
+    assert response.status_code == 200
+    assert "Kritik hatalar" in response.text

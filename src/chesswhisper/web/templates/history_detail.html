@@ -9,6 +9,35 @@
   </ul>
 </div>
 {% endif %}
+{% if cards %}
+<section class="card board-section" aria-labelledby="critical-title">
+  <h2 id="critical-title" class="section-title">Kritik hatalar</h2>
+  <p class="hint board-legend">
+    <span class="legend-key legend-played"></span> oynanan hamle
+    <span class="legend-key legend-best"></span> motorun önerisi
+  </p>
+  <div class="board-grid">
+    {% for c in cards %}
+    <figure class="board-card">
+      <div class="board-svg">{{ c.svg | safe }}</div>
+      <figcaption>
+        <div class="board-move">
+          <strong>{{ c.move_label }}</strong>
+          {% if c.classification == "blunder" %}
+          <span class="move-badge badge-blunder">Blunder</span>
+          {% else %}
+          <span class="move-badge badge-mistake">Hata</span>
+          {% endif %}
+        </div>
+        <div class="board-meta">Oyun {{ c.game_number }} · {{ c.opponent }}</div>
+        {% if c.best_san %}<div class="board-best">Daha iyisi: <strong>{{ c.best_san }}</strong></div>{% endif %}
+        <div class="board-eval">{{ c.eval_before }} → {{ c.eval_after }}</div>
+      </figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 <div class="card report">
   {{ report_html | safe }}
 </div>

@@ -234,6 +234,27 @@
   .trend-tooltip .tooltip-date { color: var(--text-muted); font-size: 12px; margin-bottom: 2px; }
   .trend-tooltip span { color: var(--text-muted); }
 
+  /* Critical-move boards */
+  .board-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: -8px 0 16px; }
+  .legend-key { display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-left: 8px; }
+  .legend-key:first-child { margin-left: 0; }
+  .legend-played { background: #c0392b; }
+  .legend-best { background: #2e8b57; }
+  .board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+  .board-card { margin: 0; }
+  .board-svg svg { display: block; width: 100%; height: auto; border-radius: 6px; }
+  .board-card figcaption { font-size: 13px; margin-top: 8px; line-height: 1.5; }
+  .board-move { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .board-meta, .board-best { color: var(--text-muted); }
+  .board-best strong { color: var(--text); }
+  .board-eval { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .move-badge {
+    font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+    border: 1px solid currentColor; line-height: 1.5;
+  }
+  .badge-blunder { color: var(--danger); }
+  .badge-mistake { color: var(--text-muted); }
+
   @media (max-width: 560px) {
     .page { padding-top: 20px; }
     header.site-header { flex-wrap: wrap; margin-bottom: 20px; }

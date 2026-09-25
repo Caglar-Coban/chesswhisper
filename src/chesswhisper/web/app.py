@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import threading
@@ -24,6 +25,7 @@ from chesswhisper.game_sources import (
     fetch_pgn,
 )
 from chesswhisper.report_writer import render_markdown
+from chesswhisper.stats_engine import critical_moves
 from chesswhisper.web import jobs
 from chesswhisper.web.auth import (
     Forbidden,
@@ -34,6 +36,7 @@ from chesswhisper.web.auth import (
     require_admin,
     verify_csrf,
 )
+from chesswhisper.web.boards import board_cards
 from chesswhisper.web.db import get_db, utcnow
 from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
 from chesswhisper.web.security import (
@@ -134,6 +137,7 @@ def _run_analysis_job(
             return
 
         report_markdown = render_markdown(aggregate, commentary, lang)
+        moves = critical_moves(aggregate.games)
         record = AnalysisRecord(
             user_id=user_id,
             player_name=aggregate.player,
@@ -143,6 +147,7 @@ def _run_analysis_job(
             overall_acpl=aggregate.overall_acpl,
             overall_accuracy=aggregate.overall_accuracy,
             report_markdown=report_markdown,
+            critical_moves_json=json.dumps(moves) if moves else None,
         )
         db.add(record)
         db.commit()
@@ -353,6 +358,7 @@ async def history_detail(
         request, "history_detail.html",
         {
             "current_user": current_user, "report_html": report_html,
+            "cards": board_cards(record.critical_moves_json),
             "back_url": "/history", "warnings": warnings,
         },
     )
@@ -541,7 +547,10 @@ async def admin_user_history_detail(
     report_html = _report_to_safe_html(record.report_markdown)
     return _render(
         request, "history_detail.html",
-        {"current_user": current_user, "report_html": report_html, "back_url": f"/admin/users/{user_id}"},
+        {
+            "current_user": current_user, "report_html": report_html,
+            "cards": board_cards(record.critical_moves_json), "back_url": f"/admin/users/{user_id}",
+        },
     )
 
 

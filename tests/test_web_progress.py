@@ -1,3 +1,4 @@
+import json
 import textwrap
 
 import chess.engine
@@ -315,3 +316,31 @@ def test_analyze_progress_page_renders_for_the_owning_user(client, monkeypatch):
 
     assert progress.status_code == 200
     assert job_id in progress.text
+
+
+def test_completed_job_saves_critical_moves_with_the_record(client, monkeypatch):
+    moves = [{"san": "f6", "cp_loss": 390}]
+    monkeypatch.setattr("chesswhisper.web.app.run_analysis", lambda *a, **k: _fake_aggregate_report())
+    monkeypatch.setattr("chesswhisper.web.app.critical_moves", lambda games: moves)
+
+    response = client.post(
+        "/analyze",
+        files={"pgn": ("game.pgn", SAMPLE_PGN, "application/octet-stream")},
+        data={"player": "Alice", "lang": "en", "llm": "none"},
+    )
+    assert response.status_code == 303
+
+    record = next(get_db()).query(AnalysisRecord).one()
+    assert json.loads(record.critical_moves_json) == moves
+
+
+def test_completed_job_without_critical_moves_saves_null(client, monkeypatch):
+    monkeypatch.setattr("chesswhisper.web.app.run_analysis", lambda *a, **k: _fake_aggregate_report())
+
+    client.post(
+        "/analyze",
+        files={"pgn": ("game.pgn", SAMPLE_PGN, "application/octet-stream")},
+        data={"player": "Alice", "lang": "en", "llm": "none"},
+    )
+
+    assert next(get_db()).query(AnalysisRecord).one().critical_moves_json is None

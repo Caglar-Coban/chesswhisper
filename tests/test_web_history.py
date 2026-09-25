@@ -2,6 +2,7 @@ import json
 import re
 from datetime import datetime
 
+import chess
 import pytest
 from conftest import CsrfClient
 
@@ -180,3 +181,68 @@ def test_history_without_records_has_no_trend_card(client):
     response = client.get("/history")
 
     assert "Eğilim" not in response.text
+
+
+def _critical_moves_json():
+    board = chess.Board()
+    board.push_san("e4")
+    return json.dumps([{
+        "game_index": 0, "opponent": "Bob", "your_color": "black", "ply": 2, "move_number": 1,
+        "san": "f6", "uci": "f7f6", "best_uci": "e7e5", "best_san": "e5", "fen_before": board.fen(),
+        "cp_before": -30, "cp_after": -420, "cp_loss": 390, "classification": "blunder",
+    }])
+
+
+def _seed_record_with_moves(username, critical_moves_json):
+    db = next(get_db())
+    user = db.query(User).filter_by(username=username).one()
+    record = AnalysisRecord(
+        user_id=user.id, player_name="Alice", lang="tr", llm_used="none", games_count=1,
+        overall_acpl=10.0, overall_accuracy=95.0, report_markdown="# Rapor",
+        critical_moves_json=critical_moves_json,
+    )
+    db.add(record)
+    db.commit()
+    return record.id
+
+
+def test_history_detail_shows_critical_move_boards(client):
+    record_id = _seed_record_with_moves("alice", _critical_moves_json())
+
+    response = client.get(f"/history/{record_id}")
+
+    assert response.status_code == 200
+    assert "Kritik hatalar" in response.text
+    assert "1... f6" in response.text
+    assert "Daha iyisi: <strong>e5</strong>" in response.text
+    assert response.text.count("<svg") == 1
+
+
+def test_history_detail_hides_boards_for_records_without_them(client):
+    record_id = _seed_record_with_moves("alice", None)
+
+    response = client.get(f"/history/{record_id}")
+
+    assert response.status_code == 200
+    assert "Kritik hatalar" not in response.text
+
+
+def test_history_detail_survives_unreadable_critical_moves(client):
+    record_id = _seed_record_with_moves("alice", "{broken")
+
+    response = client.get(f"/history/{record_id}")
+
+    assert response.status_code == 200
+    assert "Kritik hatalar" not in response.text
+    assert "Rapor" in response.text
+
+
+def test_history_detail_escapes_opponent_names_in_captions(client):
+    moves = json.loads(_critical_moves_json())
+    moves[0]["opponent"] = "<script>alert(1)</script>"
+    record_id = _seed_record_with_moves("alice", json.dumps(moves))
+
+    response = client.get(f"/history/{record_id}")
+
+    assert "<script>alert(1)</script>" not in response.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
