@@ -14,7 +14,7 @@ from chesswhisper.web import db as db_module
 from chesswhisper.web import models  # noqa: F401 -- registers tables on Base.metadata
 from chesswhisper.web.db import BASELINE_REVISION, Base, get_db, init_db, migrations_dir
 
-HEAD = BASELINE_REVISION
+HEAD = "0002_critical_moves"
 
 
 def _engine(db_path):
@@ -24,6 +24,14 @@ def _engine(db_path):
 def _versions(engine):
     with engine.connect() as conn:
         return [row[0] for row in conn.execute(text("SELECT version_num FROM alembic_version"))]
+
+
+def _build_schema_at(engine, revision):
+    with engine.begin() as conn:
+        config = Config()
+        config.set_main_option("script_location", str(migrations_dir()))
+        config.attributes["connection"] = conn
+        command.upgrade(config, revision)
 
 
 def test_fresh_database_is_migrated_to_head(tmp_path):
@@ -39,8 +47,10 @@ def test_fresh_database_is_migrated_to_head(tmp_path):
 def test_legacy_create_all_database_is_stamped_and_keeps_its_rows(tmp_path):
     db_path = tmp_path / "legacy.db"
     legacy = _engine(db_path)
-    Base.metadata.create_all(legacy)
+    # The schema the pre-Alembic create_all() built is exactly the baseline's.
+    _build_schema_at(legacy, BASELINE_REVISION)
     with legacy.begin() as conn:
+        conn.execute(text("DROP TABLE alembic_version"))
         conn.execute(
             text(
                 "INSERT INTO users (id, username, password_hash, is_admin, created_at, "
@@ -137,17 +147,17 @@ def test_cli_mode_without_url_refuses_to_guess_a_database():
 
 
 def _migrations_with_failing_revision(tmp_path):
-    """A copy of the real migrations plus a 0002 that does DDL, then raises."""
+    """A copy of the real migrations plus a revision on top that does DDL, then raises."""
     directory = tmp_path / "migrations"
     shutil.copytree(migrations_dir(), directory, ignore=shutil.ignore_patterns("__pycache__"))
-    (directory / "versions" / "0002_boom.py").write_text(
+    (directory / "versions" / "0099_boom.py").write_text(
         textwrap.dedent(
             '''
             import sqlalchemy as sa
             from alembic import op
 
-            revision = "0002_boom"
-            down_revision = "0001_baseline"
+            revision = "0099_boom"
+            down_revision = "0002_critical_moves"
             branch_labels = None
             depends_on = None
 
@@ -221,3 +231,32 @@ def test_concurrent_lazy_get_db_migrates_exactly_once(tmp_path, monkeypatch):
 
         assert errors == []
         assert _versions(_engine(db_path)) == [HEAD]
+
+
+def test_baseline_database_gains_critical_moves_column_and_keeps_rows(tmp_path):
+    db_path = tmp_path / "at_baseline.db"
+    engine = _engine(db_path)
+    _build_schema_at(engine, BASELINE_REVISION)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, is_admin, created_at, "
+                "failed_login_attempts) VALUES (1, 'alice', 'h', 0, '2026-01-01 00:00:00', 0)"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO analysis_records (user_id, created_at, player_name, lang, llm_used, "
+                "games_count, overall_acpl, overall_accuracy, report_markdown) VALUES "
+                "(1, '2026-01-01 00:00:00', 'alice', 'tr', 'none', 3, 42.0, 80.5, '# r')"
+            )
+        )
+    engine.dispose()
+
+    init_db(db_path)
+
+    engine = _engine(db_path)
+    assert _versions(engine) == [HEAD]
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT report_markdown, critical_moves_json FROM analysis_records")).all()
+    assert [tuple(r) for r in rows] == [("# r", None)]

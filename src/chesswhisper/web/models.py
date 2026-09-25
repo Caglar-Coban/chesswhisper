@@ -51,5 +51,8 @@ class AnalysisRecord(Base):
     overall_acpl: Mapped[float]
     overall_accuracy: Mapped[float]
     report_markdown: Mapped[str] = mapped_column(Text)
+    # JSON list from stats_engine.critical_moves(); None for records saved
+    # before it existed or with no blunders/mistakes.
+    critical_moves_json: Mapped[str | None] = mapped_column(Text, default=None)
 
     user: Mapped[User] = relationship(back_populates="analyses")
