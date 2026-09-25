@@ -325,3 +325,59 @@ def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
         openings=sorted(opening_map.values(), key=lambda o: o.games, reverse=True),
         time_management=combined_time_buckets.to_stats(),
     )
+
+
+CRITICAL_MOVES_LIMIT = 12
+_CRITICAL_CLASSES = ("blunder", "mistake")
+
+
+def _best_san(fen_before: str, best_uci: str | None) -> str | None:
+    if best_uci is None:
+        return None
+    try:
+        board = chess.Board(fen_before)
+        move = chess.Move.from_uci(best_uci)
+    except ValueError:
+        return None
+    if move not in board.legal_moves:
+        return None
+    return board.san(move)
+
+
+def critical_moves(game_reports: list, limit: int = CRITICAL_MOVES_LIMIT) -> list[dict]:
+    """The analysis's costliest blunders and mistakes, with what a board diagram needs.
+
+    Draws from each game's top_mistakes (already the player's flagged moves,
+    worst first), keeps blunders and mistakes that carry their starting
+    position, and ranks them across all games by centipawn loss.
+    """
+    candidates = []
+    for report in game_reports:
+        for ev in report.top_mistakes:
+            if ev.fen_before is None or ev.move_uci is None:
+                continue
+            cp_loss = max(0, ev.cp_before - ev.cp_after)
+            classification = classify_move(cp_loss)
+            if classification in _CRITICAL_CLASSES:
+                candidates.append((cp_loss, report, ev, classification))
+    candidates.sort(key=lambda c: (-c[0], c[1].game_index, c[2].ply))
+
+    return [
+        {
+            "game_index": report.game_index,
+            "opponent": report.opponent,
+            "your_color": report.your_color,
+            "ply": ev.ply,
+            "move_number": (ev.ply + 1) // 2,
+            "san": ev.move_san,
+            "uci": ev.move_uci,
+            "best_uci": ev.best_move_uci,
+            "best_san": _best_san(ev.fen_before, ev.best_move_uci),
+            "fen_before": ev.fen_before,
+            "cp_before": ev.cp_before,
+            "cp_after": ev.cp_after,
+            "cp_loss": cp_loss,
+            "classification": classification,
+        }
+        for cp_loss, report, ev, classification in candidates[:limit]
+    ]
