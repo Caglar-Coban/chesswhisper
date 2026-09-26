@@ -100,3 +100,23 @@ def test_render_markdown_handles_partial_time_management_data():
 
     assert "50.0%" in md
     assert "not enough data" in md
+
+
+def test_every_table_renders_as_an_html_table():
+    # The web UI renders reports with Python-Markdown; a table glued to the
+    # line above it comes out as literal pipes inside a list item.
+    import markdown
+
+    report = _sample_report()
+    report.games = report.games * 3
+    html = markdown.markdown(render_markdown(report, commentary="", lang="en"), extensions=["tables"])
+
+    # Overall errors + openings + one errors table per game.
+    assert html.count("<table>") == 2 + len(report.games)
+    assert "| ---" not in html
+
+
+def test_opening_table_names_its_columns():
+    md = render_markdown(_sample_report(), commentary="", lang="en")
+
+    assert "| ECO | Opening | Games | W/L/D/? |" in md

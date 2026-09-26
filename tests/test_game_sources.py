@@ -109,7 +109,7 @@ def test_lichess_returns_pgn_with_normalized_player(mocker):
     assert result.warnings == []
     assert len(calls) == 1
     call = calls[0]
-    assert call["params"] == {"max": 2, "perfType": LICHESS_PERF_TYPES}
+    assert call["params"] == {"max": 2, "perfType": LICHESS_PERF_TYPES, "clocks": "true"}
     assert call["headers"]["Accept"] == "application/x-chess-pgn"
     assert call["headers"]["User-Agent"].startswith("chesswhisper")
     assert call["timeout"] == 30

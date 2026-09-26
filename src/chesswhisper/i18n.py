@@ -37,6 +37,7 @@ _STRINGS = {
     "top_mistakes": {"tr": "Kritik Hamleler", "en": "Critical Moves"},
     "phase_column": {"tr": "Faz", "en": "Phase"},
     "eco_column": {"tr": "ECO", "en": "ECO"},
+    "opening_column": {"tr": "Açılış", "en": "Opening"},
     "vs_label": {"tr": "vs", "en": "vs"},
 }
 

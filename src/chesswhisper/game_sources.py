@@ -91,7 +91,8 @@ def _fetch_lichess(username: str, max_games: int, warnings: list[str]) -> list[c
         _LICHESS_GAMES_URL.format(username=quote(username, safe="")),
         "Lichess",
         accept="application/x-chess-pgn",
-        params={"max": max_games, "perfType": _LICHESS_PERF_TYPES},
+        # clocks=true adds the [%clk] comments the time-management stats read.
+        params={"max": max_games, "perfType": _LICHESS_PERF_TYPES, "clocks": "true"},
     )
     if resp.status_code == 404:
         raise GameFetchError(f"Lichess user {username!r} not found.")

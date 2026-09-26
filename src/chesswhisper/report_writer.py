@@ -51,7 +51,7 @@ def render_markdown(report, commentary: str, lang: str) -> str:
     parts.append("")
 
     parts.append(f"## {t('openings', lang)}")
-    parts.append(f"| {t('eco_column', lang)} | {t('openings', lang)} | {t('opening_games', lang)} | {t('opening_record', lang)} |")
+    parts.append(f"| {t('eco_column', lang)} | {t('opening_column', lang)} | {t('opening_games', lang)} | {t('opening_record', lang)} |")
     parts.append("| --- | --- | --- | --- |")
     for op in report.openings:
         parts.append(
@@ -77,13 +77,18 @@ def render_markdown(report, commentary: str, lang: str) -> str:
         parts.append(f"- {game.opening_name} ({game.eco})")
         parts.append(f"- {t('acpl', lang)}: {game.your_stats.acpl:.1f}")
         parts.append(f"- {t('accuracy', lang)}: {game.your_stats.accuracy:.1f}%")
-        game_errors_table = _errors_table(game.your_stats.errors_by_phase, lang)
-        parts.append(f"**{t('errors_by_phase', lang)}:**")
-        parts.append(game_errors_table)
-        parts.append(f"**{t('time_management', lang)}:**")
-        parts.extend(_time_management_lines(game.time_management, lang))
         if game.top_mistakes:
             parts.append(f"- {t('top_mistakes', lang)}: " + ", ".join(m.move_san for m in game.top_mistakes))
+        # Blank lines keep each block separate: a table or heading glued to the
+        # list above would be swallowed into its last item by Markdown renderers.
+        parts.append("")
+        parts.append(f"**{t('errors_by_phase', lang)}:**")
+        parts.append("")
+        parts.append(_errors_table(game.your_stats.errors_by_phase, lang))
+        parts.append("")
+        parts.append(f"**{t('time_management', lang)}:**")
+        parts.append("")
+        parts.extend(_time_management_lines(game.time_management, lang))
         parts.append("")
 
     return "\n".join(parts)
