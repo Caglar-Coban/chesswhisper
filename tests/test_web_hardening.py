@@ -33,7 +33,7 @@ def test_register_rejects_invalid_usernames(tmp_path, username):
     response = c.post("/register", data={"username": username, "password": "correct-horse"})
 
     assert response.status_code == 200  # re-rendered form, like the other register errors
-    assert "Kullanıcı adı" in response.text
+    assert "Usernames must be 3-30 characters" in response.text
     assert next(get_db()).query(User).count() == 0
 
 
@@ -100,7 +100,7 @@ def test_change_password_requires_the_current_password(client):
     )
 
     assert response.status_code == 200
-    assert "Mevcut parola yanlış" in response.text
+    assert "current password is wrong" in response.text
     assert verify_password("correct-horse", _user().password_hash)
 
 
@@ -111,7 +111,7 @@ def test_change_password_requires_matching_confirmation(client):
     )
 
     assert response.status_code == 200
-    assert "eşleşmiyor" in response.text
+    assert "don&#39;t match" in response.text
     assert verify_password("correct-horse", _user().password_hash)
 
 
@@ -122,7 +122,7 @@ def test_change_password_requires_a_long_enough_password(client):
     )
 
     assert response.status_code == 200
-    assert "en az 8" in response.text
+    assert "at least 8" in response.text
     assert verify_password("correct-horse", _user().password_hash)
 
 
@@ -133,7 +133,7 @@ def test_change_password_updates_the_hash(client):
     )
 
     assert response.status_code == 200
-    assert "Parola güncellendi" in response.text
+    assert "Password updated" in response.text
     assert verify_password("battery-staple", _user().password_hash)
 
 
@@ -196,9 +196,9 @@ def test_admin_list_marks_locked_accounts(tmp_path):
     root = db.query(User).filter_by(username="root").one()
     root.is_admin = True
     db.commit()
-    assert "Kilitli" not in admin.get("/admin").text
+    assert "Locked" not in admin.get("/admin").text
 
     root.locked_until = utcnow().replace(tzinfo=None) + timedelta(minutes=15)
     db.commit()
 
-    assert "Kilitli" in admin.get("/admin").text
+    assert "Locked" in admin.get("/admin").text

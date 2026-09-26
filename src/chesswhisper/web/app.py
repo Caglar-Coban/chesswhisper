@@ -157,7 +157,7 @@ def _run_analysis_job(
     llm: str,
     llm_api_key: str | None,
     fetch_warnings: list[str],
-    ui_language: str = "tr",
+    ui_language: str = "en",
 ) -> None:
     db = next(get_db())
     try:
@@ -597,7 +597,7 @@ async def analyze(
     username: str = Form(default=""),
     max_games: str = Form(default=str(DEFAULT_MAX_GAMES)),
     player: str = Form(default=""),
-    lang: str = Form(default="tr"),
+    lang: str = Form(default="en"),
     llm: str = Form(default="none"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

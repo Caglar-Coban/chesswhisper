@@ -2,7 +2,7 @@
 
 Report content has its own translations in chesswhisper.i18n; these are the
 labels, buttons and messages around it. The language is a per-session choice
-(Turkish by default) switched from the header.
+(English by default) switched from the header.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from starlette.requests import Request
 
 UI_LANGS = ("tr", "en")
-DEFAULT_UI_LANG = "tr"
+DEFAULT_UI_LANG = "en"
 _SESSION_KEY = "ui_lang"
 
 _STRINGS: dict[str, dict[str, str]] = {

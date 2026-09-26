@@ -174,7 +174,7 @@ def test_analyze_engine_failure_marks_the_job_as_an_error(client, monkeypatch):
     assert status.status_code == 200
     body = status.json()
     assert body["status"] == "error"
-    assert "Motor kurulum hatası" in body["message"]
+    assert "Engine setup failed" in body["message"]
 
 
 def test_analyze_unknown_player_marks_the_job_as_an_error(client, monkeypatch):
@@ -211,7 +211,7 @@ def test_analyze_unexpected_exception_marks_the_job_as_an_error_not_stuck_runnin
 
     body = status.json()
     assert body["status"] == "error"
-    assert body["message"] == "Beklenmeyen bir hata oluştu."
+    assert body["message"] == "Something unexpected went wrong."
 
 
 def test_on_progress_updates_the_job_before_it_completes(client, monkeypatch):

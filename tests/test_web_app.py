@@ -40,7 +40,7 @@ def test_analyze_without_file_returns_400(client):
     response = client.post("/analyze", data={"player": "", "lang": "tr", "llm": "none"})
 
     assert response.status_code == 400
-    assert "Hata" in response.text
+    assert "Error" in response.text
 
 
 def test_analyze_sanitizes_html_injected_via_pgn_headers(client, monkeypatch):
@@ -90,4 +90,4 @@ def test_analyze_engine_provisioning_failure_marks_the_job_as_an_error(client, m
     status = client.get(f"/analyze/status/{job_id}")
 
     assert status.json()["status"] == "error"
-    assert "Motor kurulum hatası" in status.json()["message"]
+    assert "Engine setup failed" in status.json()["message"]

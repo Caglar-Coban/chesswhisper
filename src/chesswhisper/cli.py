@@ -201,7 +201,7 @@ def cli():
     "Only with --lichess/--chesscom.",
 )
 @click.option("--player", default=None, help="Player name to analyze (matches PGN White/Black headers).")
-@click.option("--lang", type=click.Choice(["tr", "en"]), default="tr")
+@click.option("--lang", type=click.Choice(["tr", "en"]), default="en", help="Report language.")
 @click.option("--llm", "llm_name", type=click.Choice(["claude", "openai", "none"]), default="none")
 @click.option("-o", "--output", "output_path", default="report.md", type=click.Path())
 @click.option(

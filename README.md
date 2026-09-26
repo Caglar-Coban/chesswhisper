@@ -137,7 +137,7 @@ re-running the engine.
 ## Command line
 
 ```
-chesswhisper analyze games.pgn --player "YourName" --lang tr --llm claude -o report.md
+chesswhisper analyze games.pgn --player "YourName" --llm claude -o report.md
 chesswhisper analyze --lichess YourLichessName --max 20 --lang en -o report.md
 chesswhisper analyze --chesscom YourChessComName --llm claude
 ```
@@ -147,7 +147,7 @@ chesswhisper analyze --chesscom YourChessComName --llm claude
 | `PGN_PATH` / `--lichess USER` / `--chesscom USER` | Where the games come from. Give exactly one. |
 | `--max N` | With `--lichess`/`--chesscom`: how many recent games to fetch, 1-50 (default 10). Only public, standard-chess games are used. |
 | `--player NAME` | Whose moves to analyze, matched against the PGN's `White`/`Black` headers (case-insensitive). Defaults to the fetched username, or to the name that appears in the most games of the file. |
-| `--lang {tr,en}` | Report language (default `tr`). Opening names stay in their standard English form. |
+| `--lang {en,tr}` | Report language (default `en`). Opening names stay in their standard English form. |
 | `--llm {claude,openai,none}` | Coaching commentary provider (default `none`, stats only). |
 | `-o, --output PATH` | Where to write the Markdown report (default `report.md`). |
 | `--movetime MS` | Engine think time per position in milliseconds (default 300). |
@@ -187,7 +187,7 @@ chesswhisper serve                  # http://127.0.0.1:8000
   (encrypted at rest) and change your password.
 - **Admin:** list users, see who is locked out, view anyone's history, reset
   a password or delete an account.
-- **Language:** switch between English and Turkish from the header.
+- **Language:** English by default; switch to Turkish from the header.
 
 Security: bcrypt password hashes; a 15-minute lockout after 5 failed logins
 on one account and at most 20 login attempts per client address per 5

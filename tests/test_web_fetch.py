@@ -140,7 +140,7 @@ def test_analyze_fetch_requires_a_username(client, monkeypatch):
     response = client.post("/analyze", data={"source": "lichess", "username": "  ", "max_games": "5", "llm": "none"})
 
     assert response.status_code == 400
-    assert "kullanıcı adı" in response.text
+    assert "username" in response.text
 
 
 def test_analyze_fetch_rejects_a_non_numeric_game_count(client, monkeypatch):
@@ -151,7 +151,7 @@ def test_analyze_fetch_rejects_a_non_numeric_game_count(client, monkeypatch):
     )
 
     assert response.status_code == 400
-    assert "tam sayı" in response.text
+    assert "whole number" in response.text
 
 
 def test_analyze_rejects_an_unknown_source(client, monkeypatch):
@@ -160,7 +160,7 @@ def test_analyze_rejects_an_unknown_source(client, monkeypatch):
     response = client.post("/analyze", data={"source": "twitch", "username": "alice", "llm": "none"})
 
     assert response.status_code == 400
-    assert "Geçersiz oyun kaynağı" in response.text
+    assert "Invalid game source" in response.text
 
 
 def test_analyze_fetch_error_returns_400_with_the_message(client, monkeypatch):

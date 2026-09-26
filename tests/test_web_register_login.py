@@ -54,7 +54,7 @@ def test_login_with_wrong_password_fails(client):
     response = client.post("/login", data={"username": "alice", "password": "wrong-password"})
 
     assert response.status_code == 200
-    assert "hata" in response.text.lower() or "incorrect" in response.text.lower() or "yanlış" in response.text.lower()
+    assert "wrong username or password" in response.text.lower()
 
 
 def test_login_locks_account_after_five_failed_attempts(client):

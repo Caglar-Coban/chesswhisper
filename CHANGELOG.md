@@ -4,6 +4,14 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- English is now the default for the web interface, the analyze form's report
+  language and the command line's `--lang`. Turkish is one click (or
+  `--lang tr`) away.
+
 ## [0.2.0] - 2026-09-27
 
 ### Analysis

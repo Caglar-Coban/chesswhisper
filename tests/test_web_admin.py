@@ -151,7 +151,7 @@ def test_admin_report_view_shows_critical_move_boards(clients):
     response = admin_client.get(f"/admin/users/{alice.id}/history/{record.id}")
 
     assert response.status_code == 200
-    assert "Kritik hatalar" in response.text
+    assert "Critical mistakes" in response.text
 
 
 def test_admin_can_download_another_users_report(clients):

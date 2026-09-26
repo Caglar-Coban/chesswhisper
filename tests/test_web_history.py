@@ -174,13 +174,13 @@ def test_history_trend_needs_two_analyses(client):
     response = client.get("/history")
 
     assert 'id="trend-data"' not in response.text
-    assert "en az 2 analiz" in response.text
+    assert "at least 2 analyses" in response.text
 
 
 def test_history_without_records_has_no_trend_card(client):
     response = client.get("/history")
 
-    assert "Eğilim" not in response.text
+    assert 'id="trend-title"' not in response.text
 
 
 def _critical_moves_json():
@@ -212,9 +212,9 @@ def test_history_detail_shows_critical_move_boards(client):
     response = client.get(f"/history/{record_id}")
 
     assert response.status_code == 200
-    assert "Kritik hatalar" in response.text
+    assert "Critical mistakes" in response.text
     assert "1... f6" in response.text
-    assert "Daha iyisi: <strong>e5</strong>" in response.text
+    assert "Better: <strong>e5</strong>" in response.text
     assert response.text.count("<svg") == 1
 
 
@@ -224,7 +224,7 @@ def test_history_detail_hides_boards_for_records_without_them(client):
     response = client.get(f"/history/{record_id}")
 
     assert response.status_code == 200
-    assert "Kritik hatalar" not in response.text
+    assert "Critical mistakes" not in response.text
 
 
 def test_history_detail_survives_unreadable_critical_moves(client):
@@ -233,7 +233,7 @@ def test_history_detail_survives_unreadable_critical_moves(client):
     response = client.get(f"/history/{record_id}")
 
     assert response.status_code == 200
-    assert "Kritik hatalar" not in response.text
+    assert "Critical mistakes" not in response.text
     assert "Rapor" in response.text
 
 

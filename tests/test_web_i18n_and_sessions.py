@@ -25,22 +25,29 @@ def test_every_ui_string_has_both_languages():
         assert entry["tr"].count("{") == entry["en"].count("{"), key
 
 
-def test_interface_is_turkish_by_default(client):
+def test_interface_is_english_by_default(client):
     page = client.get("/settings").text
 
-    assert '<html lang="tr">' in page
-    assert "Parola değiştir" in page
+    assert '<html lang="en">' in page
+    assert "Change password" in page
 
 
-def test_switching_to_english_translates_the_interface(client):
-    response = client.get("/language/en?next=/settings")
+def test_switching_to_turkish_translates_the_interface(client):
+    response = client.get("/language/tr?next=/settings")
 
     assert response.status_code == 303
     assert response.headers["location"] == "/settings"
     page = client.get("/settings").text
-    assert '<html lang="en">' in page
-    assert "Change password" in page
-    assert "Parola değiştir" not in page
+    assert '<html lang="tr">' in page
+    assert "Parola değiştir" in page
+    assert "Change password" not in page
+
+
+def test_turkish_errors_and_report_language_default(client):
+    client.get("/language/tr")
+
+    assert "Kayıt bulunamadı." in client.get("/history/999").text
+    assert '<option value="tr" selected>Türkçe</option>' in client.get("/").text
 
 
 def test_english_errors_and_report_language_default(client):
@@ -52,7 +59,7 @@ def test_english_errors_and_report_language_default(client):
 
 def test_language_switch_ignores_unknown_languages_and_foreign_redirects(client):
     assert client.get("/language/de?next=/").status_code == 303
-    assert '<html lang="tr">' in client.get("/").text
+    assert '<html lang="en">' in client.get("/").text
 
     for target in ("https://evil.example", "//evil.example", "/\\evil.example"):
         response = client.get("/language/en", params={"next": target})
@@ -63,9 +70,9 @@ def test_language_switch_works_before_logging_in(tmp_path):
     init_db(tmp_path / "anon_lang.db")
     anon = CsrfClient(app, follow_redirects=False)
 
-    anon.get("/language/en?next=/login")
+    anon.get("/language/tr?next=/login")
 
-    assert "Log in" in anon.get("/login").text
+    assert "Giriş Yap" in anon.get("/login").text
 
 
 # --- sessions end when the password changes --------------------------------
