@@ -6,7 +6,10 @@ from pathlib import Path
 
 import bcrypt
 from cryptography.fernet import Fernet
-from platformdirs import user_data_dir
+
+from chesswhisper.paths import data_dir
+
+MIN_PASSWORD_LENGTH = 8
 
 
 def hash_password(password: str) -> str:
@@ -18,9 +21,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def _app_data_dir() -> Path:
-    path = Path(user_data_dir("chesswhisper"))
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return data_dir()
 
 
 def _get_or_create_secret_bytes(filename: str, generator) -> bytes:

@@ -8,11 +8,12 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from platformdirs import user_data_dir
 from sqlalchemy import create_engine, event, inspect
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import NullPool
+
+from chesswhisper.paths import data_dir
 
 # Revision that reproduces the schema the pre-Alembic create_all() built.
 # Databases created before migrations existed are stamped at this revision.
@@ -28,7 +29,7 @@ def utcnow() -> datetime:
 
 
 def _default_db_path() -> Path:
-    return Path(user_data_dir("chesswhisper")) / "chesswhisper.db"
+    return data_dir() / "chesswhisper.db"
 
 
 def get_engine(db_path: Path | None = None) -> Engine:

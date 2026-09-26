@@ -9,7 +9,8 @@ import zipfile
 from pathlib import Path
 
 import requests
-from platformdirs import user_data_dir
+
+from chesswhisper.paths import data_dir
 
 STOCKFISH_RELEASE_TAG = "sf_19"
 STOCKFISH_TAG_DIRNAME = STOCKFISH_RELEASE_TAG
@@ -110,7 +111,7 @@ def _verify_binary(path: Path, timeout: float = 10.0) -> bool:
 def get_stockfish_path(app_data_dir: Path | None = None) -> Path:
     import platform
 
-    base_dir = Path(app_data_dir) if app_data_dir else Path(user_data_dir("chesswhisper"))
+    base_dir = Path(app_data_dir) if app_data_dir else data_dir()
     version_dir = base_dir / STOCKFISH_TAG_DIRNAME
 
     if version_dir.is_dir():
