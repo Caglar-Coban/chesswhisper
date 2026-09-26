@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}chesswhisper — Rapor{% endblock %}
 {% block content %}
+<div class="report-actions no-print">
+  <a class="secondary-button" href="{{ download_url }}" download>Markdown indir</a>
+  <button type="button" class="secondary-button" onclick="window.print()">Yazdır / PDF</button>
+</div>
 {% if warnings %}
 <div class="banner warning">
   <strong>Uyarılar:</strong>

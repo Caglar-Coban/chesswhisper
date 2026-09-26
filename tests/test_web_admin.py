@@ -152,3 +152,20 @@ def test_admin_report_view_shows_critical_move_boards(clients):
 
     assert response.status_code == 200
     assert "Kritik hatalar" in response.text
+
+
+def test_admin_can_download_another_users_report(clients):
+    admin_client, _ = clients
+    db = next(get_db())
+    alice = db.query(User).filter_by(username="alice").one()
+    record = AnalysisRecord(
+        user_id=alice.id, player_name="Alice", lang="en", llm_used="none", games_count=1,
+        overall_acpl=1.0, overall_accuracy=99.0, report_markdown="# Alice report",
+    )
+    db.add(record)
+    db.commit()
+
+    response = admin_client.get(f"/admin/users/{alice.id}/history/{record.id}/report.md")
+
+    assert response.status_code == 200
+    assert response.text == "# Alice report"

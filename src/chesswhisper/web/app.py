@@ -10,7 +10,7 @@ import bleach
 import markdown as markdown_lib
 from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
@@ -468,9 +468,32 @@ async def history_detail(
             "current_user": current_user, "report_html": report_html,
             "cards": board_cards(record.critical_moves_json),
             "games": _game_summaries(record), "games_url_prefix": f"/history/{record_id}/games",
+            "download_url": f"/history/{record_id}/report.md",
             "back_url": "/history", "warnings": warnings,
         },
     )
+
+
+def _markdown_download(record: AnalysisRecord) -> Response:
+    filename = f"chesswhisper-report-{record.id}-{record.created_at.strftime('%Y%m%d')}.md"
+    return Response(
+        record.report_markdown,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/history/{record_id}/report.md", response_model=None)
+async def history_download(
+    request: Request,
+    record_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    record = db.get(AnalysisRecord, record_id)
+    if record is None or record.user_id != current_user.id:
+        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+    return _markdown_download(record)
 
 
 @app.get("/history/{record_id}/games/{game_number}", response_class=HTMLResponse)
@@ -694,9 +717,24 @@ async def admin_user_history_detail(
             "cards": board_cards(record.critical_moves_json),
             "games": _game_summaries(record),
             "games_url_prefix": f"/admin/users/{user_id}/history/{record_id}/games",
+            "download_url": f"/admin/users/{user_id}/history/{record_id}/report.md",
             "back_url": f"/admin/users/{user_id}",
         },
     )
+
+
+@app.get("/admin/users/{user_id}/history/{record_id}/report.md", response_model=None)
+async def admin_history_download(
+    request: Request,
+    user_id: int,
+    record_id: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    record = db.get(AnalysisRecord, record_id)
+    if record is None or record.user_id != user_id:
+        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+    return _markdown_download(record)
 
 
 @app.get("/admin/users/{user_id}/history/{record_id}/games/{game_number}", response_class=HTMLResponse)

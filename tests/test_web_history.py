@@ -261,3 +261,32 @@ def test_history_marks_record_times_as_utc_for_local_conversion(client):
     page = client.get("/history").text
 
     assert '<time class="local-time" datetime="2026-09-26T19:05:00Z">2026-09-26 19:05 UTC</time>' in page
+
+
+def test_report_can_be_downloaded_as_markdown(client):
+    record_id = _seed_record("alice", "Alice")
+
+    response = client.get(f"/history/{record_id}/report.md")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert 'attachment; filename="chesswhisper-report-' in response.headers["content-disposition"]
+    assert response.text == "# Test Report\n\nHello."
+
+
+def test_report_download_is_private(client):
+    db = next(get_db())
+    db.add(User(username="bob", password_hash=hash_password("correct-horse"), is_admin=False))
+    db.commit()
+    record_id = _seed_record("bob", "Bob")
+
+    assert client.get(f"/history/{record_id}/report.md").status_code == 404
+
+
+def test_report_page_offers_download_and_print(client):
+    record_id = _seed_record("alice", "Alice")
+
+    page = client.get(f"/history/{record_id}").text
+
+    assert f'href="/history/{record_id}/report.md"' in page
+    assert "window.print()" in page
