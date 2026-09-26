@@ -36,3 +36,24 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t chesswhisper .
+
+      - name: Serve from the image and answer a request
+        run: |
+          docker run -d --name cw -p 127.0.0.1:8000:8000 chesswhisper
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8000/login >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/login | grep -q chesswhisper
+          docker exec cw stockfish quit
+          docker exec cw chesswhisper --version
+          docker logs cw
+          docker rm -f cw

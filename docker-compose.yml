@@ -1,0 +1,18 @@
+# docker compose up -d        then open http://127.0.0.1:8000
+# docker compose run --rm chesswhisper chesswhisper create-admin
+services:
+  chesswhisper:
+    build: .
+    image: chesswhisper
+    restart: unless-stopped
+    # Published on localhost only; see docs/deployment.md before exposing it.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - chesswhisper-data:/data
+    environment:
+      # Set to 0 to close self-service sign-up once your accounts exist.
+      CHESSWHISPER_ALLOW_REGISTRATION: "1"
+
+volumes:
+  chesswhisper-data:
