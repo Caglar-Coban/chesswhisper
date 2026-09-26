@@ -3,13 +3,16 @@
 This guide covers running the web UI as a long-lived service for yourself
 or a few people you trust: on a home server, a spare machine on your LAN,
 or a small VPS. It does not turn chesswhisper into a public web service.
-The app has open registration, no rate limiting, no email verification and
-keeps background jobs in memory, so read [Reaching it from other
+Sign-up is open unless you close it, there's no email verification, and
+background jobs live in memory, so read [Reaching it from other
 machines](#reaching-it-from-other-machines) before exposing it anywhere.
+
+The quickest route is [Docker](#docker); the rest of the guide sets it up
+directly on a machine.
 
 ## What you need
 
-- Python 3.11 or 3.12.
+- Python 3.11, 3.12 or 3.13 (or just Docker).
 - A few hundred MB of disk for the virtualenv and Stockfish (about 100 MB on
   its own), plus whatever the database grows to.
 - Outbound internet access if you want Stockfish downloaded automatically,
@@ -114,11 +117,28 @@ Run it under your own account with Task Scheduler: create a task triggered
 `serve --host 127.0.0.1 --port 8000`. Create the admin from the same account
 so both use the same data directory.
 
+### Docker
+
+The repository's `Dockerfile` builds an image with Stockfish included, runs
+as an unprivileged user and keeps everything in a `/data` volume;
+`docker-compose.yml` publishes it on `127.0.0.1:8000`:
+
+```
+docker compose up -d
+docker compose exec chesswhisper chesswhisper create-admin
+docker compose logs -f                      # logs
+```
+
+To upgrade, back up the volume (see [Backups](#backups)), then
+`git pull && docker compose up -d --build`; migrations run when the new
+container starts. Set `CHESSWHISPER_ALLOW_REGISTRATION: "0"` in
+`docker-compose.yml` once your accounts exist.
+
 ### Keep it to one process
 
 `chesswhisper serve` starts a single uvicorn process, and it has to stay
 that way. Analysis progress lives in that process's memory, so do not run
-it under gunicorn or with `--workers`, and do not start two copies against
+it under gunicorn, with `--workers` or with `WEB_CONCURRENCY` set, and do not start two copies against
 the same data directory. A restart drops any analysis still running;
 already-finished ones are in the database and survive.
 
@@ -134,9 +154,9 @@ option that works for you:
    interface's address, for example `--host 100.64.0.5`, rather than
    `0.0.0.0`. Traffic is plain HTTP, so only do this on a network you trust.
 3. **Reverse proxy with HTTPS.** Only if the people using it can't join a
-   private network. Anyone who reaches the login page can register an
-   account and spend CPU on analyses, so put a second gate in front of the
-   app. With [Caddy](https://caddyserver.com/), which handles the
+   private network. Unless you set `CHESSWHISPER_ALLOW_REGISTRATION=0`,
+   anyone who reaches the login page can register an account and spend CPU
+   on analyses, so close sign-up or put a second gate in front of the app. With [Caddy](https://caddyserver.com/), which handles the
    certificate itself:
 
    ```
@@ -151,6 +171,12 @@ option that works for you:
 
    Keep chesswhisper itself on `127.0.0.1` so the proxy is the only way in,
    and allow only ports 80/443 through the firewall.
+
+   The login rate limit counts attempts per client address. Uvicorn takes
+   the real address from the proxy's `X-Forwarded-For` header only when the
+   proxy connects from `127.0.0.1`; if it connects from elsewhere (for
+   example into a Docker container), set `FORWARDED_ALLOW_IPS` to the
+   proxy's address, or every visitor shares one limit.
 
 ## Backups
 

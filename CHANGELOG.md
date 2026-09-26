@@ -4,6 +4,43 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-09-27
+
+### Analysis
+
+- Stockfish runs with several threads (half the CPU cores, at most 4) and a
+  128 MB hash: about 4x the positions searched in the same think time.
+  `--threads` overrides it.
+- Evaluations are cached per game on disk, so re-analyzing a player's recent
+  games only runs the engine on new ones (a repeat 3-game run went from 105 s
+  to under 2 s). `--no-cache` opts out.
+- Reports break results down by time control and by opponent strength, show
+  error rates by move number and by whether you were ahead, level or behind,
+  and open with key findings drawn from those numbers. The LLM prompt gets the
+  same data.
+
+### Web UI
+
+- Move-by-move game viewer with an evaluation graph and annotated move list;
+  report pages list the games and every critical-move board links into it.
+- Reports can be downloaded as Markdown or printed to PDF with a print layout.
+- English interface alongside Turkish, switched from the header.
+- Changing your password signs out your other sessions; an admin reset signs
+  the user out everywhere (migration 0004).
+- `CHESSWHISPER_ALLOW_REGISTRATION=0` closes self-service sign-up.
+- Login attempts are limited to 20 per client address per 5 minutes.
+
+### Build and tooling
+
+- Docker image with Stockfish included, and a docker-compose file.
+- CI builds the image and checks it serves; Dependabot keeps dependencies,
+  actions and the base image current; tagged releases get a wheel and sdist.
+
+### Fixed
+
+- Trend chart dates use the viewer's time zone, like the history table.
+- English error-pattern tables no longer head two columns "Moves".
+
 ## [0.1.0] - 2026-09-26
 
 First release.
@@ -51,4 +88,5 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.2.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.1.0

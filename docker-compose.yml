@@ -1,5 +1,5 @@
 # docker compose up -d        then open http://127.0.0.1:8000
-# docker compose run --rm chesswhisper chesswhisper create-admin
+# docker compose exec chesswhisper chesswhisper create-admin
 services:
   chesswhisper:
     build: .

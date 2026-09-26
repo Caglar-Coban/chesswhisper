@@ -6,62 +6,138 @@
 
 chesswhisper analyzes your chess games with Stockfish and turns the raw
 engine numbers into a coaching report: accuracy and average centipawn loss,
-where in the game your mistakes happen, how your openings are going, whether
-you crack under time pressure, and, if you want it, a written summary from
-Claude or OpenAI.
+where in the game your mistakes happen, how you do at each time control and
+against stronger or weaker opponents, and, if you want it, a written summary
+from Claude or OpenAI.
 
 It runs as a command-line tool that writes a Markdown report, or as a small
-multi-user web app with saved history, a progress trend chart and board
-diagrams of your worst moves.
+multi-user web app with saved history, a progress trend chart, board
+diagrams of your worst moves and a move-by-move game viewer. The web
+interface is available in English and Turkish.
 
-![Critical moves drawn on boards: the move played in red, the engine's choice in green](docs/images/critical-moves.png)
+![A report: the analyzed games, then the costliest mistakes drawn on boards](docs/images/report.png)
 
 ## Features
 
-- **Engine analysis.** Every position is evaluated with Stockfish, which is
-  downloaded automatically on first use (or uses one you already have).
+- **Engine analysis.** Every position is evaluated with Stockfish (downloaded
+  automatically, or one you already have), using several threads.
+- **Cached evaluations.** Games analyzed before are read back from disk, so
+  re-running a player's recent games only analyzes the new ones.
 - **Your stats, not the game's.** Accuracy, ACPL, and inaccuracies, mistakes
   and blunders split by opening, middlegame and endgame, for the player you
   pick.
-- **Opening repertoire.** Games are matched against an ECO table, with your
-  win/loss/draw record per opening.
-- **Time management.** When the PGN has clock data (`[%clk]`), it compares
-  your error rate under 30 seconds with the rest of the game.
-- **Games straight from Lichess or chess.com.** Give a username instead of a
-  file and chesswhisper fetches that player's latest public games.
-- **Optional coaching commentary** from Claude or OpenAI, in Turkish or
-  English.
-- **Web UI** with accounts, encrypted per-user API keys, analysis history,
-  a live progress page, an accuracy/ACPL trend chart and critical-move
-  boards.
+- **Breakdowns.** Results and accuracy by time control (bullet, blitz, rapid,
+  classical) and by opponent strength, plus error rates by move number and by
+  whether you were ahead, level or behind.
+- **Key findings.** The clearest patterns stated in a sentence each, such as
+  "your mistakes cluster in moves 31-40", with minimum sample sizes so a few
+  games don't produce noise.
+- **Opening repertoire and time management.** ECO-matched openings with your
+  record in each, and your error rate with under 30 seconds on the clock.
+- **Games straight from Lichess or chess.com** by username.
+- **Optional coaching commentary** from Claude or OpenAI, in English or
+  Turkish, written from all of the above.
+- **Web UI** with accounts, encrypted per-user API keys, background analysis
+  with a progress page, history with a trend chart, critical-move boards, a
+  game viewer, Markdown download and a print/PDF layout.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/game-viewer.png" alt="Game viewer with board, evaluation graph and annotated move list"></td>
+    <td width="50%"><img src="docs/images/report-stats.png" alt="Key findings, time-control and opponent breakdowns, and error patterns"></td>
+  </tr>
+  <tr>
+    <td>Step through any analyzed game: board, evaluation graph and a move list marked <code>?!</code>, <code>?</code> and <code>??</code>.</td>
+    <td>Key findings, performance by time control and opponent strength, and error patterns.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/history-trend.png" alt="History page with the accuracy and ACPL trend chart"></td>
+    <td><img src="docs/images/analyze-form.png" alt="The analyze form"></td>
+  </tr>
+  <tr>
+    <td>Accuracy and ACPL over time for each player you've analyzed.</td>
+    <td>Upload a PGN or fetch games by Lichess / chess.com username.</td>
+  </tr>
+</table>
 
 ## Quick start
 
-Requires Python 3.11 or newer.
+With Docker (Stockfish is built into the image):
 
 ```
 git clone https://github.com/Caglar-Coban/chesswhisper.git
 cd chesswhisper
-pip install ".[web]"         # or just "." for the CLI alone
+docker compose up -d
+docker compose exec chesswhisper chesswhisper create-admin
+```
 
+Then open http://127.0.0.1:8000.
+
+With Python 3.11 or newer:
+
+```
+pip install ".[web]"        # or just "." for the command line alone
 chesswhisper analyze --lichess YourLichessName --max 10 --lang en -o report.md
 ```
 
 The first run downloads Stockfish (about 100 MB) into chesswhisper's data
-directory. At the default 0.3 seconds per position, a typical game takes
-20-40 seconds to analyze.
+directory. At the default 0.3 seconds per position a typical game takes 20-40
+seconds to analyze the first time and well under a second after that.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[PGN file] --> L[pgn_loader]
+    B[Lichess / chess.com API] --> F[game_sources] --> L
+    L --> E[engine_analyzer<br/>Stockfish, per position]
+    C[(eval_cache<br/>SQLite)] <--> E
+    E --> S[stats_engine<br/>accuracy, ACPL, phases,<br/>breakdowns, critical moves]
+    S --> I[insights<br/>key findings]
+    S --> R[report_writer<br/>Markdown, TR/EN]
+    I --> R
+    S --> P[llm<br/>Claude / OpenAI]
+    I --> P
+    P --> R
+    R --> O1[report.md]
+    R --> W[FastAPI web UI]
+    S --> T[timeline<br/>move-by-move data] --> W
+    W --> DB[(SQLite + Alembic)]
+```
+
+The command line and the web UI share one pipeline (`run_analysis` in
+`cli.py`). The web app runs it on a background thread per analysis, reports
+progress to the page, and stores the report, the critical moves and each
+game's timeline so the report, boards and viewer can be rebuilt without
+re-running the engine.
+
+### How the numbers are computed
+
+- **Centipawn loss** is how much the engine's evaluation drops, from the
+  mover's side, between the position before and after a move. Evaluations are
+  capped at ±10 pawns first, as Lichess does, so missing a mate while still a
+  queen up doesn't count as a 99,000-centipawn loss.
+- **Classification:** a loss of 50+ cp is an inaccuracy, 100+ a mistake, 300+
+  a blunder. "Error rate" in the breakdowns counts mistakes and blunders.
+- **Accuracy** converts evaluations to winning chances and scores each move by
+  how much of them it gave away, using Lichess's published formula, then
+  averages over your moves.
+- **Phases:** the first 20 plies are the opening; after that it's an endgame
+  once the queens, rooks and minor pieces left are worth 20 points or less
+  (Q=9, R=5, B=N=3), and a middlegame otherwise. Games starting from a custom
+  FEN are classified by material only.
+- **Time controls** follow Lichess: base time plus 40 increments, under 3
+  minutes is bullet, under 8 blitz, under 25 rapid, else classical.
+- **Opponent strength** compares ratings from the PGN: 100+ Elo above you is
+  stronger, 100+ below is weaker.
+- **Ahead / behind** means the evaluation before your move was at least two
+  pawns in your favor / against you.
+- **Time pressure** means under 30 seconds on your clock when you moved.
 
 ## Command line
 
-Analyze a PGN file:
-
 ```
 chesswhisper analyze games.pgn --player "YourName" --lang tr --llm claude -o report.md
-```
-
-Or fetch recent games instead of passing a file:
-
-```
 chesswhisper analyze --lichess YourLichessName --max 20 --lang en -o report.md
 chesswhisper analyze --chesscom YourChessComName --llm claude
 ```
@@ -76,23 +152,16 @@ chesswhisper analyze --chesscom YourChessComName --llm claude
 | `-o, --output PATH` | Where to write the Markdown report (default `report.md`). |
 | `--movetime MS` | Engine think time per position in milliseconds (default 300). |
 | `--depth N` | Fixed search depth instead of a time limit. |
+| `--threads N` | Stockfish threads (default: half your CPU cores, at most 4). |
+| `--no-cache` | Re-analyze every game instead of reusing saved evaluations. |
 | `--engine-path PATH` | Use this Stockfish binary instead of downloading one. |
 
 `chesswhisper --version` prints the installed version.
 
-### API keys
-
 `--llm claude` reads `ANTHROPIC_API_KEY` and `--llm openai` reads
-`OPENAI_API_KEY` from the environment. You can also put them in a `.env`
-file in the directory you run chesswhisper from:
-
-```
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-```
-
-`.env` is in `.gitignore`; never commit it. If the LLM call fails, you still
-get the stats-only report and a warning.
+`OPENAI_API_KEY`, from the environment or from a `.env` file in the current
+directory (already in `.gitignore`). If the LLM call fails you still get the
+stats-only report and a warning.
 
 ## Web UI
 
@@ -102,65 +171,44 @@ chesswhisper create-admin          # prompts for a username and password
 chesswhisper serve                  # http://127.0.0.1:8000
 ```
 
-Anyone who can reach the server can register an account. Each user stores
-their own Anthropic/OpenAI key under **Settings** (encrypted at rest, and
-removable at any time) and can change their password there. The interface
-is in Turkish; reports can be generated in Turkish or English.
+- **Analyze:** upload a PGN (up to 5 MB) or type a Lichess or chess.com
+  username. A progress page counts games as they're analyzed and opens the
+  report when it's done; it's safe to leave and come back from History. Each
+  user runs one analysis at a time.
+- **Report:** the games with links into the viewer, up to 12 of the costliest
+  blunders and mistakes on boards (the move played in red, the engine's choice
+  in green, each linking to that moment in the game), then the full report.
+  Download it as Markdown or print it to PDF.
+- **Game viewer:** board, evaluation graph and annotated move list; click,
+  use the arrow keys or Home/End, and flip the board.
+- **History:** every past analysis and a trend chart of accuracy and ACPL for
+  each player.
+- **Settings:** store, replace or remove your own Anthropic/OpenAI keys
+  (encrypted at rest) and change your password.
+- **Admin:** list users, see who is locked out, view anyone's history, reset
+  a password or delete an account.
+- **Language:** switch between English and Turkish from the header.
 
-On the **Analyze** page you upload a PGN (up to 5 MB) or type a Lichess or
-chess.com username and choose how many recent games to fetch. You then land
-on a progress page that counts games as they're analyzed and opens the
-report when it's done; it's safe to leave and come back later from
-**History**. Each user runs one analysis at a time.
+Security: bcrypt password hashes; a 15-minute lockout after 5 failed logins
+on one account and at most 20 login attempts per client address per 5
+minutes; CSRF tokens on every form; changing a password signs out your other
+sessions, and an admin reset signs the user out everywhere. Sign-up can be
+closed with `CHESSWHISPER_ALLOW_REGISTRATION=0`.
 
-<p>
-  <img src="docs/images/analyze-form.png" alt="The analyze form" width="49%">
-  <img src="docs/images/history-trend.png" alt="History page with the accuracy and ACPL trend chart" width="49%">
-</p>
-
-**History** lists every past analysis and opens with a trend chart of
-accuracy and ACPL over time for one player. Hover or use the arrow keys to
-read each point, and click one to open that report. Reports start with up
-to 12 of the analysis's costliest blunders and mistakes drawn on boards: the
-move played as a red arrow, the engine's preferred move as a green one, and
-the evaluation before and after.
-
-The admin account also gets an **Admin** page listing every user, where it
-can view anyone's history, reset a password (which also lifts a login
-lockout) or delete an account.
-
-Security details: passwords are hashed with bcrypt, accounts lock for 15
-minutes after 5 failed logins, and every form is CSRF-protected. The server
-binds to `127.0.0.1` by default and is meant for you and a few people you
-trust, not for the open internet (no HTTPS of its own, no rate limiting, no
-email verification). To run it as a service, reach it from other machines,
-back it up or upgrade it, see the
-[deployment guide](docs/deployment.md).
-
-## How the numbers are computed
-
-- **Centipawn loss** is how much the engine's evaluation drops, from the
-  mover's point of view, between the position before and after a move.
-  Evaluations are capped at ±10 pawns first, as Lichess does, so missing a
-  mate while still a queen up doesn't count as a 99,000-centipawn loss.
-- **Classification:** a loss of 50+ cp is an inaccuracy, 100+ a mistake,
-  300+ a blunder.
-- **Accuracy** converts evaluations to winning chances and scores each move
-  by how much of them it gave away, using Lichess's published formula, then
-  averages over your moves.
-- **Phases:** the first 20 plies are the opening; after that it's an endgame
-  once the queens, rooks and minor pieces left on the board are worth 20
-  points or less (Q=9, R=5, B=N=3), and a middlegame otherwise. Games
-  starting from a custom FEN are classified by material only.
-- **Time pressure** means under 30 seconds on your clock when you moved.
+The server binds to `127.0.0.1` by default and is meant for you and people
+you trust, not the open internet: it has no HTTPS of its own and no email
+verification. The [deployment guide](docs/deployment.md) covers running it
+as a service or in Docker, reaching it from other machines, backups and
+upgrades.
 
 ## Configuration
 
 | Environment variable | Purpose |
 |----------------------|---------|
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | LLM keys for the CLI (the web UI uses per-user keys instead). |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | LLM keys for the command line (the web UI uses per-user keys). |
 | `CHESSWHISPER_STOCKFISH_PATH` | Use this Stockfish binary. A `stockfish` on `PATH` is also picked up. |
-| `CHESSWHISPER_DATA_DIR` | Where to keep the downloaded Stockfish and the web UI's database and keys. Defaults to the per-user data directory (`~/.local/share/chesswhisper` on Linux, `%LOCALAPPDATA%\chesswhisper\chesswhisper` on Windows). |
+| `CHESSWHISPER_DATA_DIR` | Where to keep Stockfish, the evaluation cache and the web UI's database and keys. Defaults to the per-user data directory (`~/.local/share/chesswhisper` on Linux, `%LOCALAPPDATA%\chesswhisper\chesswhisper` on Windows); `/data` in Docker. |
+| `CHESSWHISPER_ALLOW_REGISTRATION` | `0` closes self-service sign-up in the web UI. |
 
 ## Development
 
@@ -168,16 +216,18 @@ back it up or upgrade it, see the
 pip install -e ".[dev,web]"
 ruff check src tests   # lint
 mypy src               # type-check
-pytest                 # tests
+pytest                 # about 400 tests; a real-Stockfish smoke test runs when one is on PATH
 ```
 
-CI runs all three on every push and pull request, on Linux and Windows with
-Python 3.11, 3.12 and 3.13. A smoke test against a real Stockfish runs when
-one is on `PATH`.
+CI runs lint, type checks and tests on Linux and Windows with Python 3.11,
+3.12 and 3.13, and builds the Docker image and checks it serves requests.
+Dependabot keeps dependencies, actions and the base image current. Pushing a
+`v*` tag builds the wheel and source distribution and attaches them to the
+GitHub release.
 
 The web UI's SQLite schema is managed by Alembic. Migrations live in
-`src/chesswhisper/web/migrations/versions/` and run automatically when the
-app starts. To change the schema:
+`src/chesswhisper/web/migrations/versions/` and run automatically when the app
+starts. To change the schema:
 
 ```
 alembic upgrade head                           # bring the scratch dev.db up to date
@@ -192,19 +242,27 @@ and the migrations disagree.
 
 ```
 src/chesswhisper/
-  cli.py              command-line entry point and the shared analysis pipeline
+  cli.py              command line and the shared analysis pipeline
   pgn_loader.py       PGN parsing
   game_sources.py     Lichess / chess.com fetching
   engine_provision.py finding or downloading Stockfish
   engine_analyzer.py  per-move engine evaluations
-  stats_engine.py     accuracy, ACPL, phases, openings, time pressure, critical moves
+  eval_cache.py       on-disk cache of evaluations per game
+  stats_engine.py     accuracy, ACPL, phases, breakdowns, critical moves
+  insights.py         key findings
+  timeline.py         move-by-move data for the game viewer
   report_writer.py    Markdown report (with i18n.py for Turkish/English)
   llm/                Claude / OpenAI commentary
-  web/                FastAPI app, templates, models and migrations
+  paths.py            the data directory
+  web/                FastAPI app, templates, models, migrations, UI text
 docs/
-  deployment.md       running the web UI as a service
+  deployment.md       running the web UI as a service or in Docker
   superpowers/        design specs and implementation plans for each feature
 ```
+
+Built with Python, [python-chess](https://python-chess.readthedocs.io/),
+Stockfish, FastAPI, SQLAlchemy and Alembic, Jinja2, and plain JavaScript and
+SVG for the charts, boards and viewer (no front-end framework or build step).
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 
