@@ -8,6 +8,7 @@ from dotenv import find_dotenv, load_dotenv
 
 from chesswhisper.engine_analyzer import analyze_game
 from chesswhisper.engine_provision import StockfishProvisionError, get_stockfish_path
+from chesswhisper.eval_cache import EvalCache, cache_key
 from chesswhisper.game_sources import DEFAULT_MAX_GAMES, MAX_GAMES_LIMIT, GameFetchError, fetch_pgn
 from chesswhisper.llm.base import LLMProviderError
 from chesswhisper.llm.none_provider import NoneProvider
@@ -96,6 +97,7 @@ def run_analysis(
     llm_api_key=None,
     on_progress: Callable[[int, int], None] | None = None,
     threads: int | None = None,
+    use_cache: bool = True,
 ):
     """Runs the full analysis pipeline and returns (aggregate_report, commentary, warnings).
 
@@ -114,6 +116,10 @@ def run_analysis(
     as on_progress(games_processed, total_games), with total_games fixed
     before the loop starts. The CLI does not pass this; the web UI uses it
     to report progress on a background job.
+
+    With use_cache, each game's evaluations are looked up in (and saved to)
+    the on-disk EvalCache, and Stockfish is only started for games it hasn't
+    seen with the same search limit.
     """
     warnings = []
 
@@ -130,7 +136,8 @@ def run_analysis(
 
     eco_table = load_eco_table()
 
-    engine = _open_engine(engine_path=engine_path, threads=threads)
+    cache = EvalCache() if use_cache else None
+    engine = None
 
     total_games = len(load_result.games)
     skipped_for_player = 0
@@ -144,12 +151,19 @@ def run_analysis(
                 if on_progress is not None:
                     on_progress(processed, total_games)
                 continue
-            evals = analyze_game(loaded.game, engine, movetime_ms=movetime, depth=depth)
+            key = cache_key(loaded.game, movetime, depth) if cache is not None else None
+            evals = cache.get(key) if cache is not None and key is not None else None
+            if evals is None:
+                if engine is None:
+                    engine = _open_engine(engine_path=engine_path, threads=threads)
+                evals = analyze_game(loaded.game, engine, movetime_ms=movetime, depth=depth)
+                if cache is not None and key is not None:
+                    cache.put(key, evals)
             game_reports.append(build_game_report(loaded, evals, player, eco_table))
             if on_progress is not None:
                 on_progress(processed, total_games)
     finally:
-        if hasattr(engine, "quit"):
+        if engine is not None and hasattr(engine, "quit"):
             engine.quit()
 
     if skipped_for_player:
@@ -199,9 +213,10 @@ def cli():
     "--threads", default=None, type=click.IntRange(min=1, max=256),
     help=f"Stockfish search threads (default: half your CPU cores, at most {MAX_DEFAULT_THREADS}).",
 )
+@click.option("--no-cache", is_flag=True, help="Re-analyze every game instead of reusing saved evaluations.")
 def analyze(
     pgn_path, lichess_user, chesscom_user, max_games, player, lang, llm_name, output_path, movetime, depth,
-    engine_path, threads,
+    engine_path, threads, no_cache,
 ):
     sources_given = [s for s in (pgn_path, lichess_user, chesscom_user) if s is not None]
     if len(sources_given) != 1:
@@ -254,7 +269,7 @@ def analyze(
         try:
             aggregate, commentary, warnings = run_analysis(
                 analysis_path, player, lang, llm_name, movetime=movetime, depth=depth, engine_path=engine_path,
-                threads=threads,
+                threads=threads, use_cache=not no_cache,
             )
         except (OSError, ValueError, StockfishProvisionError) as exc:
             click.echo(f"Error: {exc}", err=True)

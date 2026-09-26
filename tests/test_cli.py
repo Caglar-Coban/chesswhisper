@@ -670,3 +670,65 @@ def test_analyze_passes_threads_to_the_engine(tmp_path, monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert seen["threads"] == 2
+
+
+# --- evaluation cache ---
+
+
+class CountingEngine(FakeEngine):
+    calls = 0
+
+    def analyse(self, board, limit, **kwargs):
+        CountingEngine.calls += 1
+        return super().analyse(board, limit, **kwargs)
+
+
+def test_run_analysis_reuses_cached_evaluations(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+    opened = []
+
+    def open_engine(**kwargs):
+        opened.append(1)
+        return CountingEngine()
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", open_engine)
+    CountingEngine.calls = 0
+
+    first, _, _ = run_analysis(str(pgn_path), "Alice", "en", "none")
+    calls_after_first = CountingEngine.calls
+    second, _, _ = run_analysis(str(pgn_path), "Alice", "en", "none")
+
+    assert calls_after_first > 0
+    assert CountingEngine.calls == calls_after_first  # nothing re-analyzed
+    assert len(opened) == 1  # and Stockfish wasn't even started the second time
+    assert second.overall_acpl == first.overall_acpl
+
+
+def test_run_analysis_can_skip_the_cache(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: CountingEngine())
+    CountingEngine.calls = 0
+
+    run_analysis(str(pgn_path), "Alice", "en", "none", use_cache=False)
+    once = CountingEngine.calls
+    run_analysis(str(pgn_path), "Alice", "en", "none", use_cache=False)
+
+    assert CountingEngine.calls == 2 * once
+
+
+def test_analyze_no_cache_flag(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+    seen = {}
+
+    def fake_run_analysis(*args, **kwargs):
+        seen.update(kwargs)
+        raise ValueError("stop here")
+
+    monkeypatch.setattr("chesswhisper.cli.run_analysis", fake_run_analysis)
+
+    CliRunner().invoke(cli, ["analyze", str(pgn_path), "--no-cache", "-o", str(tmp_path / "r.md")])
+
+    assert seen["use_cache"] is False

@@ -65,3 +65,12 @@ def _isolate_job_registry():
     module = sys.modules.get("chesswhisper.web.jobs")
     if module is not None:
         module._jobs.clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(tmp_path_factory, monkeypatch):
+    """Keep every test away from the real per-user data directory, where
+    the evaluation cache, keys and database would otherwise leak between
+    tests and into the developer's own install.
+    """
+    monkeypatch.setenv("CHESSWHISPER_DATA_DIR", str(tmp_path_factory.mktemp("data")))
