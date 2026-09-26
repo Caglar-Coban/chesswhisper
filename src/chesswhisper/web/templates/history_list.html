@@ -57,7 +57,7 @@
       <tbody>
         {% for r in records %}
         <tr>
-          <td class="nowrap">{{ r.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+          <td class="nowrap"><time class="local-time" datetime="{{ r.created_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ r.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</time></td>
           <td>{{ r.player_name }}</td>
           <td class="num">{{ "%.1f"|format(r.overall_accuracy) }}%</td>
           <td class="num">{{ "%.1f"|format(r.overall_acpl) }}</td>
@@ -76,6 +76,16 @@
       </tbody>
     </table>
   </div>
+  <script>
+    // Stored times are UTC; show them in the viewer's own time zone.
+    document.querySelectorAll("time.local-time").forEach(function (el) {
+      var d = new Date(el.getAttribute("datetime"));
+      if (isNaN(d)) return;
+      function pad(n) { return (n < 10 ? "0" : "") + n; }
+      el.textContent = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+        " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    });
+  </script>
   {% else %}
   <p class="trend-empty">Henüz kaydedilmiş bir analiz yok. <a href="/">İlk analizini başlat</a>.</p>
   {% endif %}

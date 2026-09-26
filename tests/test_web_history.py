@@ -246,3 +246,18 @@ def test_history_detail_escapes_opponent_names_in_captions(client):
 
     assert "<script>alert(1)</script>" not in response.text
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+
+
+def test_history_marks_record_times_as_utc_for_local_conversion(client):
+    db = next(get_db())
+    user = db.query(User).filter_by(username="alice").one()
+    db.add(AnalysisRecord(
+        user_id=user.id, player_name="Alice", lang="en", llm_used="none", games_count=1,
+        overall_acpl=10.0, overall_accuracy=90.0, report_markdown="# r",
+        created_at=datetime(2026, 9, 26, 19, 5, 0),
+    ))
+    db.commit()
+
+    page = client.get("/history").text
+
+    assert '<time class="local-time" datetime="2026-09-26T19:05:00Z">2026-09-26 19:05 UTC</time>' in page
