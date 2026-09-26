@@ -58,6 +58,21 @@ def _fetch_to_tempfile(platform, username, max_games):
     return temp_path, fetched.player, fetched.warnings
 
 
+def _spelled_player(games, player: str) -> str:
+    """*player* as the PGN headers spell it, so "alice" finds a game played by "Alice".
+
+    An exact match wins; otherwise the first case-insensitive match; otherwise
+    the name is returned trimmed and unchanged, and the caller reports that no
+    game features it.
+    """
+    player = player.strip()
+    names = [lg.headers.get(side, "") for lg in games for side in ("White", "Black")]
+    if player in names:
+        return player
+    wanted = player.casefold()
+    return next((name for name in names if name.casefold() == wanted), player)
+
+
 def run_analysis(
     pgn_path,
     player,
@@ -97,6 +112,8 @@ def run_analysis(
 
     if player is None:
         player = detect_player(load_result.games)
+    else:
+        player = _spelled_player(load_result.games, player)
 
     eco_table = load_eco_table()
 
@@ -142,6 +159,7 @@ def run_analysis(
 
 
 @click.group()
+@click.version_option(package_name="chesswhisper")
 def cli():
     load_dotenv(find_dotenv(usecwd=True))
 
@@ -159,8 +177,10 @@ def cli():
 @click.option("--lang", type=click.Choice(["tr", "en"]), default="tr")
 @click.option("--llm", "llm_name", type=click.Choice(["claude", "openai", "none"]), default="none")
 @click.option("-o", "--output", "output_path", default="report.md", type=click.Path())
-@click.option("--movetime", default=300, help="Engine think time per position, in milliseconds.")
-@click.option("--depth", default=None, type=int, help="Fixed search depth (overrides --movetime).")
+@click.option(
+    "--movetime", default=300, type=click.IntRange(min=1), help="Engine think time per position, in milliseconds."
+)
+@click.option("--depth", default=None, type=click.IntRange(min=1), help="Fixed search depth (overrides --movetime).")
 @click.option("--engine-path", default=None, help="Path to an existing Stockfish binary (skips auto-download).")
 def analyze(
     pgn_path, lichess_user, chesscom_user, max_games, player, lang, llm_name, output_path, movetime, depth, engine_path
@@ -264,12 +284,20 @@ def create_admin(username, password):
     try:
         from chesswhisper.web.db import get_db, init_db
         from chesswhisper.web.models import User
-        from chesswhisper.web.security import hash_password
+        from chesswhisper.web.security import MIN_PASSWORD_LENGTH, hash_password
     except ImportError:
         click.echo(
             'Error: the web UI requires extra dependencies. Install them with: pip install -e ".[web]"',
             err=True,
         )
+        sys.exit(1)
+
+    username = username.strip()
+    if not username or any(ch.isspace() for ch in username):
+        click.echo("Error: the username must not be blank or contain spaces.", err=True)
+        sys.exit(1)
+    if len(password) < MIN_PASSWORD_LENGTH:
+        click.echo(f"Error: the password must be at least {MIN_PASSWORD_LENGTH} characters.", err=True)
         sys.exit(1)
 
     init_db()

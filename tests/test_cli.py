@@ -558,3 +558,56 @@ def test_serve_migrates_the_database_before_starting_the_server(mocker):
 
     assert result.exit_code == 0, result.output
     assert calls == ["init_db", "uvicorn.run"]
+
+
+# --- input validation and small conveniences ---
+
+
+def test_run_analysis_matches_the_player_name_case_insensitively(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    aggregate, _, warnings = run_analysis(str(pgn_path), " alice ", "en", "none")
+
+    assert aggregate.player == "Alice"
+    assert len(aggregate.games) == 1
+    assert warnings == []
+
+
+def test_create_admin_rejects_a_short_password(tmp_path, monkeypatch):
+    from chesswhisper.web import db as web_db
+    monkeypatch.setattr(web_db, "_default_db_path", lambda: tmp_path / "short_pw.db")
+
+    result = CliRunner().invoke(cli, ["create-admin", "--username", "root", "--password", "short"])
+
+    assert result.exit_code != 0
+    assert "8" in result.output
+
+
+def test_create_admin_rejects_a_blank_username(tmp_path, monkeypatch):
+    from chesswhisper.web import db as web_db
+    monkeypatch.setattr(web_db, "_default_db_path", lambda: tmp_path / "blank_user.db")
+
+    result = CliRunner().invoke(cli, ["create-admin", "--username", "  ", "--password", "correct-horse"])
+
+    assert result.exit_code != 0
+
+
+@pytest.mark.parametrize("option", [["--movetime", "0"], ["--depth", "0"], ["--movetime", "-5"]])
+def test_analyze_rejects_non_positive_engine_limits(tmp_path, option):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+
+    result = CliRunner().invoke(cli, ["analyze", str(pgn_path), *option])
+
+    assert result.exit_code == 2  # click usage error
+
+
+def test_version_option_prints_the_package_version():
+    from importlib.metadata import version
+
+    result = CliRunner().invoke(cli, ["--version"])
+
+    assert result.exit_code == 0
+    assert version("chesswhisper") in result.output
