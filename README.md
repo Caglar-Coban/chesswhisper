@@ -123,6 +123,10 @@ internet (no HTTPS, no rate limiting, no email verification) — the
 threat model is "a few people who already have access to this machine,"
 not the open internet.
 
+To keep it running as a service (systemd or Task Scheduler), reach it
+from other machines, and back it up or upgrade it, see
+[`docs/deployment.md`](docs/deployment.md).
+
 ## Development
 
 ```
