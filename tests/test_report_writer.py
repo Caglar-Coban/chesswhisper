@@ -120,3 +120,30 @@ def test_opening_table_names_its_columns():
     md = render_markdown(_sample_report(), commentary="", lang="en")
 
     assert "| ECO | Opening | Games | W/L/D/? |" in md
+
+
+def test_report_includes_breakdowns_and_patterns_when_present():
+    from chesswhisper.stats_engine import PatternBucket, SegmentStats
+
+    report = _sample_report()
+    report.by_time_class = [SegmentStats("blitz", games=1, wins=1, acpl=42.5, accuracy=87.3)]
+    report.by_opponent_strength = [SegmentStats("stronger", games=1, wins=1, acpl=42.5, accuracy=87.3)]
+    report.move_ranges = [PatternBucket("1-10", moves=10, errors=1), PatternBucket("11-20", moves=0)]
+    report.eval_states = [PatternBucket("winning", moves=4, errors=1), PatternBucket("equal", moves=6)]
+
+    md = render_markdown(report, commentary="", lang="en")
+
+    assert "## Performance by Time Control" in md
+    assert "| Blitz | 1 | 1/0/0/0 | 42.5 | 87.3% |" in md
+    assert "Stronger (+100 Elo or more)" in md
+    assert "| 1-10 | 10 | 1 | 10% |" in md
+    assert "| 11-20 | 0 | 0 | - |" in md
+    assert "| Ahead (+2 or more) | 4 | 1 | 25% |" in md
+
+
+def test_report_leaves_out_empty_breakdowns():
+    md = render_markdown(_sample_report(), commentary="", lang="en")
+
+    assert "Performance by Time Control" not in md
+    assert "Error Patterns" not in md
+    assert "Key Findings" not in md

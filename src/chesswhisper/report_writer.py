@@ -1,4 +1,5 @@
 from chesswhisper.i18n import t
+from chesswhisper.insights import key_findings, render_finding
 from chesswhisper.stats_engine import PHASES
 
 _RESULT_KEY = {
@@ -38,6 +39,32 @@ def _time_management_lines(tm, lang: str) -> list[str]:
     return lines
 
 
+def _segment_table(segments, label_column: str, label_prefix: str, lang: str) -> list[str]:
+    lines = [
+        f"| {t(label_column, lang)} | {t('opening_games', lang)} | {t('opening_record', lang)} "
+        f"| {t('acpl_column', lang)} | {t('accuracy', lang)} |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for seg in segments:
+        unknown = seg.games - seg.wins - seg.losses - seg.draws
+        lines.append(
+            f"| {t(label_prefix + seg.label, lang)} | {seg.games} | {seg.wins}/{seg.losses}/{seg.draws}/{unknown} "
+            f"| {seg.acpl:.1f} | {seg.accuracy:.1f}% |"
+        )
+    return lines
+
+
+def _pattern_table(buckets, label_column: str, label_for, lang: str) -> list[str]:
+    lines = [
+        f"| {t(label_column, lang)} | {t('moves_column', lang)} | {t('errors_column', lang)} | {t('error_rate_column', lang)} |",
+        "| --- | --- | --- | --- |",
+    ]
+    for bucket in buckets:
+        rate = f"{bucket.error_rate:.0%}" if bucket.error_rate is not None else "-"
+        lines.append(f"| {label_for(bucket.label)} | {bucket.moves} | {bucket.errors} | {rate} |")
+    return lines
+
+
 def render_markdown(report, commentary: str, lang: str) -> str:
     parts = [f"# {t('report_title', lang)}", ""]
     parts.append(f"**{t('player', lang)}:** {report.player}")
@@ -50,6 +77,12 @@ def render_markdown(report, commentary: str, lang: str) -> str:
     parts.append(_errors_table(report.error_totals, lang))
     parts.append("")
 
+    findings = key_findings(report)
+    if findings:
+        parts.append(f"## {t('key_findings', lang)}")
+        parts.extend(f"- {render_finding(finding, lang)}" for finding in findings)
+        parts.append("")
+
     parts.append(f"## {t('openings', lang)}")
     parts.append(f"| {t('eco_column', lang)} | {t('opening_column', lang)} | {t('opening_games', lang)} | {t('opening_record', lang)} |")
     parts.append("| --- | --- | --- | --- |")
@@ -58,6 +91,27 @@ def render_markdown(report, commentary: str, lang: str) -> str:
             f"| {op.eco} | {op.name} | {op.games} | {op.wins}/{op.losses}/{op.draws}/{op.unknown} |"
         )
     parts.append("")
+
+    if report.by_time_class:
+        parts.append(f"## {t('by_time_class', lang)}")
+        parts.extend(_segment_table(report.by_time_class, "time_class_column", "tc_", lang))
+        parts.append("")
+
+    if report.by_opponent_strength:
+        parts.append(f"## {t('by_opponent_strength', lang)}")
+        parts.extend(_segment_table(report.by_opponent_strength, "opponent_column", "strength_", lang))
+        parts.append("")
+
+    if any(bucket.moves for bucket in report.move_ranges):
+        parts.append(f"## {t('error_patterns', lang)}")
+        parts.append(t("error_patterns_note", lang))
+        parts.append("")
+        parts.extend(_pattern_table(report.move_ranges, "move_range_column", lambda label: label, lang))
+        parts.append("")
+        parts.extend(
+            _pattern_table(report.eval_states, "eval_state_column", lambda label: t(f"state_label_{label}", lang), lang)
+        )
+        parts.append("")
 
     parts.append(f"## {t('time_management', lang)}")
     parts.extend(_time_management_lines(report.time_management, lang))

@@ -153,6 +153,52 @@ def _time_buckets_for_color(evals, color) -> _TimeBuckets:
     return buckets
 
 
+@dataclass(frozen=True)
+class MoveRecord:
+    """One of the player's moves, as the error-pattern breakdowns need it."""
+
+    ply: int
+    move_number: int
+    eval_before: int  # clamped, from the player's side
+    cp_loss: int
+    classification: str
+
+
+TIME_CLASSES = ("bullet", "blitz", "rapid", "classical", "correspondence", "unknown")
+
+
+def time_class(time_control: str | None) -> str:
+    """Lichess's speed category for a PGN TimeControl header.
+
+    The estimated duration is the base time plus 40 increments: under 3
+    minutes is bullet, under 8 blitz, under 25 rapid, else classical. "-" and
+    chess.com's daily "1/86400" form are correspondence.
+    """
+    if not time_control:
+        return "unknown"
+    if time_control == "-" or "/" in time_control:
+        return "correspondence"
+    base, _, increment = time_control.partition("+")
+    try:
+        estimated = int(base) + 40 * int(increment or 0)
+    except ValueError:
+        return "unknown"
+    if estimated < 180:
+        return "bullet"
+    if estimated < 480:
+        return "blitz"
+    if estimated < 1500:
+        return "rapid"
+    return "classical"
+
+
+def _elo(value: str | None) -> int | None:
+    try:
+        return int(value) if value else None
+    except ValueError:
+        return None
+
+
 @dataclass
 class GameReport:
     game_index: int
@@ -165,6 +211,10 @@ class GameReport:
     time_management: TimeManagementStats
     time_buckets: _TimeBuckets = field(default_factory=_TimeBuckets)
     top_mistakes: list = field(default_factory=list)
+    time_class: str = "unknown"
+    your_elo: int | None = None
+    opponent_elo: int | None = None
+    moves: list[MoveRecord] = field(default_factory=list)
 
 
 @dataclass
@@ -179,6 +229,41 @@ class OpeningStats:
 
 
 @dataclass
+class SegmentStats:
+    """Results and move quality over a subset of the games."""
+
+    label: str
+    games: int = 0
+    wins: int = 0
+    losses: int = 0
+    draws: int = 0
+    acpl: float = 0.0
+    accuracy: float = 100.0
+
+
+@dataclass
+class PatternBucket:
+    """How often the player's moves in one bucket were mistakes or blunders."""
+
+    label: str
+    moves: int = 0
+    errors: int = 0
+
+    @property
+    def error_rate(self) -> float | None:
+        return self.errors / self.moves if self.moves else None
+
+
+MOVE_RANGES = (("1-10", 1, 10), ("11-20", 11, 20), ("21-30", 21, 30), ("31-40", 31, 40), ("41+", 41, None))
+EVAL_STATES = ("winning", "equal", "losing")
+# Two pawns either way: past that the player is clearly better or worse.
+DECISIVE_EVAL_CP = 200
+OPPONENT_STRENGTHS = ("stronger", "similar", "weaker")
+SIMILAR_RATING_GAP = 100
+_ERROR_CLASSES = ("mistake", "blunder")
+
+
+@dataclass
 class AggregateReport:
     player: str
     games: list
@@ -187,6 +272,10 @@ class AggregateReport:
     error_totals: dict
     openings: list
     time_management: TimeManagementStats
+    by_time_class: list[SegmentStats] = field(default_factory=list)
+    by_opponent_strength: list[SegmentStats] = field(default_factory=list)
+    move_ranges: list[PatternBucket] = field(default_factory=list)
+    eval_states: list[PatternBucket] = field(default_factory=list)
 
 
 def detect_player(loaded_games) -> str:
@@ -211,6 +300,26 @@ def detect_player(loaded_games) -> str:
     if top_count < 1:
         raise ValueError("No repeated player name found; pass --player explicitly")
     return top_name
+
+
+def _move_number(ev) -> int:
+    if ev.fen_before:
+        return chess.Board(ev.fen_before).fullmove_number
+    return (ev.ply + 1) // 2
+
+
+def _move_records(evals, color) -> list[MoveRecord]:
+    return [
+        MoveRecord(
+            ply=ev.ply,
+            move_number=_move_number(ev),
+            eval_before=_clamp_eval(ev.cp_before),
+            cp_loss=cp_loss(ev),
+            classification=classify_move(cp_loss(ev)),
+        )
+        for ev in evals
+        if ev.color == color
+    ]
 
 
 def _player_stats_for_color(evals, color, ply_to_phase) -> tuple[PlayerGameStats, list]:
@@ -282,6 +391,7 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
         opening_eco, opening_name = opening.eco, opening.name
 
     time_buckets = _time_buckets_for_color(evals, your_bool_color)
+    white_elo, black_elo = _elo(loaded.headers.get("WhiteElo")), _elo(loaded.headers.get("BlackElo"))
 
     return GameReport(
         game_index=loaded.index,
@@ -294,7 +404,82 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
         time_management=time_buckets.to_stats(),
         time_buckets=time_buckets,
         top_mistakes=top_mistakes,
+        time_class=time_class(loaded.headers.get("TimeControl")),
+        your_elo=white_elo if your_bool_color else black_elo,
+        opponent_elo=black_elo if your_bool_color else white_elo,
+        moves=_move_records(evals, your_bool_color),
     )
+
+
+def _segment(label: str, reports: list) -> SegmentStats:
+    total_moves = sum(r.your_stats.move_count for r in reports)
+    return SegmentStats(
+        label=label,
+        games=len(reports),
+        wins=sum(r.result == "win" for r in reports),
+        losses=sum(r.result == "loss" for r in reports),
+        draws=sum(r.result == "draw" for r in reports),
+        acpl=sum(r.your_stats.acpl * r.your_stats.move_count for r in reports) / total_moves if total_moves else 0.0,
+        accuracy=(
+            sum(r.your_stats.accuracy * r.your_stats.move_count for r in reports) / total_moves
+            if total_moves else 100.0
+        ),
+    )
+
+
+def _opponent_strength(report) -> str | None:
+    if report.your_elo is None or report.opponent_elo is None:
+        return None
+    gap = report.opponent_elo - report.your_elo
+    if gap >= SIMILAR_RATING_GAP:
+        return "stronger"
+    if gap <= -SIMILAR_RATING_GAP:
+        return "weaker"
+    return "similar"
+
+
+def _eval_state(eval_before: int) -> str:
+    if eval_before >= DECISIVE_EVAL_CP:
+        return "winning"
+    if eval_before <= -DECISIVE_EVAL_CP:
+        return "losing"
+    return "equal"
+
+
+def _move_range(move_number: int) -> str:
+    for label, low, high in MOVE_RANGES:
+        if move_number >= low and (high is None or move_number <= high):
+            return label
+    return MOVE_RANGES[0][0]
+
+
+def _pattern_buckets(labels, moves, bucket_of) -> list[PatternBucket]:
+    buckets = {label: PatternBucket(label=label) for label in labels}
+    for move in moves:
+        bucket = buckets[bucket_of(move)]
+        bucket.moves += 1
+        if move.classification in _ERROR_CLASSES:
+            bucket.errors += 1
+    return list(buckets.values())
+
+
+def _breakdowns(game_reports: list) -> dict:
+    by_time = [
+        _segment(label, [r for r in game_reports if r.time_class == label])
+        for label in TIME_CLASSES
+    ]
+    by_strength = [
+        _segment(label, [r for r in game_reports if _opponent_strength(r) == label])
+        for label in OPPONENT_STRENGTHS
+    ]
+    moves = [move for r in game_reports for move in r.moves]
+    return {
+        "by_time_class": [seg for seg in by_time if seg.games],
+        "by_opponent_strength": [seg for seg in by_strength if seg.games],
+        "move_ranges": _pattern_buckets([label for label, _, _ in MOVE_RANGES], moves,
+                                        lambda m: _move_range(m.move_number)),
+        "eval_states": _pattern_buckets(EVAL_STATES, moves, lambda m: _eval_state(m.eval_before)),
+    }
 
 
 def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
@@ -339,6 +524,7 @@ def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
         error_totals=error_totals,
         openings=sorted(opening_map.values(), key=lambda o: o.games, reverse=True),
         time_management=combined_time_buckets.to_stats(),
+        **_breakdowns(game_reports),
     )
 
 

@@ -1,3 +1,4 @@
+from chesswhisper.insights import key_findings, render_finding
 from chesswhisper.stats_engine import cp_loss
 
 _LANG_INSTRUCTION = {
@@ -19,6 +20,31 @@ def build_prompt(report, lang: str) -> str:
     lines.append("Opening repertoire:")
     for op in report.openings:
         lines.append(f"  {op.name} ({op.eco}): {op.games} games, {op.wins}W/{op.losses}L/{op.draws}D")
+
+    if report.by_time_class:
+        lines.append("By time control:")
+        for seg in report.by_time_class:
+            lines.append(
+                f"  {seg.label}: {seg.games} games, {seg.wins}W/{seg.losses}L/{seg.draws}D, "
+                f"ACPL {seg.acpl:.1f}, accuracy {seg.accuracy:.1f}%"
+            )
+    if report.by_opponent_strength:
+        lines.append("By opponent rating (relative to the player):")
+        for seg in report.by_opponent_strength:
+            lines.append(f"  {seg.label}: {seg.games} games, {seg.wins}W/{seg.losses}L/{seg.draws}D")
+    if any(bucket.moves for bucket in report.move_ranges):
+        lines.append("Share of moves that were mistakes or blunders, by move number:")
+        for bucket in report.move_ranges:
+            if bucket.moves:
+                lines.append(f"  moves {bucket.label}: {bucket.errors}/{bucket.moves}")
+        lines.append("Same, by evaluation before the move (ahead/level/behind by 2 pawns):")
+        for bucket in report.eval_states:
+            if bucket.moves:
+                lines.append(f"  {bucket.label}: {bucket.errors}/{bucket.moves}")
+    findings = key_findings(report)
+    if findings:
+        lines.append("Automatically detected patterns:")
+        lines.extend(f"  - {render_finding(finding, 'en')}" for finding in findings)
 
     lines.append("Most critical mistakes across games:")
     for game in report.games:
