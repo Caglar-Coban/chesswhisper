@@ -1,9 +1,10 @@
 """In-memory registry of the web UI's background analysis jobs.
 
 Job state does not survive a server restart -- this mirrors the rest of
-the app's local, single-process design (no public-internet hardening). Every function here takes the module-level
-lock, so callers never need to know the registry is shared across the
-request thread and whichever thread is running the analysis.
+the app's local, single-process design (no public-internet hardening).
+Every function here takes the module-level lock, so callers never need to
+know the registry is shared across the request thread and whichever thread
+is running the analysis.
 """
 
 from __future__ import annotations
@@ -35,7 +36,8 @@ class Job:
 
 
 _jobs: dict[str, Job] = {}
-_lock = threading.Lock()
+# Re-entrant so create_job_unless_running can build on the other helpers.
+_lock = threading.RLock()
 
 
 def _prune_expired(now: float) -> None:
@@ -60,6 +62,19 @@ def running_job_for(user_id: int) -> Job | None:
     """The user's analysis still in progress, if any (each user runs one at a time)."""
     with _lock:
         return next((job for job in _jobs.values() if job.user_id == user_id and job.status == "running"), None)
+
+
+def create_job_unless_running(user_id: int) -> tuple[Job, bool]:
+    """(the user's running job, False) if there is one, else (a new job, True).
+
+    Checking and creating under one lock keeps two quick submissions from
+    both starting an analysis.
+    """
+    with _lock:
+        running = running_job_for(user_id)
+        if running is not None:
+            return running, False
+        return create_job(user_id), True
 
 
 def get_job(job_id: str) -> Job | None:

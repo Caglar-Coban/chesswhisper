@@ -106,3 +106,17 @@ def test_create_job_does_not_prune_entries_within_the_ttl(monkeypatch):
     jobs.create_job(user_id=2)
 
     assert jobs.get_job(job.id) is job
+
+
+def test_create_job_unless_running_starts_one_job_per_user():
+    first, created = jobs.create_job_unless_running(41)
+    again, created_again = jobs.create_job_unless_running(41)
+    other, created_other = jobs.create_job_unless_running(42)
+
+    assert created and not created_again and created_other
+    assert again.id == first.id
+    assert other.id != first.id
+
+    jobs.mark_done(first.id, record_id=1, warnings=[])
+    after, created_after = jobs.create_job_unless_running(41)
+    assert created_after and after.id != first.id

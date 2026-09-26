@@ -531,7 +531,11 @@ async def analyze(
         tmp.write(contents)
         tmp_path = tmp.name
 
-    job = jobs.create_job(current_user.id)
+    job, created = jobs.create_job_unless_running(current_user.id)
+    if not created:
+        # Another submission started an analysis while this one was fetching.
+        os.remove(tmp_path)
+        return RedirectResponse(f"/analyze/progress/{job.id}", status_code=303)
     user_id = current_user.id
     _start_background(
         lambda: _run_analysis_job(
