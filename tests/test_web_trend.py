@@ -64,6 +64,7 @@ def test_points_are_only_the_selected_players_in_chronological_order():
         "id": 1,
         "date": "2026-09-02",
         "label": "02.09.2026",
+        "iso": "2026-09-02T12:00:00Z",
         "accuracy": 70.0,
         "acpl": 60.0,
         "games": 5,

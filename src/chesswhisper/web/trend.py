@@ -110,6 +110,8 @@ def build_trend(records: Sequence[TrendRecord], requested_player: str | None) ->
             "id": r.id,
             "date": r.created_at.strftime("%Y-%m-%d"),
             "label": r.created_at.strftime("%d.%m.%Y"),
+            # UTC, for the page script to relabel in the viewer's time zone.
+            "iso": r.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "accuracy": r.overall_accuracy,
             "acpl": r.overall_acpl,
             "games": r.games_count,

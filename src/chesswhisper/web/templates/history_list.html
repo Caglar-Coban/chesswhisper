@@ -103,6 +103,13 @@
   if (!dataEl) return;
   var data = JSON.parse(dataEl.textContent);
   var points = data.points;
+  points.forEach(function (p) {
+    var d = p.iso ? new Date(p.iso) : null;
+    if (d && !isNaN(d)) {
+      var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+      p.label = pad(d.getDate()) + "." + pad(d.getMonth() + 1) + "." + d.getFullYear();
+    }
+  });
   var wrap = document.getElementById("trend-charts");
   var tooltip = document.getElementById("trend-tooltip");
   var detailPrefix = wrap.getAttribute("data-detail-prefix");
