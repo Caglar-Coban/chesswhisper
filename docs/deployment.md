@@ -52,10 +52,13 @@ It holds:
   every saved API key unreadable**; users would have to enter them again.
 - `sf_*/`: the downloaded Stockfish binary (safe to delete; it is re-downloaded).
 
-The directory belongs to the OS user the server runs as. Run every
-command (`create-admin`, `serve`) as that same user, or they will each
-see their own empty database. With the setup above that means
-`sudo -u chesswhisper ...`.
+Set `CHESSWHISPER_DATA_DIR` to keep all of this somewhere else, for example
+`/var/lib/chesswhisper/data` or a mounted volume.
+
+Without that variable the directory belongs to the OS user the server runs
+as. Run every command (`create-admin`, `serve`) as that same user, with the
+same `CHESSWHISPER_DATA_DIR` if you set one, or they will each see their own
+empty database. With the setup above that means `sudo -u chesswhisper ...`.
 
 ## First start
 
@@ -85,6 +88,8 @@ User=chesswhisper
 Group=chesswhisper
 WorkingDirectory=/var/lib/chesswhisper
 ExecStart=/var/lib/chesswhisper/venv/bin/chesswhisper serve --host 127.0.0.1 --port 8000
+# Optional: pin the data directory instead of relying on the user's home.
+# Environment=CHESSWHISPER_DATA_DIR=/var/lib/chesswhisper/data
 # Uncomment to use a system Stockfish instead of the auto-downloaded one:
 # Environment=CHESSWHISPER_STOCKFISH_PATH=/usr/games/stockfish
 Restart=on-failure
@@ -179,8 +184,9 @@ step 1, since a migrated database isn't guaranteed to work with older code.
 - **"the web UI requires extra dependencies"**: the `web` extra isn't
   installed in the virtualenv the service uses. Reinstall with `"[web]"`.
 - **Admin login fails right after `create-admin`**: the command ran as a
-  different OS user than the service, so it wrote to another data
-  directory. Re-run it with `sudo -u chesswhisper`.
+  different OS user (or with a different `CHESSWHISPER_DATA_DIR`) than the
+  service, so it wrote to another data directory. Re-run it with
+  `sudo -u chesswhisper` and the same environment.
 - **Analyses fail with a Stockfish download error**: the server has no
   outbound access to GitHub. Install Stockfish from your package manager
   and set `CHESSWHISPER_STOCKFISH_PATH`.
