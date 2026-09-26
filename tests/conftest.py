@@ -74,3 +74,13 @@ def _isolated_data_dir(tmp_path_factory, monkeypatch):
     tests and into the developer's own install.
     """
     monkeypatch.setenv("CHESSWHISPER_DATA_DIR", str(tmp_path_factory.mktemp("data")))
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limit():
+    """The login rate limiter counts attempts per client address, and every
+    TestClient comes from the same one."""
+    module = sys.modules.get("chesswhisper.web.app")
+    if module is not None:
+        module.login_limiter.reset()
+    yield

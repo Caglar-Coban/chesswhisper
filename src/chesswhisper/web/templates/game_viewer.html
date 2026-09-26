@@ -1,37 +1,37 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — Oyun {{ game_number }}{% endblock %}
+{% block title %}chesswhisper — {{ t("title.game", n=game_number) }}{% endblock %}
 {% block content %}
 <div class="card">
   <div class="viewer-head">
     <h2>{{ timeline.white }} – {{ timeline.black }}</h2>
     <p>
-      Oyun {{ game_number }} / {{ games_total }} · {{ timeline.opening }} ({{ timeline.eco }})
-      · {{ {"win": "Kazandın", "loss": "Kaybettin", "draw": "Berabere"}.get(timeline.result, "Sonuç bilinmiyor") }}
+      {{ t("viewer.game_of", n=game_number, total=games_total) }} · {{ timeline.opening }} ({{ timeline.eco }})
+      · {{ {"win": t("viewer.you_won"), "loss": t("viewer.you_lost"), "draw": t("result.draw")}.get(timeline.result, t("result.unknown")) }}
     </p>
   </div>
   <div class="viewer">
     <div>
-      <div class="viewer-board" id="board" role="img" aria-label="Satranç tahtası"></div>
+      <div class="viewer-board" id="board" role="img" aria-label="{{ t('viewer.board') }}"></div>
       <div class="viewer-controls">
-        <button type="button" class="secondary-button" id="btn-first" aria-label="Başa">⏮</button>
-        <button type="button" class="secondary-button" id="btn-prev" aria-label="Önceki hamle">◀</button>
-        <button type="button" class="secondary-button" id="btn-next" aria-label="Sonraki hamle">▶</button>
-        <button type="button" class="secondary-button" id="btn-last" aria-label="Sona">⏭</button>
+        <button type="button" class="secondary-button" id="btn-first" aria-label="{{ t('viewer.first') }}">⏮</button>
+        <button type="button" class="secondary-button" id="btn-prev" aria-label="{{ t('viewer.prev') }}">◀</button>
+        <button type="button" class="secondary-button" id="btn-next" aria-label="{{ t('viewer.next') }}">▶</button>
+        <button type="button" class="secondary-button" id="btn-last" aria-label="{{ t('viewer.last') }}">⏭</button>
         <span class="spacer"></span>
-        <button type="button" class="secondary-button" id="btn-flip" aria-label="Tahtayı çevir">⇅</button>
+        <button type="button" class="secondary-button" id="btn-flip" aria-label="{{ t('viewer.flip') }}">⇅</button>
       </div>
       <div class="viewer-info" id="info" aria-live="polite"></div>
     </div>
     <div>
       <div class="eval-graph" id="graph"></div>
-      <p class="hint">Değerlendirme beyazın açısından. Grafiğe ya da bir hamleye tıkla; ← → tuşlarıyla da gezebilirsin.</p>
+      <p class="hint">{{ t("viewer.hint") }}</p>
       <div class="move-list" id="moves"></div>
     </div>
   </div>
   <div class="viewer-nav">
-    <span>{% if game_number > 1 %}<a href="{{ url_prefix }}/games/{{ game_number - 1 }}">&larr; Önceki oyun</a>{% endif %}</span>
-    <a href="{{ url_prefix }}">Rapora dön</a>
-    <span>{% if game_number < games_total %}<a href="{{ url_prefix }}/games/{{ game_number + 1 }}">Sonraki oyun &rarr;</a>{% endif %}</span>
+    <span>{% if game_number > 1 %}<a href="{{ url_prefix }}/games/{{ game_number - 1 }}">{{ t("viewer.prev_game") }}</a>{% endif %}</span>
+    <a href="{{ url_prefix }}">{{ t("viewer.back") }}</a>
+    <span>{% if game_number < games_total %}<a href="{{ url_prefix }}/games/{{ game_number + 1 }}">{{ t("viewer.next_game") }}</a>{% endif %}</span>
   </div>
 </div>
 <script>
@@ -40,7 +40,13 @@
   var PIECES = {{ pieces | tojson }};
   var COLORS = {{ board_colors | tojson }};
   var LABELS = {
-    blunder: "Gaf", mistake: "Hata", inaccuracy: "Belirsizlik", fine: ""
+    blunder: {{ t("class.blunder") | tojson }}, mistake: {{ t("class.mistake") | tojson }},
+    inaccuracy: {{ t("class.inaccuracy") | tojson }}, fine: ""
+  };
+  var TEXT = {
+    start: {{ t("viewer.start_position") | tojson }},
+    evaluation: {{ t("viewer.eval") | tojson }},
+    better: {{ t("viewer.better") | tojson }}
   };
   var MARKS = { blunder: "??", mistake: "?", inaccuracy: "?!" };
   var MATE = 100000, MATE_THRESHOLD = 90000, CLAMP = 1000;
@@ -109,7 +115,7 @@
     var info = document.getElementById("info");
     info.textContent = "";
     if (ply === 0) {
-      info.textContent = "Başlangıç pozisyonu";
+      info.textContent = TEXT.start;
       return;
     }
     var m = moves[ply - 1];
@@ -120,10 +126,10 @@
     var evalSpan = document.createElement("span");
     evalSpan.className = "eval";
     evalSpan.textContent = formatEval(m.eval);
-    evalLine.appendChild(document.createTextNode("Değerlendirme: "));
+    evalLine.appendChild(document.createTextNode(TEXT.evaluation + " "));
     evalLine.appendChild(evalSpan);
     if (m.best_san) {
-      evalLine.appendChild(document.createTextNode(" · Daha iyisi: " + m.best_san));
+      evalLine.appendChild(document.createTextNode(" · " + TEXT.better + " " + m.best_san));
     }
     info.appendChild(line);
     info.appendChild(evalLine);

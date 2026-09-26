@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — Hata{% endblock %}
+{% block title %}chesswhisper — {{ t("title.error") }}{% endblock %}
 {% block content %}
 <div class="card">
   <div class="banner error">
-    <strong>Hata:</strong> {{ message }}
+    <strong>{{ t("error.label") }}</strong> {{ message }}
   </div>
-  <a class="back-link" href="/">&larr; Geri dön</a>
+  <a class="back-link" href="/">&larr; {{ t("error.back") }}</a>
 </div>
 {% endblock %}

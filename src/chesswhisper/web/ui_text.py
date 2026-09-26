@@ -1,0 +1,249 @@
+"""Interface text for the web UI in Turkish and English.
+
+Report content has its own translations in chesswhisper.i18n; these are the
+labels, buttons and messages around it. The language is a per-session choice
+(Turkish by default) switched from the header.
+"""
+
+from __future__ import annotations
+
+from starlette.requests import Request
+
+UI_LANGS = ("tr", "en")
+DEFAULT_UI_LANG = "tr"
+_SESSION_KEY = "ui_lang"
+
+_STRINGS: dict[str, dict[str, str]] = {
+    # Layout
+    "tagline": {"tr": "Stockfish + LLM ile satranç analiz ve koçluk aracı",
+                "en": "Chess analysis and coaching with Stockfish + LLMs"},
+    "nav.analyze": {"tr": "Analiz", "en": "Analyze"},
+    "nav.history": {"tr": "Geçmiş", "en": "History"},
+    "nav.settings": {"tr": "Ayarlar", "en": "Settings"},
+    "nav.admin": {"tr": "Admin", "en": "Admin"},
+    "nav.logout": {"tr": "Çıkış ({name})", "en": "Log out ({name})"},
+    "nav.switch_language": {"tr": "English", "en": "Türkçe"},
+    "title.analyze": {"tr": "Analiz", "en": "Analyze"},
+    "title.login": {"tr": "Giriş", "en": "Log in"},
+    "title.register": {"tr": "Kayıt Ol", "en": "Sign up"},
+    "title.settings": {"tr": "Ayarlar", "en": "Settings"},
+    "title.history": {"tr": "Geçmiş", "en": "History"},
+    "title.report": {"tr": "Rapor", "en": "Report"},
+    "title.progress": {"tr": "Analiz sürüyor", "en": "Analysis running"},
+    "title.game": {"tr": "Oyun {n}", "en": "Game {n}"},
+    "title.error": {"tr": "Hata", "en": "Error"},
+    "title.admin": {"tr": "Admin", "en": "Admin"},
+
+    # Login / register
+    "auth.username": {"tr": "Kullanıcı adı", "en": "Username"},
+    "auth.password": {"tr": "Parola", "en": "Password"},
+    "auth.login_button": {"tr": "Giriş Yap", "en": "Log in"},
+    "auth.no_account": {"tr": "Hesabın yok mu?", "en": "No account yet?"},
+    "auth.sign_up_link": {"tr": "Kayıt ol", "en": "Sign up"},
+    "auth.password_hint": {"tr": "En az 8 karakter.", "en": "At least 8 characters."},
+    "auth.register_button": {"tr": "Kayıt Ol", "en": "Sign up"},
+    "auth.have_account": {"tr": "Zaten hesabın var mı?", "en": "Already have an account?"},
+    "auth.login_link": {"tr": "Giriş yap", "en": "Log in"},
+    "auth.registration_closed": {"tr": "Bu sunucuda yeni kayıt kapalı. Bir hesap için yöneticiye başvur.",
+                                 "en": "Sign-ups are closed on this server. Ask the admin for an account."},
+    "auth.error.username": {"tr": "Kullanıcı adı 3-30 karakter olmalı ve boşluk içermemeli.",
+                            "en": "Usernames must be 3-30 characters with no spaces."},
+    "auth.error.password_length": {"tr": "Parola en az {n} karakter olmalı.",
+                                   "en": "Passwords must be at least {n} characters."},
+    "auth.error.username_taken": {"tr": "Bu kullanıcı adı zaten kayıtlı.", "en": "That username is already taken."},
+    "auth.error.locked": {"tr": "Hesap kilitlendi. {minutes} dakika sonra tekrar dene.",
+                          "en": "Account locked. Try again in {minutes} minutes."},
+    "auth.error.invalid": {"tr": "Kullanıcı adı veya parola yanlış.", "en": "Wrong username or password."},
+    "auth.error.rate_limited": {"tr": "Çok fazla giriş denemesi. Biraz bekleyip tekrar dene.",
+                                "en": "Too many login attempts. Wait a little and try again."},
+
+    # Analyze form
+    "analyze.source": {"tr": "Oyun kaynağı", "en": "Games from"},
+    "analyze.source_file": {"tr": "PGN dosyası", "en": "PGN file"},
+    "analyze.source_lichess": {"tr": "Lichess kullanıcısı", "en": "Lichess user"},
+    "analyze.source_chesscom": {"tr": "chess.com kullanıcısı", "en": "chess.com user"},
+    "analyze.file": {"tr": "PGN dosyası", "en": "PGN file"},
+    "analyze.file_hint": {"tr": "Chess.com veya Lichess'ten indirdiğin bir .pgn dosyası (en fazla 5 MB).",
+                          "en": "A .pgn file downloaded from chess.com or Lichess (up to 5 MB)."},
+    "analyze.username": {"tr": "Kullanıcı adı", "en": "Username"},
+    "analyze.username_placeholder": {"tr": "Platformdaki kullanıcı adın", "en": "Your username on the site"},
+    "analyze.max_games": {"tr": "Oyun sayısı", "en": "Number of games"},
+    "analyze.max_games_hint": {
+        "tr": "Son oynadığın oyunlar çekilir (en fazla {n}, yalnızca herkese açık oyunlar). Daha önce analiz edilen oyunlar tekrar analiz edilmez; yeni oyunlar oyun başına yaklaşık yarım dakika sürer.",
+        "en": "Your most recent games are fetched (up to {n}, public games only). Games analyzed before are reused; new ones take about half a minute each.",
+    },
+    "analyze.player": {"tr": "Oyuncu adı (opsiyonel)", "en": "Player name (optional)"},
+    "analyze.player_placeholder": {"tr": "Boş bırakırsan otomatik tespit edilir", "en": "Detected automatically if left blank"},
+    "analyze.player_hint": {"tr": "Kullanıcı adıyla oyun çekiyorsan boş bırakabilirsin; kullanıcı adın kullanılır.",
+                            "en": "When fetching by username you can leave this blank; the username is used."},
+    "analyze.lang": {"tr": "Rapor dili", "en": "Report language"},
+    "analyze.llm": {"tr": "Koçluk yorumu", "en": "Coaching commentary"},
+    "analyze.llm_none": {"tr": "Yok (sadece istatistik)", "en": "None (stats only)"},
+    "analyze.llm_hint": {"tr": "Claude/OpenAI seçilirse, önce <a href=\"/settings\">Ayarlar</a> sayfasından kendi API anahtarını girmelisin.",
+                         "en": "For Claude/OpenAI, first add your own API key under <a href=\"/settings\">Settings</a>."},
+    "analyze.submit": {"tr": "Analiz Et", "en": "Analyze"},
+    "analyze.starting": {"tr": "Başlatılıyor…", "en": "Starting…"},
+    "analyze.starting_note": {"tr": "Analiz başlatılıyor… oyunlar çekiliyorsa bu birkaç saniye sürebilir.",
+                              "en": "Starting the analysis… fetching games can take a few seconds."},
+
+    # Progress
+    "progress.starting": {"tr": "Analiz başlıyor…", "en": "Starting the analysis…"},
+    "progress.count": {"tr": "{completed} / {total} oyun analiz edildi", "en": "{completed} / {total} games analyzed"},
+    "progress.error": {"tr": "Hata:", "en": "Error:"},
+    "progress.new_analysis": {"tr": "Yeni analiz", "en": "New analysis"},
+
+    # Settings
+    "settings.api_keys": {"tr": "API anahtarları", "en": "API keys"},
+    "settings.anthropic": {"tr": "Anthropic (Claude) API anahtarı", "en": "Anthropic (Claude) API key"},
+    "settings.openai": {"tr": "OpenAI API anahtarı", "en": "OpenAI API key"},
+    "settings.saved_placeholder": {"tr": "•••••••• (kayıtlı, değiştirmek için yeni bir değer gir)",
+                                   "en": "•••••••• (saved; type a new one to replace it)"},
+    "settings.not_set": {"tr": "kayıtlı değil", "en": "not set"},
+    "settings.keys_hint": {"tr": "Bir alanı boş bırakırsan mevcut kayıtlı anahtar (varsa) değişmeden kalır. Anahtarlar şifrelenmiş olarak saklanır.",
+                           "en": "Leave a field blank to keep the saved key (if any). Keys are stored encrypted."},
+    "settings.save": {"tr": "Kaydet", "en": "Save"},
+    "settings.key_saved": {"tr": "{provider} anahtarı kayıtlı", "en": "{provider} key saved"},
+    "settings.delete": {"tr": "Sil", "en": "Remove"},
+    "settings.change_password": {"tr": "Parola değiştir", "en": "Change password"},
+    "settings.current_password": {"tr": "Mevcut parola", "en": "Current password"},
+    "settings.new_password": {"tr": "Yeni parola", "en": "New password"},
+    "settings.confirm_password": {"tr": "Yeni parola (tekrar)", "en": "New password (again)"},
+    "settings.update_password": {"tr": "Parolayı güncelle", "en": "Update password"},
+    "settings.msg.missing_key": {"tr": "Devam etmeden önce bir API anahtarı gir.", "en": "Add an API key before continuing."},
+    "settings.msg.saved": {"tr": "Kaydedildi.", "en": "Saved."},
+    "settings.msg.key_removed": {"tr": "Anahtar silindi.", "en": "Key removed."},
+    "settings.msg.password_updated": {"tr": "Parola güncellendi. Diğer cihazlardaki oturumların kapatıldı.",
+                                      "en": "Password updated. Your other sessions have been signed out."},
+    "settings.error.current_password": {"tr": "Mevcut parola yanlış.", "en": "The current password is wrong."},
+    "settings.error.new_password_length": {"tr": "Yeni parola en az {n} karakter olmalı.",
+                                           "en": "The new password must be at least {n} characters."},
+    "settings.error.mismatch": {"tr": "Yeni parola ile tekrarı eşleşmiyor.", "en": "The two new passwords don't match."},
+
+    # History list
+    "history.viewing_as_admin": {"tr": "{name} kullanıcısının analiz geçmişini görüntülüyorsun.",
+                                 "en": "You're viewing {name}'s analysis history."},
+    "history.trend": {"tr": "Eğilim", "en": "Trend"},
+    "history.trend_sub": {"tr": "Analizler eskiden yeniye. Bir noktaya tıklayınca raporu açılır.",
+                          "en": "Analyses from oldest to newest. Click a point to open its report."},
+    "history.player": {"tr": "Oyuncu", "en": "Player"},
+    "history.show": {"tr": "Göster", "en": "Show"},
+    "history.accuracy": {"tr": "Doğruluk", "en": "Accuracy"},
+    "history.accuracy_note": {"tr": "% · yüksek daha iyi", "en": "% · higher is better"},
+    "history.acpl_note": {"tr": "ortalama kayıp · düşük daha iyi", "en": "average loss · lower is better"},
+    "history.need_two": {"tr": "Eğilim için en az 2 analiz gerekli. {player} için şu an {n} analiz var.",
+                         "en": "A trend needs at least 2 analyses. {player} has {n} so far."},
+    "history.analyses": {"tr": "Analizler", "en": "Analyses"},
+    "history.date": {"tr": "Tarih", "en": "Date"},
+    "history.games": {"tr": "Oyun", "en": "Games"},
+    "history.view": {"tr": "Görüntüle", "en": "View"},
+    "history.delete": {"tr": "Sil", "en": "Delete"},
+    "history.empty": {"tr": "Henüz kaydedilmiş bir analiz yok.", "en": "No saved analyses yet."},
+    "history.start_first": {"tr": "İlk analizini başlat", "en": "Start your first one"},
+    "history.js.aria": {"tr": "{n} analizde {first} değerinden {last} değerine.",
+                        "en": "from {first} to {last} over {n} analyses."},
+    "history.js.accuracy": {"tr": "doğruluk", "en": "accuracy"},
+    "history.js.games": {"tr": "oyun", "en": "games"},
+
+    # Report page
+    "report.download": {"tr": "Markdown indir", "en": "Download Markdown"},
+    "report.print": {"tr": "Yazdır / PDF", "en": "Print / PDF"},
+    "report.warnings": {"tr": "Uyarılar:", "en": "Warnings:"},
+    "report.review_games": {"tr": "Oyunları incele", "en": "Review the games"},
+    "report.critical": {"tr": "Kritik hatalar", "en": "Critical mistakes"},
+    "report.legend_played": {"tr": "oynanan hamle", "en": "move played"},
+    "report.legend_best": {"tr": "motorun önerisi", "en": "engine's choice"},
+    "report.game_meta": {"tr": "Oyun {n} · {opponent}", "en": "Game {n} · {opponent}"},
+    "report.better": {"tr": "Daha iyisi:", "en": "Better:"},
+    "report.show_in_game": {"tr": "Oyunda göster →", "en": "Show in game →"},
+    "report.back": {"tr": "Geçmişe dön", "en": "Back to history"},
+    "result.win": {"tr": "Kazandı", "en": "Won"},
+    "result.loss": {"tr": "Kaybetti", "en": "Lost"},
+    "result.draw": {"tr": "Berabere", "en": "Draw"},
+    "result.unknown": {"tr": "Sonuç bilinmiyor", "en": "Result unknown"},
+    "color.white": {"tr": "beyaz", "en": "white"},
+    "color.black": {"tr": "siyah", "en": "black"},
+    "class.blunder": {"tr": "Gaf", "en": "Blunder"},
+    "class.mistake": {"tr": "Hata", "en": "Mistake"},
+    "class.inaccuracy": {"tr": "Belirsizlik", "en": "Inaccuracy"},
+
+    # Game viewer
+    "viewer.game_of": {"tr": "Oyun {n} / {total}", "en": "Game {n} of {total}"},
+    "viewer.board": {"tr": "Satranç tahtası", "en": "Chess board"},
+    "viewer.first": {"tr": "Başa", "en": "Start"},
+    "viewer.prev": {"tr": "Önceki hamle", "en": "Previous move"},
+    "viewer.next": {"tr": "Sonraki hamle", "en": "Next move"},
+    "viewer.last": {"tr": "Sona", "en": "End"},
+    "viewer.flip": {"tr": "Tahtayı çevir", "en": "Flip board"},
+    "viewer.hint": {"tr": "Değerlendirme beyazın açısından. Grafiğe ya da bir hamleye tıkla; ← → tuşlarıyla da gezebilirsin.",
+                    "en": "Evaluation from White's side. Click the graph or a move, or use the ← → keys."},
+    "viewer.prev_game": {"tr": "← Önceki oyun", "en": "← Previous game"},
+    "viewer.next_game": {"tr": "Sonraki oyun →", "en": "Next game →"},
+    "viewer.back": {"tr": "Rapora dön", "en": "Back to report"},
+    "viewer.start_position": {"tr": "Başlangıç pozisyonu", "en": "Starting position"},
+    "viewer.eval": {"tr": "Değerlendirme:", "en": "Evaluation:"},
+    "viewer.better": {"tr": "Daha iyisi:", "en": "Better:"},
+    "viewer.you_won": {"tr": "Kazandın", "en": "You won"},
+    "viewer.you_lost": {"tr": "Kaybettin", "en": "You lost"},
+
+    # Admin
+    "admin.user": {"tr": "Kullanıcı", "en": "User"},
+    "admin.is_admin": {"tr": "Admin mi", "en": "Admin"},
+    "admin.analyses": {"tr": "Analiz sayısı", "en": "Analyses"},
+    "admin.joined": {"tr": "Kayıt tarihi", "en": "Joined"},
+    "admin.yes": {"tr": "Evet", "en": "Yes"},
+    "admin.no": {"tr": "Hayır", "en": "No"},
+    "admin.locked": {"tr": "Kilitli", "en": "Locked"},
+    "admin.locked_title": {"tr": "Çok fazla hatalı giriş; parolayı sıfırlamak kilidi açar",
+                           "en": "Too many failed logins; resetting the password unlocks it"},
+    "admin.view_history": {"tr": "Geçmişi gör", "en": "View history"},
+    "admin.new_password": {"tr": "yeni parola", "en": "new password"},
+    "admin.reset": {"tr": "Sıfırla", "en": "Reset"},
+    "admin.delete": {"tr": "Sil", "en": "Delete"},
+
+    # Errors
+    "error.label": {"tr": "Hata:", "en": "Error:"},
+    "error.back": {"tr": "Geri dön", "en": "Go back"},
+    "error.forbidden": {"tr": "Bu sayfaya erişim yetkiniz yok.", "en": "You don't have access to this page."},
+    "error.unexpected": {"tr": "Beklenmeyen bir hata oluştu.", "en": "Something unexpected went wrong."},
+    "error.record_not_found": {"tr": "Kayıt bulunamadı.", "en": "Record not found."},
+    "error.game_not_found": {"tr": "Oyun bulunamadı.", "en": "Game not found."},
+    "error.user_not_found": {"tr": "Kullanıcı bulunamadı.", "en": "User not found."},
+    "error.analysis_not_found": {"tr": "Analiz bulunamadı.", "en": "Analysis not found."},
+    "error.unauthorized": {"tr": "Yetkisiz.", "en": "Not allowed."},
+    "error.bad_source": {"tr": "Geçersiz oyun kaynağı.", "en": "Invalid game source."},
+    "error.bad_lang": {"tr": "Geçersiz rapor dili.", "en": "Invalid report language."},
+    "error.bad_llm": {"tr": "Geçersiz koçluk yorumu seçeneği.", "en": "Invalid commentary option."},
+    "error.need_username": {"tr": "Lütfen bir kullanıcı adı girin.", "en": "Please enter a username."},
+    "error.bad_game_count": {"tr": "Oyun sayısı geçerli bir tam sayı olmalı.", "en": "The number of games must be a whole number."},
+    "error.need_file": {"tr": "Lütfen analiz edilecek bir PGN dosyası seçin.", "en": "Please choose a PGN file to analyze."},
+    "error.file_too_large": {"tr": "PGN dosyası en fazla {mb} MB olabilir.", "en": "PGN files can be at most {mb} MB."},
+    "error.fetch_failed": {"tr": "Oyunlar alınamadı: {detail}", "en": "Couldn't fetch the games: {detail}"},
+    "error.engine_setup": {"tr": "Motor kurulum hatası: {detail}", "en": "Engine setup failed: {detail}"},
+    "error.bad_provider": {"tr": "Geçersiz sağlayıcı.", "en": "Invalid provider."},
+    "error.delete_self": {"tr": "Kendi hesabını silemezsin.", "en": "You can't delete your own account."},
+}
+
+
+def ui_text(key: str, lang: str, **params) -> str:
+    entry = _STRINGS[key]
+    text = entry.get(lang, entry[DEFAULT_UI_LANG])
+    return text.format(**params) if params else text
+
+
+def ui_lang(request: Request) -> str:
+    lang = request.session.get(_SESSION_KEY)
+    return lang if lang in UI_LANGS else DEFAULT_UI_LANG
+
+
+def set_ui_lang(request: Request, lang: str) -> None:
+    if lang in UI_LANGS:
+        request.session[_SESSION_KEY] = lang
+
+
+def strings_for(lang: str, prefix: str) -> dict[str, str]:
+    """Every string under *prefix*, keyed without it, for handing to page scripts."""
+    return {key[len(prefix):]: ui_text(key, lang) for key in _STRINGS if key.startswith(prefix)}
+
+
+def all_keys() -> list[str]:
+    return list(_STRINGS)

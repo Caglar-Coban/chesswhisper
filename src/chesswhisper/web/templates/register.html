@@ -1,17 +1,17 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — Kayıt Ol{% endblock %}
+{% block title %}chesswhisper — {{ t("title.register") }}{% endblock %}
 {% block content %}
 <div class="card">
   {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
   <form method="post" action="/register">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="username">Kullanıcı adı</label>
-    <input type="text" id="username" name="username" required>
-    <label for="password">Parola</label>
-    <input type="password" id="password" name="password" required minlength="8">
-    <p class="hint">En az 8 karakter.</p>
-    <button type="submit">Kayıt Ol</button>
+    <label for="username">{{ t("auth.username") }}</label>
+    <input type="text" id="username" name="username" autocomplete="username" required>
+    <label for="password">{{ t("auth.password") }}</label>
+    <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8">
+    <p class="hint">{{ t("auth.password_hint") }}</p>
+    <button type="submit">{{ t("auth.register_button") }}</button>
   </form>
-  <p class="hint" style="margin-top:16px;">Zaten hesabın var mı? <a href="/login">Giriş yap</a></p>
+  <p class="hint" style="margin-top:16px;">{{ t("auth.have_account") }} <a href="/login">{{ t("auth.login_link") }}</a></p>
 </div>
 {% endblock %}

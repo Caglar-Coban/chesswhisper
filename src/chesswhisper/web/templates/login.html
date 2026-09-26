@@ -1,16 +1,18 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — Giriş{% endblock %}
+{% block title %}chesswhisper — {{ t("title.login") }}{% endblock %}
 {% block content %}
 <div class="card">
   {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
   <form method="post" action="/login">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="username">Kullanıcı adı</label>
-    <input type="text" id="username" name="username" required>
-    <label for="password">Parola</label>
-    <input type="password" id="password" name="password" required>
-    <button type="submit">Giriş Yap</button>
+    <label for="username">{{ t("auth.username") }}</label>
+    <input type="text" id="username" name="username" autocomplete="username" required>
+    <label for="password">{{ t("auth.password") }}</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+    <button type="submit">{{ t("auth.login_button") }}</button>
   </form>
-  <p class="hint" style="margin-top:16px;">Hesabın yok mu? <a href="/register">Kayıt ol</a></p>
+  {% if registration_open %}
+  <p class="hint" style="margin-top:16px;">{{ t("auth.no_account") }} <a href="/register">{{ t("auth.sign_up_link") }}</a></p>
+  {% endif %}
 </div>
 {% endblock %}

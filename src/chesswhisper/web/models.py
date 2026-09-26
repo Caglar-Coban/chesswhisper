@@ -18,6 +18,8 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     failed_login_attempts: Mapped[int] = mapped_column(default=0)
     locked_until: Mapped[datetime | None] = mapped_column(default=None)
+    # Stored in each login session; bumping it signs out every other session.
+    session_version: Mapped[int] = mapped_column(default=0, server_default="0")
 
     api_key: Mapped[UserApiKey | None] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"

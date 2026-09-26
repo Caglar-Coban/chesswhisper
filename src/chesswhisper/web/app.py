@@ -8,7 +8,7 @@ from datetime import timedelta
 
 import bleach
 import markdown as markdown_lib
-from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -36,11 +36,13 @@ from chesswhisper.web.auth import (
     get_current_user,
     get_optional_current_user,
     require_admin,
+    start_session,
     verify_csrf,
 )
 from chesswhisper.web.boards import PIECE_SVGS, VIEWER_COLORS, board_cards
 from chesswhisper.web.db import get_db, utcnow
 from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
+from chesswhisper.web.ratelimit import SlidingWindowLimiter
 from chesswhisper.web.security import (
     MIN_PASSWORD_LENGTH,
     decrypt_api_key,
@@ -50,9 +52,14 @@ from chesswhisper.web.security import (
     verify_password,
 )
 from chesswhisper.web.trend import build_trend
+from chesswhisper.web.ui_text import UI_LANGS, set_ui_lang, ui_lang, ui_text
 
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
+# Per client address, across all accounts.
+LOGIN_RATE_LIMIT = 20
+LOGIN_RATE_WINDOW_SECONDS = 5 * 60
+ALLOW_REGISTRATION_ENV = "CHESSWHISPER_ALLOW_REGISTRATION"
 FETCH_SOURCES = ("lichess", "chesscom")
 REPORT_LANGS = ("tr", "en")
 LLM_CHOICES = ("none", "claude", "openai")
@@ -80,6 +87,14 @@ _ALLOWED_TAGS = [
 ]
 _ALLOWED_ATTRS = {"a": ["href"]}
 
+login_limiter = SlidingWindowLimiter(LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW_SECONDS)
+
+
+def registration_open() -> bool:
+    """Self-service sign-up, on unless CHESSWHISPER_ALLOW_REGISTRATION is 0/false/no/off."""
+    return os.environ.get(ALLOW_REGISTRATION_ENV, "1").strip().lower() not in ("0", "false", "no", "off")
+
+
 app = FastAPI(title="chesswhisper")
 app.add_middleware(SessionMiddleware, secret_key=get_session_secret().hex())
 
@@ -91,12 +106,25 @@ async def _redirect_to_login(request: Request, exc: RedirectToLogin) -> Redirect
 
 @app.exception_handler(Forbidden)
 async def _forbidden_handler(request: Request, exc: Forbidden) -> HTMLResponse:
-    return _render_error(request, "Bu sayfaya erişim yetkiniz yok.", 403)
+    return _render_error(request, _tr(request, "error.forbidden"), 403)
+
+
+def _tr(request: Request, key: str, **params) -> str:
+    return ui_text(key, ui_lang(request), **params)
 
 
 def _render(request: Request, template_name: str, context: dict, status_code: int = 200) -> HTMLResponse:
+    lang = ui_lang(request)
     return templates.TemplateResponse(
-        request, template_name, {**context, "csrf_token": get_csrf_token(request)}, status_code=status_code
+        request, template_name,
+        {
+            **context,
+            "csrf_token": get_csrf_token(request),
+            "ui_lang": lang,
+            "t": lambda key, **params: ui_text(key, lang, **params),
+            "registration_open": registration_open(),
+        },
+        status_code=status_code,
     )
 
 
@@ -108,7 +136,7 @@ def _render_error(
 
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> HTMLResponse:
-    return _render_error(request, "Beklenmeyen bir hata oluştu.", 500, None)
+    return _render_error(request, _tr(request, "error.unexpected"), 500, None)
 
 
 def _report_to_safe_html(report_markdown: str) -> str:
@@ -129,6 +157,7 @@ def _run_analysis_job(
     llm: str,
     llm_api_key: str | None,
     fetch_warnings: list[str],
+    ui_language: str = "tr",
 ) -> None:
     db = next(get_db())
     try:
@@ -142,7 +171,7 @@ def _run_analysis_job(
             jobs.mark_error(job_id, str(exc))
             return
         except StockfishProvisionError as exc:
-            jobs.mark_error(job_id, f"Motor kurulum hatası: {exc}")
+            jobs.mark_error(job_id, ui_text("error.engine_setup", ui_language, detail=exc))
             return
 
         report_markdown = render_markdown(aggregate, commentary, lang)
@@ -170,7 +199,7 @@ def _run_analysis_job(
         # the job stuck in "running" forever from the client's point of
         # view. Message text matches the existing top-level
         # _unhandled_exception_handler for the same failure class.
-        jobs.mark_error(job_id, "Beklenmeyen bir hata oluştu.")
+        jobs.mark_error(job_id, ui_text("error.unexpected", ui_language))
     finally:
         db.close()
         if os.path.exists(tmp_path):
@@ -197,7 +226,7 @@ def _render_game_viewer(
 ) -> HTMLResponse:
     timelines = _timelines(record)
     if not 1 <= game_number <= len(timelines):
-        return _render_error(request, "Oyun bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.game_not_found"), 404, current_user)
     return _render(
         request, "game_viewer.html",
         {
@@ -212,12 +241,26 @@ def _render_game_viewer(
     )
 
 
+@app.get("/language/{lang}", response_model=None)
+async def switch_language(
+    request: Request, lang: str, next_path: str = Query("/", alias="next")
+) -> RedirectResponse:
+    if lang in UI_LANGS:
+        set_ui_lang(request, lang)
+    # Only same-site paths, so the switch can't be used as an open redirect.
+    safe = next_path.startswith("/") and not next_path.startswith("//") and "\\" not in next_path
+    target = next_path if safe else "/"
+    return RedirectResponse(target, status_code=303)
+
+
 @app.get("/register", response_class=HTMLResponse, response_model=None)
 async def register_form(
     request: Request, current_user: User | None = Depends(get_optional_current_user)
 ) -> HTMLResponse | RedirectResponse:
     if current_user is not None:
         return RedirectResponse("/", status_code=303)
+    if not registration_open():
+        return _render_error(request, _tr(request, "auth.registration_closed"), 403)
     return _render(request, "register.html", {"current_user": None})
 
 
@@ -229,21 +272,23 @@ async def register_submit(
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
+    if not registration_open():
+        return _render_error(request, _tr(request, "auth.registration_closed"), 403)
     username = username.strip()
     if not _USERNAME_RE.fullmatch(username):
         return _render(
             request, "register.html",
-            {"current_user": None, "error": "Kullanıcı adı 3-30 karakter olmalı ve boşluk içermemeli."},
+            {"current_user": None, "error": _tr(request, "auth.error.username")},
         )
     if len(password) < MIN_PASSWORD_LENGTH:
         return _render(
             request, "register.html",
-            {"current_user": None, "error": f"Parola en az {MIN_PASSWORD_LENGTH} karakter olmalı."},
+            {"current_user": None, "error": _tr(request, "auth.error.password_length", n=MIN_PASSWORD_LENGTH)},
         )
     if db.query(User).filter_by(username=username).first() is not None:
         return _render(
             request, "register.html",
-            {"current_user": None, "error": "Bu kullanıcı adı zaten kayıtlı."},
+            {"current_user": None, "error": _tr(request, "auth.error.username_taken")},
         )
 
     user = User(username=username, password_hash=hash_password(password), is_admin=False)
@@ -251,7 +296,7 @@ async def register_submit(
     db.commit()
     db.refresh(user)
 
-    request.session["user_id"] = user.id
+    start_session(request, user)
     return RedirectResponse("/", status_code=303)
 
 
@@ -272,6 +317,13 @@ async def login_submit(
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
+    client = request.client.host if request.client else "unknown"
+    if not login_limiter.allow(client):
+        return _render(
+            request, "login.html", {"current_user": None, "error": _tr(request, "auth.error.rate_limited")},
+            status_code=429,
+        )
+
     user = db.query(User).filter_by(username=username.strip()).first()
 
     if user is not None and user.locked_until is not None and user.locked_until > _naive_utcnow():
@@ -280,7 +332,7 @@ async def login_submit(
             request, "login.html",
             {
                 "current_user": None,
-                "error": f"Hesap kilitlendi. {remaining_minutes} dakika sonra tekrar dene.",
+                "error": _tr(request, "auth.error.locked", minutes=remaining_minutes),
             },
         )
 
@@ -292,14 +344,14 @@ async def login_submit(
             db.commit()
         return _render(
             request, "login.html",
-            {"current_user": None, "error": "Kullanıcı adı veya parola yanlış."},
+            {"current_user": None, "error": _tr(request, "auth.error.invalid")},
         )
 
     user.failed_login_attempts = 0
     user.locked_until = None
     db.commit()
 
-    request.session["user_id"] = user.id
+    start_session(request, user)
     return RedirectResponse("/", status_code=303)
 
 
@@ -339,7 +391,7 @@ async def settings_form(
 ) -> HTMLResponse:
     missing_key = request.query_params.get("message") == "missing_key"
     return _render_settings(
-        request, current_user, db, message="Devam etmeden önce bir API anahtarı gir." if missing_key else None
+        request, current_user, db, message=_tr(request, "settings.msg.missing_key") if missing_key else None
     )
 
 
@@ -366,7 +418,7 @@ async def settings_submit(
 
     db.commit()
 
-    return _render_settings(request, current_user, db, message="Kaydedildi.")
+    return _render_settings(request, current_user, db, message=_tr(request, "settings.msg.saved"))
 
 
 @app.post("/settings/delete-key", response_class=HTMLResponse)
@@ -379,7 +431,7 @@ async def settings_delete_key(
 ) -> HTMLResponse:
     column = _KEY_COLUMNS.get(provider)
     if column is None:
-        return _render_error(request, "Geçersiz sağlayıcı.", 400, current_user)
+        return _render_error(request, _tr(request, "error.bad_provider"), 400, current_user)
 
     key_row = db.get(UserApiKey, current_user.id)
     if key_row is not None:
@@ -387,7 +439,7 @@ async def settings_delete_key(
         key_row.updated_at = utcnow()
         db.commit()
 
-    return _render_settings(request, current_user, db, message="Anahtar silindi.")
+    return _render_settings(request, current_user, db, message=_tr(request, "settings.msg.key_removed"))
 
 
 @app.post("/settings/password", response_class=HTMLResponse)
@@ -402,17 +454,19 @@ async def settings_change_password(
 ) -> HTMLResponse:
     error = None
     if not verify_password(current_password, current_user.password_hash):
-        error = "Mevcut parola yanlış."
+        error = _tr(request, "settings.error.current_password")
     elif len(new_password) < MIN_PASSWORD_LENGTH:
-        error = f"Yeni parola en az {MIN_PASSWORD_LENGTH} karakter olmalı."
+        error = _tr(request, "settings.error.new_password_length", n=MIN_PASSWORD_LENGTH)
     elif new_password != confirm_password:
-        error = "Yeni parola ile tekrarı eşleşmiyor."
+        error = _tr(request, "settings.error.mismatch")
     if error is not None:
         return _render_settings(request, current_user, db, password_error=error)
 
     current_user.password_hash = hash_password(new_password)
+    current_user.session_version += 1
     db.commit()
-    return _render_settings(request, current_user, db, password_message="Parola güncellendi.")
+    start_session(request, current_user)  # keep this session; every other one is now stale
+    return _render_settings(request, current_user, db, password_message=_tr(request, "settings.msg.password_updated"))
 
 
 @app.get("/history", response_class=HTMLResponse)
@@ -447,7 +501,7 @@ async def history_detail(
 ) -> HTMLResponse:
     record = db.get(AnalysisRecord, record_id)
     if record is None or record.user_id != current_user.id:
-        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.record_not_found"), 404, current_user)
 
     warnings: list[str] = []
     job_id = request.query_params.get("job")
@@ -492,7 +546,7 @@ async def history_download(
 ) -> Response:
     record = db.get(AnalysisRecord, record_id)
     if record is None or record.user_id != current_user.id:
-        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.record_not_found"), 404, current_user)
     return _markdown_download(record)
 
 
@@ -506,7 +560,7 @@ async def history_game(
 ) -> HTMLResponse:
     record = db.get(AnalysisRecord, record_id)
     if record is None or record.user_id != current_user.id:
-        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.record_not_found"), 404, current_user)
     return _render_game_viewer(request, record, game_number, f"/history/{record_id}", current_user)
 
 
@@ -520,7 +574,7 @@ async def history_delete(
 ) -> HTMLResponse | RedirectResponse:
     record = db.get(AnalysisRecord, record_id)
     if record is None or record.user_id != current_user.id:
-        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.record_not_found"), 404, current_user)
 
     db.delete(record)
     db.commit()
@@ -551,11 +605,11 @@ async def analyze(
 ) -> HTMLResponse | RedirectResponse:
     fetching = source in FETCH_SOURCES
     if source != "file" and not fetching:
-        return _render_error(request, "Geçersiz oyun kaynağı.", 400, current_user)
+        return _render_error(request, _tr(request, "error.bad_source"), 400, current_user)
     if lang not in REPORT_LANGS:
-        return _render_error(request, "Geçersiz rapor dili.", 400, current_user)
+        return _render_error(request, _tr(request, "error.bad_lang"), 400, current_user)
     if llm not in LLM_CHOICES:
-        return _render_error(request, "Geçersiz koçluk yorumu seçeneği.", 400, current_user)
+        return _render_error(request, _tr(request, "error.bad_llm"), 400, current_user)
 
     running = jobs.running_job_for(current_user.id)
     if running is not None:
@@ -567,18 +621,18 @@ async def analyze(
     if fetching:
         username = username.strip()
         if not username:
-            return _render_error(request, "Lütfen bir kullanıcı adı girin.", 400, current_user)
+            return _render_error(request, _tr(request, "error.need_username"), 400, current_user)
         try:
             game_count = int(max_games)
         except ValueError:
-            return _render_error(request, "Oyun sayısı geçerli bir tam sayı olmalı.", 400, current_user)
+            return _render_error(request, _tr(request, "error.bad_game_count"), 400, current_user)
     else:
         if pgn is None or not pgn.filename:
-            return _render_error(request, "Lütfen analiz edilecek bir PGN dosyası seçin.", 400, current_user)
+            return _render_error(request, _tr(request, "error.need_file"), 400, current_user)
         contents = await pgn.read(MAX_UPLOAD_BYTES + 1)
         if len(contents) > MAX_UPLOAD_BYTES:
             return _render_error(
-                request, f"PGN dosyası en fazla {MAX_UPLOAD_BYTES // (1024 * 1024)} MB olabilir.", 413, current_user
+                request, _tr(request, "error.file_too_large", mb=MAX_UPLOAD_BYTES // (1024 * 1024)), 413, current_user
             )
 
     llm_api_key = None
@@ -596,7 +650,7 @@ async def analyze(
         try:
             fetched = await run_in_threadpool(fetch_pgn, source, username, game_count)
         except GameSourceUnavailable as exc:
-            return _render_error(request, f"Oyunlar alınamadı: {exc}", 502, current_user)
+            return _render_error(request, _tr(request, "error.fetch_failed", detail=exc), 502, current_user)
         except GameFetchError as exc:
             return _render_error(request, str(exc), 400, current_user)
         contents = fetched.pgn_text.encode("utf-8")
@@ -608,6 +662,7 @@ async def analyze(
         tmp_path = tmp.name
 
     job, created = jobs.create_job_unless_running(current_user.id)
+    ui_language = ui_lang(request)
     if not created:
         # Another submission started an analysis while this one was fetching.
         os.remove(tmp_path)
@@ -615,7 +670,7 @@ async def analyze(
     user_id = current_user.id
     _start_background(
         lambda: _run_analysis_job(
-            job.id, user_id, tmp_path, player or None, lang, llm, llm_api_key, fetch_warnings
+            job.id, user_id, tmp_path, player or None, lang, llm, llm_api_key, fetch_warnings, ui_language
         )
     )
     return RedirectResponse(f"/analyze/progress/{job.id}", status_code=303)
@@ -629,7 +684,7 @@ async def analyze_progress(
 ) -> HTMLResponse:
     job = jobs.get_job(job_id)
     if job is None:
-        return _render_error(request, "Analiz bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.analysis_not_found"), 404, current_user)
     if job.user_id != current_user.id:
         raise Forbidden()
     return _render(request, "progress.html", {"current_user": current_user, "job_id": job_id})
@@ -637,14 +692,15 @@ async def analyze_progress(
 
 @app.get("/analyze/status/{job_id}", response_model=None)
 async def analyze_status(
+    request: Request,
     job_id: str,
     current_user: User = Depends(get_current_user),
 ) -> JSONResponse:
     job = jobs.get_job(job_id)
     if job is None:
-        return JSONResponse({"status": "error", "message": "Analiz bulunamadı."}, status_code=404)
+        return JSONResponse({"status": "error", "message": _tr(request, "error.analysis_not_found")}, status_code=404)
     if job.user_id != current_user.id:
-        return JSONResponse({"status": "error", "message": "Yetkisiz."}, status_code=403)
+        return JSONResponse({"status": "error", "message": _tr(request, "error.unauthorized")}, status_code=403)
 
     body: dict[str, object] = {"status": job.status, "completed": job.completed, "total": job.total}
     if job.status == "done":
@@ -678,7 +734,7 @@ async def admin_user_history(
 ) -> HTMLResponse:
     target = db.get(User, user_id)
     if target is None:
-        return _render_error(request, "Kullanıcı bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.user_not_found"), 404, current_user)
 
     records = (
         db.query(AnalysisRecord)
@@ -707,7 +763,7 @@ async def admin_user_history_detail(
 ) -> HTMLResponse:
     record = db.get(AnalysisRecord, record_id)
     if record is None or record.user_id != user_id:
-        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.record_not_found"), 404, current_user)
 
     report_html = _report_to_safe_html(record.report_markdown)
     return _render(
@@ -733,7 +789,7 @@ async def admin_history_download(
 ) -> Response:
     record = db.get(AnalysisRecord, record_id)
     if record is None or record.user_id != user_id:
-        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.record_not_found"), 404, current_user)
     return _markdown_download(record)
 
 
@@ -748,7 +804,7 @@ async def admin_user_history_game(
 ) -> HTMLResponse:
     record = db.get(AnalysisRecord, record_id)
     if record is None or record.user_id != user_id:
-        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.record_not_found"), 404, current_user)
     return _render_game_viewer(
         request, record, game_number, f"/admin/users/{user_id}/history/{record_id}", current_user
     )
@@ -763,11 +819,11 @@ async def admin_delete_user(
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
     if user_id == current_user.id:
-        return _render_error(request, "Kendi hesabını silemezsin.", 400, current_user)
+        return _render_error(request, _tr(request, "error.delete_self"), 400, current_user)
 
     target = db.get(User, user_id)
     if target is None:
-        return _render_error(request, "Kullanıcı bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.user_not_found"), 404, current_user)
 
     db.delete(target)
     db.commit()
@@ -785,14 +841,15 @@ async def admin_reset_password(
 ) -> HTMLResponse | RedirectResponse:
     target = db.get(User, user_id)
     if target is None:
-        return _render_error(request, "Kullanıcı bulunamadı.", 404, current_user)
+        return _render_error(request, _tr(request, "error.user_not_found"), 404, current_user)
 
     if len(new_password) < MIN_PASSWORD_LENGTH:
-        return _render_error(request, f"Parola en az {MIN_PASSWORD_LENGTH} karakter olmalı.", 400, current_user)
+        return _render_error(request, _tr(request, "auth.error.password_length", n=MIN_PASSWORD_LENGTH), 400, current_user)
 
     target.password_hash = hash_password(new_password)
     # A reset is how an admin lets a locked-out user back in.
     target.failed_login_attempts = 0
     target.locked_until = None
+    target.session_version += 1  # sign the user out everywhere
     db.commit()
     return RedirectResponse(f"/admin/users/{user_id}", status_code=303)

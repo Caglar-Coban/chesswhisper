@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — Rapor{% endblock %}
+{% block title %}chesswhisper — {{ t("title.report") }}{% endblock %}
 {% block content %}
 <div class="report-actions no-print">
-  <a class="secondary-button" href="{{ download_url }}" download>Markdown indir</a>
-  <button type="button" class="secondary-button" onclick="window.print()">Yazdır / PDF</button>
+  <a class="secondary-button" href="{{ download_url }}" download>{{ t("report.download") }}</a>
+  <button type="button" class="secondary-button" onclick="window.print()">{{ t("report.print") }}</button>
 </div>
 {% if warnings %}
 <div class="banner warning">
-  <strong>Uyarılar:</strong>
+  <strong>{{ t("report.warnings") }}</strong>
   <ul>
     {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
   </ul>
@@ -15,15 +15,15 @@
 {% endif %}
 {% if games %}
 <section class="card games-card" aria-labelledby="games-title">
-  <h2 id="games-title" class="section-title">Oyunları incele</h2>
+  <h2 id="games-title" class="section-title">{{ t("report.review_games") }}</h2>
   <ul class="game-list">
     {% for g in games %}
     <li>
       <a href="{{ games_url_prefix }}/{{ g.game_number }}">
         <span class="game-list-title">{{ g.game_number }}. vs {{ g.opponent }}</span>
         <span class="game-list-meta">
-          {{ {"win": "Kazandı", "loss": "Kaybetti", "draw": "Berabere"}.get(g.result, "Sonuç bilinmiyor") }}
-          · {{ "beyaz" if g.your_color == "white" else "siyah" }} · {{ g.opening }}
+          {{ t("result." ~ (g.result if g.result in ("win", "loss", "draw") else "unknown")) }}
+          · {{ t("color." ~ g.your_color) }} · {{ g.opening }}
         </span>
       </a>
     </li>
@@ -33,10 +33,10 @@
 {% endif %}
 {% if cards %}
 <section class="card board-section" aria-labelledby="critical-title">
-  <h2 id="critical-title" class="section-title">Kritik hatalar</h2>
+  <h2 id="critical-title" class="section-title">{{ t("report.critical") }}</h2>
   <p class="hint board-legend">
-    <span class="legend-key legend-played"></span> oynanan hamle
-    <span class="legend-key legend-best"></span> motorun önerisi
+    <span class="legend-key legend-played"></span> {{ t("report.legend_played") }}
+    <span class="legend-key legend-best"></span> {{ t("report.legend_best") }}
   </p>
   <div class="board-grid">
     {% for c in cards %}
@@ -46,15 +46,15 @@
         <div class="board-move">
           <strong>{{ c.move_label }}</strong>
           {% if c.classification == "blunder" %}
-          <span class="move-badge badge-blunder">Blunder</span>
+          <span class="move-badge badge-blunder">{{ t("class.blunder") }}</span>
           {% else %}
-          <span class="move-badge badge-mistake">Hata</span>
+          <span class="move-badge badge-mistake">{{ t("class.mistake") }}</span>
           {% endif %}
         </div>
-        <div class="board-meta">Oyun {{ c.game_number }} · {{ c.opponent }}</div>
-        {% if c.best_san %}<div class="board-best">Daha iyisi: <strong>{{ c.best_san }}</strong></div>{% endif %}
+        <div class="board-meta">{{ t("report.game_meta", n=c.game_number, opponent=c.opponent) }}</div>
+        {% if c.best_san %}<div class="board-best">{{ t("report.better") }} <strong>{{ c.best_san }}</strong></div>{% endif %}
         <div class="board-eval">{{ c.eval_before }} → {{ c.eval_after }}</div>
-        {% if games %}<a class="board-link" href="{{ games_url_prefix }}/{{ c.game_number }}?ply={{ c.ply }}">Oyunda göster →</a>{% endif %}
+        {% if games %}<a class="board-link" href="{{ games_url_prefix }}/{{ c.game_number }}?ply={{ c.ply }}">{{ t("report.show_in_game") }}</a>{% endif %}
       </figcaption>
     </figure>
     {% endfor %}
@@ -64,5 +64,5 @@
 <div class="card report">
   {{ report_html | safe }}
 </div>
-<a class="back-link" href="{{ back_url }}">&larr; Geçmişe dön</a>
+<a class="back-link" href="{{ back_url }}">&larr; {{ t("report.back") }}</a>
 {% endblock %}

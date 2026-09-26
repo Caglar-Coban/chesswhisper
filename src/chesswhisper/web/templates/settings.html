@@ -1,32 +1,32 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — Ayarlar{% endblock %}
+{% block title %}chesswhisper — {{ t("title.settings") }}{% endblock %}
 {% block content %}
 <div class="card">
-  <h2 class="section-title">API anahtarları</h2>
+  <h2 class="section-title">{{ t("settings.api_keys") }}</h2>
   {% if message %}<div class="banner warning">{{ message }}</div>{% endif %}
   <form method="post" action="/settings">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="anthropic_key">Anthropic (Claude) API anahtarı</label>
+    <label for="anthropic_key">{{ t("settings.anthropic") }}</label>
     <input type="password" id="anthropic_key" name="anthropic_key" autocomplete="off"
-           placeholder="{% if has_anthropic_key %}•••••••• (kayıtlı, değiştirmek için yeni bir değer gir){% else %}kayıtlı değil{% endif %}">
+           placeholder="{{ t('settings.saved_placeholder') if has_anthropic_key else t('settings.not_set') }}">
 
-    <label for="openai_key">OpenAI API anahtarı</label>
+    <label for="openai_key">{{ t("settings.openai") }}</label>
     <input type="password" id="openai_key" name="openai_key" autocomplete="off"
-           placeholder="{% if has_openai_key %}•••••••• (kayıtlı, değiştirmek için yeni bir değer gir){% else %}kayıtlı değil{% endif %}">
+           placeholder="{{ t('settings.saved_placeholder') if has_openai_key else t('settings.not_set') }}">
 
-    <p class="hint">Bir alanı boş bırakırsan mevcut kayıtlı anahtar (varsa) değişmeden kalır. Anahtarlar şifrelenmiş olarak saklanır.</p>
-    <button type="submit">Kaydet</button>
+    <p class="hint">{{ t("settings.keys_hint") }}</p>
+    <button type="submit">{{ t("settings.save") }}</button>
   </form>
   {% if has_anthropic_key or has_openai_key %}
   <div style="margin-top: 22px;">
     {% for provider, label, saved in [("anthropic", "Anthropic (Claude)", has_anthropic_key), ("openai", "OpenAI", has_openai_key)] %}
     {% if saved %}
     <div class="key-row">
-      <span>{{ label }} anahtarı kayıtlı</span>
+      <span>{{ t("settings.key_saved", provider=label) }}</span>
       <form method="post" action="/settings/delete-key">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="provider" value="{{ provider }}">
-        <button type="submit" class="link-button danger">Sil</button>
+        <button type="submit" class="link-button danger">{{ t("settings.delete") }}</button>
       </form>
     </div>
     {% endif %}
@@ -36,18 +36,18 @@
 </div>
 
 <div class="card">
-  <h2 class="section-title">Parola değiştir</h2>
+  <h2 class="section-title">{{ t("settings.change_password") }}</h2>
   {% if password_error %}<div class="banner error">{{ password_error }}</div>{% endif %}
   {% if password_message %}<div class="banner success">{{ password_message }}</div>{% endif %}
   <form method="post" action="/settings/password">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="current_password">Mevcut parola</label>
+    <label for="current_password">{{ t("settings.current_password") }}</label>
     <input type="password" id="current_password" name="current_password" autocomplete="current-password" required>
-    <label for="new_password">Yeni parola</label>
+    <label for="new_password">{{ t("settings.new_password") }}</label>
     <input type="password" id="new_password" name="new_password" autocomplete="new-password" minlength="8" required>
-    <label for="confirm_password">Yeni parola (tekrar)</label>
+    <label for="confirm_password">{{ t("settings.confirm_password") }}</label>
     <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" minlength="8" required>
-    <button type="submit">Parolayı güncelle</button>
+    <button type="submit">{{ t("settings.update_password") }}</button>
   </form>
 </div>
 {% endblock %}

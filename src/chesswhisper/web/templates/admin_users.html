@@ -1,28 +1,29 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — Admin{% endblock %}
+{% block title %}chesswhisper — {{ t("title.admin") }}{% endblock %}
 {% block content %}
 <div class="card">
-  <table>
-    <thead><tr><th>Kullanıcı</th><th>Admin mi</th><th>Analiz sayısı</th><th>Kayıt tarihi</th><th></th></tr></thead>
+  <div class="table-scroll">
+  <table class="data-table">
+    <thead><tr><th>{{ t("admin.user") }}</th><th>{{ t("admin.is_admin") }}</th><th class="num">{{ t("admin.analyses") }}</th><th>{{ t("admin.joined") }}</th><th></th></tr></thead>
     <tbody>
       {% for u in users %}
       <tr>
-        <td>{{ u.username }}{% if u.id in locked_ids %} <span class="move-badge badge-blunder" title="Çok fazla hatalı giriş; parolayı sıfırlamak kilidi açar">Kilitli</span>{% endif %}</td>
-        <td>{{ "Evet" if u.is_admin else "Hayır" }}</td>
-        <td>{{ u.analyses|length }}</td>
-        <td>{{ u.created_at.strftime("%Y-%m-%d") }}</td>
-        <td>
-          <a href="/admin/users/{{ u.id }}">Geçmişi gör</a>
-          <form method="post" action="/admin/users/{{ u.id }}/reset-password" style="display:inline; margin-left:8px;">
+        <td>{{ u.username }}{% if u.id in locked_ids %} <span class="move-badge badge-blunder" title="{{ t('admin.locked_title') }}">{{ t("admin.locked") }}</span>{% endif %}</td>
+        <td>{{ t("admin.yes") if u.is_admin else t("admin.no") }}</td>
+        <td class="num">{{ u.analyses|length }}</td>
+        <td class="nowrap">{{ u.created_at.strftime("%Y-%m-%d") }}</td>
+        <td class="row-actions">
+          <a href="/admin/users/{{ u.id }}">{{ t("admin.view_history") }}</a>
+          <form method="post" action="/admin/users/{{ u.id }}/reset-password">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="password" name="new_password" placeholder="yeni parola" minlength="8" required
-                   style="width:120px; padding:4px 6px; font-size:13px;">
-            <button type="submit" class="link-button">Sıfırla</button>
+            <input type="password" name="new_password" placeholder="{{ t('admin.new_password') }}" minlength="8" required
+                   style="width:130px; padding:4px 6px; font-size:13px;">
+            <button type="submit" class="link-button">{{ t("admin.reset") }}</button>
           </form>
           {% if u.id != current_user.id %}
-          <form method="post" action="/admin/users/{{ u.id }}/delete" style="display:inline; margin-left:8px;">
+          <form method="post" action="/admin/users/{{ u.id }}/delete">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="link-button">Sil</button>
+            <button type="submit" class="link-button danger">{{ t("admin.delete") }}</button>
           </form>
           {% endif %}
         </td>
@@ -30,5 +31,6 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 {% endblock %}

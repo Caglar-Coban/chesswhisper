@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="{{ ui_lang }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -169,6 +169,7 @@
   .nav-links { display: flex; align-items: center; gap: 16px; font-size: 14px; }
   .nav-links a { text-decoration: none; }
   .nav-links a:hover { text-decoration: underline; }
+  .lang-switch { border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; font-size: 13px; }
   .link-button {
     background: none; border: none; padding: 0; margin: 0;
     color: var(--accent); font-size: 14px; font-weight: 400;
@@ -335,21 +336,23 @@
       <span class="logo">&#9822;</span>
       <div>
         <h1>chesswhisper</h1>
-        <p class="tagline">Stockfish + LLM ile satranç analiz ve koçluk aracı</p>
+        <p class="tagline">{{ t("tagline") }}</p>
       </div>
     </div>
-    {% if current_user %}
     <nav class="nav-links">
-      <a href="/">Analiz</a>
-      <a href="/history">Geçmiş</a>
-      <a href="/settings">Ayarlar</a>
-      {% if current_user.is_admin %}<a href="/admin">Admin</a>{% endif %}
+      {% if current_user %}
+      <a href="/">{{ t("nav.analyze") }}</a>
+      <a href="/history">{{ t("nav.history") }}</a>
+      <a href="/settings">{{ t("nav.settings") }}</a>
+      {% if current_user.is_admin %}<a href="/admin">{{ t("nav.admin") }}</a>{% endif %}
       <form method="post" action="/logout" style="display:inline; margin:0;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="link-button">Çıkış ({{ current_user.username }})</button>
+        <button type="submit" class="link-button">{{ t("nav.logout", name=current_user.username) }}</button>
       </form>
+      {% endif %}
+      {% set other_lang = "en" if ui_lang == "tr" else "tr" %}
+      <a class="lang-switch" href="/language/{{ other_lang }}?next={{ request.url.path | urlencode }}" lang="{{ other_lang }}">{{ t("nav.switch_language") }}</a>
     </nav>
-    {% endif %}
   </header>
   {% block content %}{% endblock %}
 </div>

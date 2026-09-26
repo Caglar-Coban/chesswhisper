@@ -1,50 +1,50 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — Analiz{% endblock %}
+{% block title %}chesswhisper — {{ t("title.analyze") }}{% endblock %}
 {% block content %}
 <div class="card">
   <form id="analyze-form" method="post" action="/analyze" enctype="multipart/form-data" onsubmit="return handleSubmit()">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label for="source">Oyun kaynağı</label>
+    <label for="source">{{ t("analyze.source") }}</label>
     <select id="source" name="source" onchange="updateSource()">
-      <option value="file" selected>PGN dosyası</option>
-      <option value="lichess">Lichess kullanıcısı</option>
-      <option value="chesscom">chess.com kullanıcısı</option>
+      <option value="file" selected>{{ t("analyze.source_file") }}</option>
+      <option value="lichess">{{ t("analyze.source_lichess") }}</option>
+      <option value="chesscom">{{ t("analyze.source_chesscom") }}</option>
     </select>
 
     <div id="file-field">
-      <label for="pgn">PGN dosyası</label>
+      <label for="pgn">{{ t("analyze.file") }}</label>
       <input type="file" id="pgn" name="pgn" accept=".pgn" required>
-      <p class="hint">Chess.com veya Lichess'ten indirdiğin bir .pgn dosyası.</p>
+      <p class="hint">{{ t("analyze.file_hint") }}</p>
     </div>
 
     <div id="fetch-fields" style="display: none;">
-      <label for="username">Kullanıcı adı</label>
-      <input type="text" id="username" name="username" placeholder="Platformdaki kullanıcı adın">
-      <label for="max_games">Oyun sayısı</label>
+      <label for="username">{{ t("analyze.username") }}</label>
+      <input type="text" id="username" name="username" placeholder="{{ t('analyze.username_placeholder') }}">
+      <label for="max_games">{{ t("analyze.max_games") }}</label>
       <input type="number" id="max_games" name="max_games" value="{{ default_max_games }}" min="1" max="{{ max_games_limit }}">
-      <p class="hint">Son oynadığın oyunlar çekilir (en fazla {{ max_games_limit }}, yalnızca herkese açık oyunlar). Ne kadar çok oyun seçersen analiz o kadar uzun sürer.</p>
+      <p class="hint">{{ t("analyze.max_games_hint", n=max_games_limit) }}</p>
     </div>
 
-    <label for="player">Oyuncu adı (opsiyonel)</label>
-    <input type="text" id="player" name="player" placeholder="Boş bırakırsan otomatik tespit edilir">
-    <p class="hint">Kullanıcı adıyla oyun çekiyorsan boş bırakabilirsin; kullanıcı adın kullanılır.</p>
+    <label for="player">{{ t("analyze.player") }}</label>
+    <input type="text" id="player" name="player" placeholder="{{ t('analyze.player_placeholder') }}">
+    <p class="hint">{{ t("analyze.player_hint") }}</p>
 
-    <label for="lang">Rapor dili</label>
+    <label for="lang">{{ t("analyze.lang") }}</label>
     <select id="lang" name="lang">
-      <option value="tr" selected>Türkçe</option>
-      <option value="en">English</option>
+      <option value="tr"{% if ui_lang == "tr" %} selected{% endif %}>Türkçe</option>
+      <option value="en"{% if ui_lang == "en" %} selected{% endif %}>English</option>
     </select>
 
-    <label for="llm">Koçluk yorumu</label>
+    <label for="llm">{{ t("analyze.llm") }}</label>
     <select id="llm" name="llm">
-      <option value="none" selected>Yok (sadece istatistik)</option>
+      <option value="none" selected>{{ t("analyze.llm_none") }}</option>
       <option value="claude">Claude</option>
       <option value="openai">OpenAI</option>
     </select>
-    <p class="hint">Claude/OpenAI seçilirse, önce <a href="/settings">Ayarlar</a> sayfasından kendi API anahtarını girmelisin.</p>
+    <p class="hint">{{ t("analyze.llm_hint") | safe }}</p>
 
-    <button type="submit" id="submit-btn">Analiz Et</button>
-    <p class="status-line" id="status-line">Analiz başlatılıyor… oyunlar çekiliyorsa bu birkaç saniye sürebilir.</p>
+    <button type="submit" id="submit-btn">{{ t("analyze.submit") }}</button>
+    <p class="status-line" id="status-line">{{ t("analyze.starting_note") }}</p>
   </form>
 </div>
 <script>
@@ -59,7 +59,7 @@
 
   function handleSubmit() {
     document.getElementById("submit-btn").disabled = true;
-    document.getElementById("submit-btn").textContent = "Başlatılıyor…";
+    document.getElementById("submit-btn").textContent = {{ t("analyze.starting") | tojson }};
     document.getElementById("status-line").style.display = "block";
     return true;
   }

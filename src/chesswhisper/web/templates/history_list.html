@@ -1,26 +1,26 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — Geçmiş{% endblock %}
+{% block title %}chesswhisper — {{ t("title.history") }}{% endblock %}
 {% block content %}
 {% if viewing_as_admin %}
-<p class="hint page-note">{{ target_username }} kullanıcısının analiz geçmişini görüntülüyorsun.</p>
+<p class="hint page-note">{{ t("history.viewing_as_admin", name=target_username) }}</p>
 {% endif %}
 
 {% if trend %}
 <section class="card trend-card" aria-labelledby="trend-title">
   <div class="trend-head">
     <div>
-      <h2 id="trend-title" class="section-title">Eğilim</h2>
-      <p class="hint trend-sub">Analizler eskiden yeniye. Bir noktaya tıklayınca raporu açılır.</p>
+      <h2 id="trend-title" class="section-title">{{ t("history.trend") }}</h2>
+      <p class="hint trend-sub">{{ t("history.trend_sub") }}</p>
     </div>
     {% if trend.players|length > 1 %}
     <form method="get" action="{{ request.url.path }}" class="player-picker">
-      <label for="trend-player">Oyuncu</label>
+      <label for="trend-player">{{ t("history.player") }}</label>
       <select id="trend-player" name="player">
         {% for name in trend.players %}
         <option value="{{ name }}"{% if name == trend.selected %} selected{% endif %}>{{ name }}</option>
         {% endfor %}
       </select>
-      <noscript><button type="submit" class="secondary-button">Göster</button></noscript>
+      <noscript><button type="submit" class="secondary-button">{{ t("history.show") }}</button></noscript>
     </form>
     {% else %}
     <p class="trend-player-name">{{ trend.selected }}</p>
@@ -30,29 +30,29 @@
   {% if trend.has_enough_points %}
   <div class="trend-charts" id="trend-charts" data-detail-prefix="{{ detail_url_prefix }}">
     <figure class="trend-chart">
-      <figcaption><span class="metric">Doğruluk</span> <span class="metric-note">% · yüksek daha iyi</span></figcaption>
+      <figcaption><span class="metric">{{ t("history.accuracy") }}</span> <span class="metric-note">{{ t("history.accuracy_note") }}</span></figcaption>
       <svg id="trend-accuracy" tabindex="0" role="img"></svg>
     </figure>
     <figure class="trend-chart">
-      <figcaption><span class="metric">ACPL</span> <span class="metric-note">ortalama kayıp · düşük daha iyi</span></figcaption>
+      <figcaption><span class="metric">ACPL</span> <span class="metric-note">{{ t("history.acpl_note") }}</span></figcaption>
       <svg id="trend-acpl" tabindex="0" role="img"></svg>
     </figure>
     <div class="trend-tooltip" id="trend-tooltip" hidden></div>
   </div>
   <script type="application/json" id="trend-data">{{ trend.chart_data()|tojson }}</script>
   {% else %}
-  <p class="trend-empty">Eğilim için en az 2 analiz gerekli. {{ trend.selected }} için şu an {{ trend.points|length }} analiz var.</p>
+  <p class="trend-empty">{{ t("history.need_two", player=trend.selected, n=trend.points|length) }}</p>
   {% endif %}
 </section>
 {% endif %}
 
 <section class="card">
-  <h2 class="section-title">Analizler</h2>
+  <h2 class="section-title">{{ t("history.analyses") }}</h2>
   {% if records %}
   <div class="table-scroll">
     <table class="data-table">
       <thead>
-        <tr><th>Tarih</th><th>Oyuncu</th><th class="num">Doğruluk</th><th class="num">ACPL</th><th class="num">Oyun</th><th></th></tr>
+        <tr><th>{{ t("history.date") }}</th><th>{{ t("history.player") }}</th><th class="num">{{ t("history.accuracy") }}</th><th class="num">ACPL</th><th class="num">{{ t("history.games") }}</th><th></th></tr>
       </thead>
       <tbody>
         {% for r in records %}
@@ -63,11 +63,11 @@
           <td class="num">{{ "%.1f"|format(r.overall_acpl) }}</td>
           <td class="num">{{ r.games_count }}</td>
           <td class="row-actions">
-            <a href="{{ detail_url_prefix }}/{{ r.id }}">Görüntüle</a>
+            <a href="{{ detail_url_prefix }}/{{ r.id }}">{{ t("history.view") }}</a>
             {% if not viewing_as_admin %}
             <form method="post" action="/history/{{ r.id }}/delete">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <button type="submit" class="link-button danger">Sil</button>
+              <button type="submit" class="link-button danger">{{ t("history.delete") }}</button>
             </form>
             {% endif %}
           </td>
@@ -87,7 +87,7 @@
     });
   </script>
   {% else %}
-  <p class="trend-empty">Henüz kaydedilmiş bir analiz yok. <a href="/">İlk analizini başlat</a>.</p>
+  <p class="trend-empty">{{ t("history.empty") }} <a href="/">{{ t("history.start_first") }}</a>.</p>
   {% endif %}
 </section>
 
@@ -110,9 +110,15 @@
   var HEIGHT = 150;
   var MARGIN = { top: 12, right: 52, bottom: 26, left: 40 };
 
+  var TEXT = {
+    accuracy: {{ t("history.accuracy") | tojson }},
+    aria: {{ t("history.js.aria") | tojson }},
+    accuracyLower: {{ t("history.js.accuracy") | tojson }},
+    games: {{ t("history.js.games") | tojson }}
+  };
   var charts = [
     { svg: document.getElementById("trend-accuracy"), key: "accuracy", axis: data.accuracy_axis,
-      name: "Doğruluk", format: function (v) { return v.toFixed(1) + "%"; } },
+      name: TEXT.accuracy, format: function (v) { return v.toFixed(1) + "%"; } },
     { svg: document.getElementById("trend-acpl"), key: "acpl", axis: data.acpl_axis,
       name: "ACPL", format: function (v) { return v.toFixed(1); } }
   ];
@@ -148,8 +154,8 @@
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
     var first = points[0][chart.key], last = points[points.length - 1][chart.key];
-    svg.setAttribute("aria-label", data.player + " — " + chart.name + ": " + points.length +
-      " analizde " + chart.format(first) + " değerinden " + chart.format(last) + " değerine.");
+    svg.setAttribute("aria-label", data.player + " — " + chart.name + ": " + TEXT.aria
+      .replace("{n}", points.length).replace("{first}", chart.format(first)).replace("{last}", chart.format(last)));
 
     chart.axis.ticks.forEach(function (t) {
       var y = yAt(t, chart.axis);
@@ -236,9 +242,9 @@
     date.className = "tooltip-date";
     date.textContent = p.label;
     tooltip.appendChild(date);
-    tooltip.appendChild(row(p.accuracy.toFixed(1) + "%", "doğruluk"));
+    tooltip.appendChild(row(p.accuracy.toFixed(1) + "%", TEXT.accuracyLower));
     tooltip.appendChild(row(p.acpl.toFixed(1), "ACPL"));
-    tooltip.appendChild(row(String(p.games), "oyun"));
+    tooltip.appendChild(row(String(p.games), TEXT.games));
     tooltip.hidden = false;
 
     // Beside the crosshair, never on it, so the hovered points stay visible.

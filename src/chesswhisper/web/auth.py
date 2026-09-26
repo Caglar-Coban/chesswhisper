@@ -35,11 +35,23 @@ async def verify_csrf(request: Request, csrf_token: str = Form(...)) -> None:
         raise Forbidden()
 
 
+def start_session(request: Request, user: User) -> None:
+    request.session["user_id"] = user.id
+    request.session["session_version"] = user.session_version
+
+
 def get_optional_current_user(request: Request, db: Session = Depends(get_db)) -> User | None:
     user_id = request.session.get("user_id")
     if user_id is None:
         return None
-    return db.get(User, user_id)
+    user = db.get(User, user_id)
+    # Sessions from before a password change (or before session versions
+    # existed, which count as version 0) no longer identify the user.
+    if user is None or request.session.get("session_version", 0) != user.session_version:
+        request.session.pop("user_id", None)
+        request.session.pop("session_version", None)
+        return None
+    return user
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:

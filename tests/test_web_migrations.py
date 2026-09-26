@@ -14,7 +14,7 @@ from chesswhisper.web import db as db_module
 from chesswhisper.web import models  # noqa: F401 -- registers tables on Base.metadata
 from chesswhisper.web.db import BASELINE_REVISION, Base, get_db, init_db, migrations_dir
 
-HEAD = "0003_game_timelines"
+HEAD = "0004_session_version"
 
 
 def _engine(db_path):
