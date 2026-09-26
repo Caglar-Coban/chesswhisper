@@ -16,17 +16,29 @@ from chesswhisper.pgn_loader import load_pgn
 from chesswhisper.report_writer import write_report
 from chesswhisper.stats_engine import build_aggregate_report, build_game_report, detect_player
 
+# Stockfish defaults to one thread and a 16 MB hash table; more of both
+# searches several times as many positions in the same think time.
+ENGINE_HASH_MB = 128
+MAX_DEFAULT_THREADS = 4
 
-def _open_engine(engine_path=None):
+
+def default_threads() -> int:
+    """Half the CPU cores, capped so a busy machine keeps some headroom."""
+    return max(1, min(MAX_DEFAULT_THREADS, (os.cpu_count() or 1) // 2))
+
+
+def _open_engine(engine_path=None, threads=None):
     import chess.engine
 
     from chesswhisper.engine_provision import resolve_installed_stockfish
 
     path = resolve_installed_stockfish(engine_path) or get_stockfish_path()
     try:
-        return chess.engine.SimpleEngine.popen_uci(str(path))
+        engine = chess.engine.SimpleEngine.popen_uci(str(path))
     except OSError as exc:
         raise StockfishProvisionError(f"Failed to start Stockfish at {path}: {exc}") from exc
+    engine.configure({"Threads": threads or default_threads(), "Hash": ENGINE_HASH_MB})
+    return engine
 
 
 def _build_llm_provider(name: str, api_key: str | None = None):
@@ -83,6 +95,7 @@ def run_analysis(
     engine_path=None,
     llm_api_key=None,
     on_progress: Callable[[int, int], None] | None = None,
+    threads: int | None = None,
 ):
     """Runs the full analysis pipeline and returns (aggregate_report, commentary, warnings).
 
@@ -117,7 +130,7 @@ def run_analysis(
 
     eco_table = load_eco_table()
 
-    engine = _open_engine(engine_path=engine_path)
+    engine = _open_engine(engine_path=engine_path, threads=threads)
 
     total_games = len(load_result.games)
     skipped_for_player = 0
@@ -182,8 +195,13 @@ def cli():
 )
 @click.option("--depth", default=None, type=click.IntRange(min=1), help="Fixed search depth (overrides --movetime).")
 @click.option("--engine-path", default=None, help="Path to an existing Stockfish binary (skips auto-download).")
+@click.option(
+    "--threads", default=None, type=click.IntRange(min=1, max=256),
+    help=f"Stockfish search threads (default: half your CPU cores, at most {MAX_DEFAULT_THREADS}).",
+)
 def analyze(
-    pgn_path, lichess_user, chesscom_user, max_games, player, lang, llm_name, output_path, movetime, depth, engine_path
+    pgn_path, lichess_user, chesscom_user, max_games, player, lang, llm_name, output_path, movetime, depth,
+    engine_path, threads,
 ):
     sources_given = [s for s in (pgn_path, lichess_user, chesscom_user) if s is not None]
     if len(sources_given) != 1:
@@ -235,7 +253,8 @@ def analyze(
 
         try:
             aggregate, commentary, warnings = run_analysis(
-                analysis_path, player, lang, llm_name, movetime=movetime, depth=depth, engine_path=engine_path
+                analysis_path, player, lang, llm_name, movetime=movetime, depth=depth, engine_path=engine_path,
+                threads=threads,
             )
         except (OSError, ValueError, StockfishProvisionError) as exc:
             click.echo(f"Error: {exc}", err=True)

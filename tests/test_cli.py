@@ -4,7 +4,7 @@ import textwrap
 import pytest
 from click.testing import CliRunner
 
-from chesswhisper.cli import _open_engine, cli, run_analysis
+from chesswhisper.cli import ENGINE_HASH_MB, _open_engine, cli, default_threads, run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
 from chesswhisper.game_sources import DEFAULT_MAX_GAMES, MAX_GAMES_LIMIT, FetchResult, GameFetchError
 
@@ -611,3 +611,62 @@ def test_version_option_prints_the_package_version():
 
     assert result.exit_code == 0
     assert version("chesswhisper") in result.output
+
+
+# --- engine configuration ---
+
+
+class _RecordingEngine:
+    def __init__(self):
+        self.options = None
+
+    def configure(self, options):
+        self.options = options
+
+
+def test_open_engine_configures_threads_and_hash(monkeypatch):
+    import chess.engine
+
+    engine = _RecordingEngine()
+    monkeypatch.setattr(chess.engine.SimpleEngine, "popen_uci", staticmethod(lambda path: engine))
+    monkeypatch.setattr("chesswhisper.engine_provision.resolve_installed_stockfish", lambda path: "stockfish")
+
+    assert _open_engine(threads=3) is engine
+    assert engine.options == {"Threads": 3, "Hash": ENGINE_HASH_MB}
+
+
+def test_open_engine_defaults_to_half_the_cores_capped_at_four(monkeypatch):
+    import chess.engine
+
+    engine = _RecordingEngine()
+    monkeypatch.setattr(chess.engine.SimpleEngine, "popen_uci", staticmethod(lambda path: engine))
+    monkeypatch.setattr("chesswhisper.engine_provision.resolve_installed_stockfish", lambda path: "stockfish")
+    monkeypatch.setattr("chesswhisper.cli.os.cpu_count", lambda: 32)
+
+    _open_engine()
+
+    assert engine.options["Threads"] == 4
+
+
+def test_default_threads_is_at_least_one(monkeypatch):
+    monkeypatch.setattr("chesswhisper.cli.os.cpu_count", lambda: None)
+    assert default_threads() == 1
+
+
+def test_analyze_passes_threads_to_the_engine(tmp_path, monkeypatch):
+    pgn_path = tmp_path / "game.pgn"
+    pgn_path.write_text(SAMPLE_PGN, encoding="utf-8")
+    seen = {}
+
+    def fake_open_engine(**kwargs):
+        seen.update(kwargs)
+        return FakeEngine()
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", fake_open_engine)
+
+    result = CliRunner().invoke(
+        cli, ["analyze", str(pgn_path), "--player", "Alice", "--threads", "2", "-o", str(tmp_path / "r.md")]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen["threads"] == 2
