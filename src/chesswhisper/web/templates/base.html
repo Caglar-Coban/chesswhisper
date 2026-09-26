@@ -18,6 +18,8 @@
     --error-bg: #fdecea;
     --error-border: #f5b7b1;
     --danger: #b3261e;
+    --success-bg: #e8f5ec;
+    --success-border: #9fd3b0;
     --radius: 10px;
   }
   @media (prefers-color-scheme: dark) {
@@ -34,6 +36,8 @@
       --error-bg: #3a1f1d;
       --error-border: #8a3b34;
       --danger: #f28b82;
+      --success-bg: #173222;
+      --success-border: #2f6b45;
     }
   }
   * { box-sizing: border-box; }
@@ -83,7 +87,7 @@
     margin: 18px 0 6px;
   }
   label:first-of-type { margin-top: 0; }
-  input[type="file"], input[type="text"], select {
+  input[type="file"], input[type="text"], input[type="password"], input[type="number"], select {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--border);
@@ -138,6 +142,10 @@
   }
   .banner.warning { background: var(--warning-bg); border: 1px solid var(--warning-border); }
   .banner.error { background: var(--error-bg); border: 1px solid var(--error-border); }
+  .banner.success { background: var(--success-bg); border: 1px solid var(--success-border); }
+  .key-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; }
+  .key-row + .key-row { margin-top: 8px; }
+  .key-row form { margin: 0; }
   .banner ul { margin: 6px 0 0; padding-left: 20px; }
   .report table {
     width: 100%;

@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import tempfile
 import threading
 from collections.abc import Callable
@@ -40,6 +41,7 @@ from chesswhisper.web.boards import board_cards
 from chesswhisper.web.db import get_db, utcnow
 from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
 from chesswhisper.web.security import (
+    MIN_PASSWORD_LENGTH,
     decrypt_api_key,
     encrypt_api_key,
     get_session_secret,
@@ -51,6 +53,12 @@ from chesswhisper.web.trend import build_trend
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
 FETCH_SOURCES = ("lichess", "chesscom")
+REPORT_LANGS = ("tr", "en")
+LLM_CHOICES = ("none", "claude", "openai")
+# A PGN of several thousand games fits comfortably; this only stops runaway uploads.
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+_USERNAME_RE = re.compile(r"\S{3,30}")
+_KEY_COLUMNS = {"anthropic": "anthropic_key_encrypted", "openai": "openai_key_encrypted"}
 
 
 def _naive_utcnow():
@@ -183,10 +191,16 @@ async def register_submit(
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
-    if len(password) < 8:
+    username = username.strip()
+    if not _USERNAME_RE.fullmatch(username):
         return _render(
             request, "register.html",
-            {"current_user": None, "error": "Parola en az 8 karakter olmalı."},
+            {"current_user": None, "error": "Kullanıcı adı 3-30 karakter olmalı ve boşluk içermemeli."},
+        )
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return _render(
+            request, "register.html",
+            {"current_user": None, "error": f"Parola en az {MIN_PASSWORD_LENGTH} karakter olmalı."},
         )
     if db.query(User).filter_by(username=username).first() is not None:
         return _render(
@@ -220,7 +234,7 @@ async def login_submit(
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
-    user = db.query(User).filter_by(username=username).first()
+    user = db.query(User).filter_by(username=username.strip()).first()
 
     if user is not None and user.locked_until is not None and user.locked_until > _naive_utcnow():
         remaining_minutes = max(1, int((user.locked_until - _naive_utcnow()).total_seconds() // 60) + 1)
@@ -257,11 +271,13 @@ async def logout(request: Request, _csrf: None = Depends(verify_csrf)) -> Redire
     return RedirectResponse("/login", status_code=303)
 
 
-@app.get("/settings", response_class=HTMLResponse)
-async def settings_form(
+def _render_settings(
     request: Request,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    current_user: User,
+    db: Session,
+    message: str | None = None,
+    password_message: str | None = None,
+    password_error: str | None = None,
 ) -> HTMLResponse:
     key_row = db.get(UserApiKey, current_user.id)
     return _render(
@@ -270,8 +286,22 @@ async def settings_form(
             "current_user": current_user,
             "has_anthropic_key": bool(key_row and key_row.anthropic_key_encrypted),
             "has_openai_key": bool(key_row and key_row.openai_key_encrypted),
-            "message": "Devam etmeden önce bir API anahtarı gir." if request.query_params.get("message") == "missing_key" else None,
+            "message": message,
+            "password_message": password_message,
+            "password_error": password_error,
         },
+    )
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_form(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    missing_key = request.query_params.get("message") == "missing_key"
+    return _render_settings(
+        request, current_user, db, message="Devam etmeden önce bir API anahtarı gir." if missing_key else None
     )
 
 
@@ -289,22 +319,62 @@ async def settings_submit(
         key_row = UserApiKey(user_id=current_user.id)
         db.add(key_row)
 
+    anthropic_key, openai_key = anthropic_key.strip(), openai_key.strip()
     if anthropic_key:
         key_row.anthropic_key_encrypted = encrypt_api_key(anthropic_key)
     if openai_key:
         key_row.openai_key_encrypted = encrypt_api_key(openai_key)
+    key_row.updated_at = utcnow()
 
     db.commit()
 
-    return _render(
-        request, "settings.html",
-        {
-            "current_user": current_user,
-            "has_anthropic_key": bool(key_row.anthropic_key_encrypted),
-            "has_openai_key": bool(key_row.openai_key_encrypted),
-            "message": "Kaydedildi.",
-        },
-    )
+    return _render_settings(request, current_user, db, message="Kaydedildi.")
+
+
+@app.post("/settings/delete-key", response_class=HTMLResponse)
+async def settings_delete_key(
+    request: Request,
+    provider: str = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse:
+    column = _KEY_COLUMNS.get(provider)
+    if column is None:
+        return _render_error(request, "Geçersiz sağlayıcı.", 400, current_user)
+
+    key_row = db.get(UserApiKey, current_user.id)
+    if key_row is not None:
+        setattr(key_row, column, None)
+        key_row.updated_at = utcnow()
+        db.commit()
+
+    return _render_settings(request, current_user, db, message="Anahtar silindi.")
+
+
+@app.post("/settings/password", response_class=HTMLResponse)
+async def settings_change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse:
+    error = None
+    if not verify_password(current_password, current_user.password_hash):
+        error = "Mevcut parola yanlış."
+    elif len(new_password) < MIN_PASSWORD_LENGTH:
+        error = f"Yeni parola en az {MIN_PASSWORD_LENGTH} karakter olmalı."
+    elif new_password != confirm_password:
+        error = "Yeni parola ile tekrarı eşleşmiyor."
+    if error is not None:
+        return _render_settings(request, current_user, db, password_error=error)
+
+    current_user.password_hash = hash_password(new_password)
+    db.commit()
+    return _render_settings(request, current_user, db, password_message="Parola güncellendi.")
 
 
 @app.get("/history", response_class=HTMLResponse)
@@ -406,6 +476,15 @@ async def analyze(
     fetching = source in FETCH_SOURCES
     if source != "file" and not fetching:
         return _render_error(request, "Geçersiz oyun kaynağı.", 400, current_user)
+    if lang not in REPORT_LANGS:
+        return _render_error(request, "Geçersiz rapor dili.", 400, current_user)
+    if llm not in LLM_CHOICES:
+        return _render_error(request, "Geçersiz koçluk yorumu seçeneği.", 400, current_user)
+
+    running = jobs.running_job_for(current_user.id)
+    if running is not None:
+        # One analysis per user at a time: each one runs its own Stockfish.
+        return RedirectResponse(f"/analyze/progress/{running.id}", status_code=303)
 
     contents = b""
     game_count = DEFAULT_MAX_GAMES
@@ -420,7 +499,11 @@ async def analyze(
     else:
         if pgn is None or not pgn.filename:
             return _render_error(request, "Lütfen analiz edilecek bir PGN dosyası seçin.", 400, current_user)
-        contents = await pgn.read()
+        contents = await pgn.read(MAX_UPLOAD_BYTES + 1)
+        if len(contents) > MAX_UPLOAD_BYTES:
+            return _render_error(
+                request, f"PGN dosyası en fazla {MAX_UPLOAD_BYTES // (1024 * 1024)} MB olabilir.", 413, current_user
+            )
 
     llm_api_key = None
     if llm != "none":
@@ -498,8 +581,10 @@ async def admin_users_list(
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     users = db.query(User).order_by(User.created_at).all()
+    now = _naive_utcnow()
+    locked_ids = {u.id for u in users if u.locked_until is not None and u.locked_until > now}
     return _render(
-        request, "admin_users.html", {"current_user": current_user, "users": users}
+        request, "admin_users.html", {"current_user": current_user, "users": users, "locked_ids": locked_ids}
     )
 
 
@@ -587,9 +672,12 @@ async def admin_reset_password(
     if target is None:
         return _render_error(request, "Kullanıcı bulunamadı.", 404, current_user)
 
-    if len(new_password) < 8:
-        return _render_error(request, "Parola en az 8 karakter olmalı.", 400, current_user)
+    if len(new_password) < MIN_PASSWORD_LENGTH:
+        return _render_error(request, f"Parola en az {MIN_PASSWORD_LENGTH} karakter olmalı.", 400, current_user)
 
     target.password_hash = hash_password(new_password)
+    # A reset is how an admin lets a locked-out user back in.
+    target.failed_login_attempts = 0
+    target.locked_until = None
     db.commit()
     return RedirectResponse(f"/admin/users/{user_id}", status_code=303)

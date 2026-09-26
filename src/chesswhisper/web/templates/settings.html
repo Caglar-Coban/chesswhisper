@@ -2,19 +2,52 @@
 {% block title %}chesswhisper — Ayarlar{% endblock %}
 {% block content %}
 <div class="card">
+  <h2 class="section-title">API anahtarları</h2>
   {% if message %}<div class="banner warning">{{ message }}</div>{% endif %}
   <form method="post" action="/settings">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label for="anthropic_key">Anthropic (Claude) API anahtarı</label>
-    <input type="password" id="anthropic_key" name="anthropic_key"
+    <input type="password" id="anthropic_key" name="anthropic_key" autocomplete="off"
            placeholder="{% if has_anthropic_key %}•••••••• (kayıtlı, değiştirmek için yeni bir değer gir){% else %}kayıtlı değil{% endif %}">
 
     <label for="openai_key">OpenAI API anahtarı</label>
-    <input type="password" id="openai_key" name="openai_key"
+    <input type="password" id="openai_key" name="openai_key" autocomplete="off"
            placeholder="{% if has_openai_key %}•••••••• (kayıtlı, değiştirmek için yeni bir değer gir){% else %}kayıtlı değil{% endif %}">
 
-    <p class="hint">Bir alanı boş bırakırsan mevcut kayıtlı anahtar (varsa) değişmeden kalır.</p>
+    <p class="hint">Bir alanı boş bırakırsan mevcut kayıtlı anahtar (varsa) değişmeden kalır. Anahtarlar şifrelenmiş olarak saklanır.</p>
     <button type="submit">Kaydet</button>
+  </form>
+  {% if has_anthropic_key or has_openai_key %}
+  <div style="margin-top: 22px;">
+    {% for provider, label, saved in [("anthropic", "Anthropic (Claude)", has_anthropic_key), ("openai", "OpenAI", has_openai_key)] %}
+    {% if saved %}
+    <div class="key-row">
+      <span>{{ label }} anahtarı kayıtlı</span>
+      <form method="post" action="/settings/delete-key">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="provider" value="{{ provider }}">
+        <button type="submit" class="link-button danger">Sil</button>
+      </form>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 class="section-title">Parola değiştir</h2>
+  {% if password_error %}<div class="banner error">{{ password_error }}</div>{% endif %}
+  {% if password_message %}<div class="banner success">{{ password_message }}</div>{% endif %}
+  <form method="post" action="/settings/password">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="current_password">Mevcut parola</label>
+    <input type="password" id="current_password" name="current_password" autocomplete="current-password" required>
+    <label for="new_password">Yeni parola</label>
+    <input type="password" id="new_password" name="new_password" autocomplete="new-password" minlength="8" required>
+    <label for="confirm_password">Yeni parola (tekrar)</label>
+    <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" minlength="8" required>
+    <button type="submit">Parolayı güncelle</button>
   </form>
 </div>
 {% endblock %}

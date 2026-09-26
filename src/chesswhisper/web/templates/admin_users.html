@@ -7,7 +7,7 @@
     <tbody>
       {% for u in users %}
       <tr>
-        <td>{{ u.username }}</td>
+        <td>{{ u.username }}{% if u.id in locked_ids %} <span class="move-badge badge-blunder" title="Çok fazla hatalı giriş; parolayı sıfırlamak kilidi açar">Kilitli</span>{% endif %}</td>
         <td>{{ "Evet" if u.is_admin else "Hayır" }}</td>
         <td>{{ u.analyses|length }}</td>
         <td>{{ u.created_at.strftime("%Y-%m-%d") }}</td>

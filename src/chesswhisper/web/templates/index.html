@@ -44,7 +44,7 @@
     <p class="hint">Claude/OpenAI seçilirse, önce <a href="/settings">Ayarlar</a> sayfasından kendi API anahtarını girmelisin.</p>
 
     <button type="submit" id="submit-btn">Analiz Et</button>
-    <p class="status-line" id="status-line">Analiz ediliyor… bu birkaç dakika sürebilir, lütfen sayfadan ayrılmayın.</p>
+    <p class="status-line" id="status-line">Analiz başlatılıyor… oyunlar çekiliyorsa bu birkaç saniye sürebilir.</p>
   </form>
 </div>
 <script>
@@ -59,7 +59,7 @@
 
   function handleSubmit() {
     document.getElementById("submit-btn").disabled = true;
-    document.getElementById("submit-btn").textContent = "Analiz ediliyor…";
+    document.getElementById("submit-btn").textContent = "Başlatılıyor…";
     document.getElementById("status-line").style.display = "block";
     return true;
   }

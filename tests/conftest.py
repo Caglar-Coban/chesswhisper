@@ -50,3 +50,18 @@ def _run_background_jobs_inline(monkeypatch):
     module = sys.modules.get("chesswhisper.web.app")
     if module is not None:
         monkeypatch.setattr(module, "_start_background", lambda target: target())
+
+
+@pytest.fixture(autouse=True)
+def _isolate_job_registry():
+    """The job registry is process-wide and every test database's first user
+    has id 1, so a job one test leaves "running" would otherwise count as
+    that user's in-progress analysis in the next test.
+    """
+    module = sys.modules.get("chesswhisper.web.jobs")
+    if module is not None:
+        module._jobs.clear()
+    yield
+    module = sys.modules.get("chesswhisper.web.jobs")
+    if module is not None:
+        module._jobs.clear()
