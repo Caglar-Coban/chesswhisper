@@ -215,6 +215,10 @@ class GameReport:
     your_elo: int | None = None
     opponent_elo: int | None = None
     moves: list[MoveRecord] = field(default_factory=list)
+    white: str = ""
+    black: str = ""
+    # Every ply's evaluation, for replaying the game (see timeline.py).
+    evals: list = field(default_factory=list)
 
 
 @dataclass
@@ -408,6 +412,9 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
         your_elo=white_elo if your_bool_color else black_elo,
         opponent_elo=black_elo if your_bool_color else white_elo,
         moves=_move_records(evals, your_bool_color),
+        white=white,
+        black=black,
+        evals=list(evals),
     )
 
 

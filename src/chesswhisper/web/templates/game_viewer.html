@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — Oyun {{ game_number }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="viewer-head">
+    <h2>{{ timeline.white }} – {{ timeline.black }}</h2>
+    <p>
+      Oyun {{ game_number }} / {{ games_total }} · {{ timeline.opening }} ({{ timeline.eco }})
+      · {{ {"win": "Kazandın", "loss": "Kaybettin", "draw": "Berabere"}.get(timeline.result, "Sonuç bilinmiyor") }}
+    </p>
+  </div>
+  <div class="viewer">
+    <div>
+      <div class="viewer-board" id="board" role="img" aria-label="Satranç tahtası"></div>
+      <div class="viewer-controls">
+        <button type="button" class="secondary-button" id="btn-first" aria-label="Başa">⏮</button>
+        <button type="button" class="secondary-button" id="btn-prev" aria-label="Önceki hamle">◀</button>
+        <button type="button" class="secondary-button" id="btn-next" aria-label="Sonraki hamle">▶</button>
+        <button type="button" class="secondary-button" id="btn-last" aria-label="Sona">⏭</button>
+        <span class="spacer"></span>
+        <button type="button" class="secondary-button" id="btn-flip" aria-label="Tahtayı çevir">⇅</button>
+      </div>
+      <div class="viewer-info" id="info" aria-live="polite"></div>
+    </div>
+    <div>
+      <div class="eval-graph" id="graph"></div>
+      <p class="hint">Değerlendirme beyazın açısından. Grafiğe ya da bir hamleye tıkla; ← → tuşlarıyla da gezebilirsin.</p>
+      <div class="move-list" id="moves"></div>
+    </div>
+  </div>
+  <div class="viewer-nav">
+    <span>{% if game_number > 1 %}<a href="{{ url_prefix }}/games/{{ game_number - 1 }}">&larr; Önceki oyun</a>{% endif %}</span>
+    <a href="{{ url_prefix }}">Rapora dön</a>
+    <span>{% if game_number < games_total %}<a href="{{ url_prefix }}/games/{{ game_number + 1 }}">Sonraki oyun &rarr;</a>{% endif %}</span>
+  </div>
+</div>
+<script>
+(function () {
+  var game = {{ timeline | tojson }};
+  var PIECES = {{ pieces | tojson }};
+  var COLORS = {{ board_colors | tojson }};
+  var LABELS = {
+    blunder: "Gaf", mistake: "Hata", inaccuracy: "Belirsizlik", fine: ""
+  };
+  var MARKS = { blunder: "??", mistake: "?", inaccuracy: "?!" };
+  var MATE = 100000, MATE_THRESHOLD = 90000, CLAMP = 1000;
+
+  var moves = game.moves;
+  var ply = 0;
+  var whiteBottom = game.your_color !== "black";
+
+  function fenAt(p) { return p === 0 ? game.start_fen : moves[p - 1].fen; }
+
+  function formatEval(cp) {
+    if (Math.abs(cp) >= MATE_THRESHOLD) {
+      var n = MATE - Math.abs(cp);
+      return (cp > 0 ? "#" : "−#") + n;
+    }
+    return (cp < 0 ? "−" : "+") + (Math.abs(cp) / 100).toFixed(1);
+  }
+
+  function squareXY(file, rank) {
+    var col = whiteBottom ? file : 7 - file;
+    var row = whiteBottom ? 7 - rank : rank;
+    return [col * 45, row * 45];
+  }
+
+  function drawBoard() {
+    var placement = fenAt(ply).split(" ")[0].split("/");
+    var last = ply > 0 ? moves[ply - 1].uci : null;
+    var marked = {};
+    if (last) {
+      marked[last.slice(0, 2)] = true;
+      marked[last.slice(2, 4)] = true;
+    }
+    var parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360">'];
+    for (var rank = 0; rank < 8; rank++) {
+      for (var file = 0; file < 8; file++) {
+        var xy = squareXY(file, rank);
+        var name = "abcdefgh"[file] + (rank + 1);
+        parts.push('<rect x="' + xy[0] + '" y="' + xy[1] + '" width="45" height="45" fill="' +
+          ((file + rank) % 2 ? COLORS.light : COLORS.dark) + '"/>');
+        if (marked[name]) {
+          parts.push('<rect x="' + xy[0] + '" y="' + xy[1] + '" width="45" height="45" fill="#f2c94c" opacity="0.45"/>');
+        }
+      }
+    }
+    for (var r = 0; r < 8; r++) {
+      var rank8 = 7 - r, f = 0;
+      for (var i = 0; i < placement[r].length; i++) {
+        var ch = placement[r][i];
+        if (ch >= "1" && ch <= "8") { f += Number(ch); continue; }
+        var pos = squareXY(f, rank8);
+        parts.push('<g transform="translate(' + pos[0] + ',' + pos[1] + ')">' + PIECES[ch] + "</g>");
+        f++;
+      }
+    }
+    for (var k = 0; k < 8; k++) {
+      var fileLabel = "abcdefgh"[whiteBottom ? k : 7 - k];
+      var rankLabel = whiteBottom ? 8 - k : k + 1;
+      parts.push('<text x="' + (k * 45 + 41) + '" y="357" font-size="8" text-anchor="end" fill="' + COLORS.coord + '">' + fileLabel + "</text>");
+      parts.push('<text x="2" y="' + (k * 45 + 10) + '" font-size="8" fill="' + COLORS.coord + '">' + rankLabel + "</text>");
+    }
+    parts.push("</svg>");
+    document.getElementById("board").innerHTML = parts.join("");
+  }
+
+  function drawInfo() {
+    var info = document.getElementById("info");
+    info.textContent = "";
+    if (ply === 0) {
+      info.textContent = "Başlangıç pozisyonu";
+      return;
+    }
+    var m = moves[ply - 1];
+    var line = document.createElement("div");
+    line.textContent = m.move_number + (m.color === "white" ? ". " : "... ") + m.san +
+      (LABELS[m.classification] ? " — " + LABELS[m.classification] : "");
+    var evalLine = document.createElement("div");
+    var evalSpan = document.createElement("span");
+    evalSpan.className = "eval";
+    evalSpan.textContent = formatEval(m.eval);
+    evalLine.appendChild(document.createTextNode("Değerlendirme: "));
+    evalLine.appendChild(evalSpan);
+    if (m.best_san) {
+      evalLine.appendChild(document.createTextNode(" · Daha iyisi: " + m.best_san));
+    }
+    info.appendChild(line);
+    info.appendChild(evalLine);
+  }
+
+  function graphY(cp) {
+    var v = Math.max(-CLAMP, Math.min(CLAMP, cp));
+    return 55 - (v / CLAMP) * 50;
+  }
+
+  function graphX(p) { return moves.length ? (p / moves.length) * 600 : 0; }
+
+  function drawGraph() {
+    var pts = [[0, graphY(0)]];
+    moves.forEach(function (m, i) { pts.push([graphX(i + 1), graphY(m.eval)]); });
+    var line = pts.map(function (p) { return p[0].toFixed(1) + "," + p[1].toFixed(1); }).join(" ");
+    var parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 110" preserveAspectRatio="none">'];
+    parts.push('<polygon class="area" points="0,55 ' + line + " " + graphX(moves.length).toFixed(1) + ',55"/>');
+    parts.push('<line class="zero" x1="0" y1="55" x2="600" y2="55"/>');
+    parts.push('<polyline class="line" points="' + line + '"/>');
+    moves.forEach(function (m, i) {
+      if (m.classification === "blunder" || m.classification === "mistake") {
+        parts.push('<circle class="dot-' + m.classification + '" cx="' + graphX(i + 1).toFixed(1) +
+          '" cy="' + graphY(m.eval).toFixed(1) + '" r="3"/>');
+      }
+    });
+    parts.push('<line class="cursor" x1="' + graphX(ply).toFixed(1) + '" y1="0" x2="' + graphX(ply).toFixed(1) + '" y2="110"/>');
+    parts.push("</svg>");
+    var graph = document.getElementById("graph");
+    graph.innerHTML = parts.join("");
+  }
+
+  function buildMoveList() {
+    var list = document.getElementById("moves");
+    moves.forEach(function (m, i) {
+      if (m.color === "white" || i === 0) {
+        var num = document.createElement("span");
+        num.className = "num";
+        num.textContent = m.move_number + ".";
+        list.appendChild(num);
+        if (m.color === "black") {
+          list.appendChild(document.createElement("span"));
+        }
+      }
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.ply = i + 1;
+      btn.appendChild(document.createTextNode(m.san));
+      if (MARKS[m.classification]) {
+        var mark = document.createElement("span");
+        mark.className = "mark-" + m.classification;
+        mark.textContent = MARKS[m.classification];
+        btn.appendChild(mark);
+      }
+      btn.addEventListener("click", function () { go(i + 1); });
+      list.appendChild(btn);
+    });
+  }
+
+  function highlightMove() {
+    var buttons = document.querySelectorAll("#moves button");
+    buttons.forEach(function (b) {
+      var current = Number(b.dataset.ply) === ply;
+      b.classList.toggle("current", current);
+      if (current) b.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  function go(p) {
+    ply = Math.max(0, Math.min(moves.length, p));
+    drawBoard();
+    drawInfo();
+    drawGraph();
+    highlightMove();
+  }
+
+  document.getElementById("btn-first").addEventListener("click", function () { go(0); });
+  document.getElementById("btn-prev").addEventListener("click", function () { go(ply - 1); });
+  document.getElementById("btn-next").addEventListener("click", function () { go(ply + 1); });
+  document.getElementById("btn-last").addEventListener("click", function () { go(moves.length); });
+  document.getElementById("btn-flip").addEventListener("click", function () { whiteBottom = !whiteBottom; drawBoard(); });
+  document.getElementById("graph").addEventListener("click", function (e) {
+    var rect = e.currentTarget.getBoundingClientRect();
+    go(Math.round(((e.clientX - rect.left) / rect.width) * moves.length));
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (e.key === "ArrowLeft") { go(ply - 1); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { go(ply + 1); e.preventDefault(); }
+    else if (e.key === "Home") { go(0); e.preventDefault(); }
+    else if (e.key === "End") { go(moves.length); e.preventDefault(); }
+  });
+
+  buildMoveList();
+  var start = Number(new URLSearchParams(window.location.search).get("ply"));
+  go(isNaN(start) ? 0 : start);
+})();
+</script>
+{% endblock %}

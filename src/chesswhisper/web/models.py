@@ -56,5 +56,8 @@ class AnalysisRecord(Base):
     # JSON list from stats_engine.critical_moves(); None for records saved
     # before it existed or with no blunders/mistakes.
     critical_moves_json: Mapped[str | None] = mapped_column(Text, default=None)
+    # JSON list from timeline.game_timelines(), for the move-by-move viewer;
+    # None for records saved before it existed.
+    games_json: Mapped[str | None] = mapped_column(Text, default=None)
 
     user: Mapped[User] = relationship(back_populates="analyses")

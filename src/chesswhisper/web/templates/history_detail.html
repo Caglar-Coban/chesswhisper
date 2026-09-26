@@ -9,6 +9,24 @@
   </ul>
 </div>
 {% endif %}
+{% if games %}
+<section class="card games-card" aria-labelledby="games-title">
+  <h2 id="games-title" class="section-title">Oyunları incele</h2>
+  <ul class="game-list">
+    {% for g in games %}
+    <li>
+      <a href="{{ games_url_prefix }}/{{ g.game_number }}">
+        <span class="game-list-title">{{ g.game_number }}. vs {{ g.opponent }}</span>
+        <span class="game-list-meta">
+          {{ {"win": "Kazandı", "loss": "Kaybetti", "draw": "Berabere"}.get(g.result, "Sonuç bilinmiyor") }}
+          · {{ "beyaz" if g.your_color == "white" else "siyah" }} · {{ g.opening }}
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 {% if cards %}
 <section class="card board-section" aria-labelledby="critical-title">
   <h2 id="critical-title" class="section-title">Kritik hatalar</h2>
@@ -32,6 +50,7 @@
         <div class="board-meta">Oyun {{ c.game_number }} · {{ c.opponent }}</div>
         {% if c.best_san %}<div class="board-best">Daha iyisi: <strong>{{ c.best_san }}</strong></div>{% endif %}
         <div class="board-eval">{{ c.eval_before }} → {{ c.eval_after }}</div>
+        {% if games %}<a class="board-link" href="{{ games_url_prefix }}/{{ c.game_number }}?ply={{ c.ply }}">Oyunda göster →</a>{% endif %}
       </figcaption>
     </figure>
     {% endfor %}

@@ -27,6 +27,7 @@ from chesswhisper.game_sources import (
 )
 from chesswhisper.report_writer import render_markdown
 from chesswhisper.stats_engine import critical_moves
+from chesswhisper.timeline import game_timelines
 from chesswhisper.web import jobs
 from chesswhisper.web.auth import (
     Forbidden,
@@ -37,7 +38,7 @@ from chesswhisper.web.auth import (
     require_admin,
     verify_csrf,
 )
-from chesswhisper.web.boards import board_cards
+from chesswhisper.web.boards import PIECE_SVGS, VIEWER_COLORS, board_cards
 from chesswhisper.web.db import get_db, utcnow
 from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
 from chesswhisper.web.security import (
@@ -146,6 +147,7 @@ def _run_analysis_job(
 
         report_markdown = render_markdown(aggregate, commentary, lang)
         moves = critical_moves(aggregate.games)
+        timelines = game_timelines(aggregate.games)
         record = AnalysisRecord(
             user_id=user_id,
             player_name=aggregate.player,
@@ -156,6 +158,7 @@ def _run_analysis_job(
             overall_accuracy=aggregate.overall_accuracy,
             report_markdown=report_markdown,
             critical_moves_json=json.dumps(moves) if moves else None,
+            games_json=json.dumps(timelines) if timelines else None,
         )
         db.add(record)
         db.commit()
@@ -172,6 +175,41 @@ def _run_analysis_job(
         db.close()
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+def _timelines(record: AnalysisRecord) -> list[dict]:
+    if not record.games_json:
+        return []
+    try:
+        timelines = json.loads(record.games_json)
+    except ValueError:
+        return []
+    return timelines if isinstance(timelines, list) else []
+
+
+def _game_summaries(record: AnalysisRecord) -> list[dict]:
+    """What the report page's game list shows, without each game's moves."""
+    return [{k: v for k, v in timeline.items() if k != "moves"} for timeline in _timelines(record)]
+
+
+def _render_game_viewer(
+    request: Request, record: AnalysisRecord, game_number: int, url_prefix: str, current_user: User
+) -> HTMLResponse:
+    timelines = _timelines(record)
+    if not 1 <= game_number <= len(timelines):
+        return _render_error(request, "Oyun bulunamadı.", 404, current_user)
+    return _render(
+        request, "game_viewer.html",
+        {
+            "current_user": current_user,
+            "timeline": timelines[game_number - 1],
+            "game_number": game_number,
+            "games_total": len(timelines),
+            "url_prefix": url_prefix,
+            "pieces": PIECE_SVGS,
+            "board_colors": VIEWER_COLORS,
+        },
+    )
 
 
 @app.get("/register", response_class=HTMLResponse, response_model=None)
@@ -429,9 +467,24 @@ async def history_detail(
         {
             "current_user": current_user, "report_html": report_html,
             "cards": board_cards(record.critical_moves_json),
+            "games": _game_summaries(record), "games_url_prefix": f"/history/{record_id}/games",
             "back_url": "/history", "warnings": warnings,
         },
     )
+
+
+@app.get("/history/{record_id}/games/{game_number}", response_class=HTMLResponse)
+async def history_game(
+    request: Request,
+    record_id: int,
+    game_number: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    record = db.get(AnalysisRecord, record_id)
+    if record is None or record.user_id != current_user.id:
+        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+    return _render_game_viewer(request, record, game_number, f"/history/{record_id}", current_user)
 
 
 @app.post("/history/{record_id}/delete", response_model=None)
@@ -638,8 +691,28 @@ async def admin_user_history_detail(
         request, "history_detail.html",
         {
             "current_user": current_user, "report_html": report_html,
-            "cards": board_cards(record.critical_moves_json), "back_url": f"/admin/users/{user_id}",
+            "cards": board_cards(record.critical_moves_json),
+            "games": _game_summaries(record),
+            "games_url_prefix": f"/admin/users/{user_id}/history/{record_id}/games",
+            "back_url": f"/admin/users/{user_id}",
         },
+    )
+
+
+@app.get("/admin/users/{user_id}/history/{record_id}/games/{game_number}", response_class=HTMLResponse)
+async def admin_user_history_game(
+    request: Request,
+    user_id: int,
+    record_id: int,
+    game_number: int,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    record = db.get(AnalysisRecord, record_id)
+    if record is None or record.user_id != user_id:
+        return _render_error(request, "Kayıt bulunamadı.", 404, current_user)
+    return _render_game_viewer(
+        request, record, game_number, f"/admin/users/{user_id}/history/{record_id}", current_user
     )
 
 

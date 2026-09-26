@@ -14,7 +14,7 @@ from chesswhisper.web import db as db_module
 from chesswhisper.web import models  # noqa: F401 -- registers tables on Base.metadata
 from chesswhisper.web.db import BASELINE_REVISION, Base, get_db, init_db, migrations_dir
 
-HEAD = "0002_critical_moves"
+HEAD = "0003_game_timelines"
 
 
 def _engine(db_path):
@@ -157,7 +157,7 @@ def _migrations_with_failing_revision(tmp_path):
             from alembic import op
 
             revision = "0099_boom"
-            down_revision = "0002_critical_moves"
+            down_revision = "{head}"
             branch_labels = None
             depends_on = None
 
@@ -172,7 +172,7 @@ def _migrations_with_failing_revision(tmp_path):
             def downgrade() -> None:
                 pass
             '''
-        ),
+        ).replace("{head}", HEAD),
         encoding="utf-8",
     )
     return directory
@@ -260,3 +260,32 @@ def test_baseline_database_gains_critical_moves_column_and_keeps_rows(tmp_path):
     with engine.connect() as conn:
         rows = conn.execute(text("SELECT report_markdown, critical_moves_json FROM analysis_records")).all()
     assert [tuple(r) for r in rows] == [("# r", None)]
+
+
+def test_critical_moves_database_gains_games_json_column_and_keeps_rows(tmp_path):
+    db_path = tmp_path / "at_0002.db"
+    engine = _engine(db_path)
+    _build_schema_at(engine, "0002_critical_moves")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO users (id, username, password_hash, is_admin, created_at, "
+                "failed_login_attempts) VALUES (1, 'alice', 'h', 0, '2026-01-01 00:00:00', 0)"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO analysis_records (user_id, created_at, player_name, lang, llm_used, "
+                "games_count, overall_acpl, overall_accuracy, report_markdown, critical_moves_json) VALUES "
+                "(1, '2026-01-01 00:00:00', 'alice', 'tr', 'none', 3, 42.0, 80.5, '# r', '[]')"
+            )
+        )
+    engine.dispose()
+
+    init_db(db_path)
+
+    engine = _engine(db_path)
+    assert _versions(engine) == [HEAD]
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT critical_moves_json, games_json FROM analysis_records")).all()
+    assert [tuple(r) for r in rows] == [("[]", None)]

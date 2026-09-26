@@ -31,6 +31,16 @@ _BOARD_COLORS = {
 }
 
 
+# python-chess's own piece drawings (45x45 SVG groups keyed by FEN letter),
+# so the game viewer's script draws the same pieces as these static boards.
+PIECE_SVGS = dict(chess.svg.PIECES)
+VIEWER_COLORS = {
+    "light": _BOARD_COLORS["square light"],
+    "dark": _BOARD_COLORS["square dark"],
+    "coord": _BOARD_COLORS["coord"],
+}
+
+
 @dataclass(frozen=True)
 class BoardCard:
     game_number: int
@@ -41,6 +51,7 @@ class BoardCard:
     eval_before: str
     eval_after: str
     svg: str
+    ply: int = 0
 
 
 def format_eval(cp: int) -> str:
@@ -80,6 +91,7 @@ def _card(entry: dict) -> BoardCard:
         eval_before=format_eval(int(entry["cp_before"])),
         eval_after=format_eval(int(entry["cp_after"])),
         svg=svg,
+        ply=int(entry["ply"]),
     )
 
 

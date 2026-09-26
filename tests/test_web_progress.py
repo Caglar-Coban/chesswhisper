@@ -344,3 +344,18 @@ def test_completed_job_without_critical_moves_saves_null(client, monkeypatch):
     )
 
     assert next(get_db()).query(AnalysisRecord).one().critical_moves_json is None
+
+
+def test_completed_job_saves_game_timelines_with_the_record(client, monkeypatch):
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    client.post(
+        "/analyze",
+        files={"pgn": ("game.pgn", SAMPLE_PGN, "application/octet-stream")},
+        data={"player": "Alice", "lang": "en", "llm": "none"},
+    )
+
+    record = next(get_db()).query(AnalysisRecord).one()
+    [timeline] = json.loads(record.games_json)
+    assert timeline["white"] == "Alice"
+    assert [m["san"] for m in timeline["moves"]][:2] == ["e4", "e5"]
