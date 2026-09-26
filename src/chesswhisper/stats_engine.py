@@ -15,6 +15,22 @@ ENDGAME_MATERIAL_THRESHOLD = 20
 _PIECE_VALUES = {chess.QUEEN: 9, chess.ROOK: 5, chess.BISHOP: 3, chess.KNIGHT: 3}
 
 
+# Evaluations are capped at +/-10 pawns before measuring a move's loss, as
+# Lichess does: past that the game is decided either way, and mate scores
+# (encoded as +/-100_000) would otherwise turn "missed a mate but still a
+# queen up" into a ~99,000 cp loss that swamps the whole game's ACPL.
+EVAL_CLAMP_CP = 1000
+
+
+def _clamp_eval(cp: int) -> int:
+    return max(-EVAL_CLAMP_CP, min(EVAL_CLAMP_CP, cp))
+
+
+def cp_loss(ev) -> int:
+    """Centipawns the mover gave up with this move, from clamped evaluations."""
+    return max(0, _clamp_eval(ev.cp_before) - _clamp_eval(ev.cp_after))
+
+
 def classify_move(cp_loss: int) -> str:
     if cp_loss >= BLUNDER_CP:
         return "blunder"
@@ -125,8 +141,7 @@ def _time_buckets_for_color(evals, color) -> _TimeBuckets:
     for ev in evals:
         if ev.color != color or ev.clock_seconds is None:
             continue
-        cp_loss = max(0, ev.cp_before - ev.cp_after)
-        is_error = classify_move(cp_loss) != "fine"
+        is_error = classify_move(cp_loss(ev)) != "fine"
         if ev.clock_seconds < LOW_TIME_THRESHOLD_SECONDS:
             buckets.low_total += 1
             if is_error:
@@ -207,15 +222,15 @@ def _player_stats_for_color(evals, color, ply_to_phase) -> tuple[PlayerGameStats
     for ev in evals:
         if ev.color != color:
             continue
-        cp_loss = max(0, ev.cp_before - ev.cp_after)
-        cp_losses.append(cp_loss)
+        loss = cp_loss(ev)
+        cp_losses.append(loss)
         accuracies.append(move_accuracy(win_percent(ev.cp_before), win_percent(ev.cp_after)))
 
-        classification = classify_move(cp_loss)
+        classification = classify_move(loss)
         if classification != "fine":
             phase = ply_to_phase[ev.ply]
             errors_by_phase[phase].add(classification)
-            flagged.append((cp_loss, ev))
+            flagged.append((loss, ev))
 
     acpl = sum(cp_losses) / len(cp_losses) if cp_losses else 0.0
     accuracy = sum(accuracies) / len(accuracies) if accuracies else 100.0
@@ -356,10 +371,10 @@ def critical_moves(game_reports: list, limit: int = CRITICAL_MOVES_LIMIT) -> lis
         for ev in report.top_mistakes:
             if ev.fen_before is None or ev.move_uci is None:
                 continue
-            cp_loss = max(0, ev.cp_before - ev.cp_after)
-            classification = classify_move(cp_loss)
+            loss = cp_loss(ev)
+            classification = classify_move(loss)
             if classification in _CRITICAL_CLASSES:
-                candidates.append((cp_loss, report, ev, classification))
+                candidates.append((loss, report, ev, classification))
     candidates.sort(key=lambda c: (-c[0], c[1].game_index, c[2].ply))
 
     return [
@@ -377,8 +392,8 @@ def critical_moves(game_reports: list, limit: int = CRITICAL_MOVES_LIMIT) -> lis
             "fen_before": ev.fen_before,
             "cp_before": ev.cp_before,
             "cp_after": ev.cp_after,
-            "cp_loss": cp_loss,
+            "cp_loss": loss,
             "classification": classification,
         }
-        for cp_loss, report, ev, classification in candidates[:limit]
+        for loss, report, ev, classification in candidates[:limit]
     ]

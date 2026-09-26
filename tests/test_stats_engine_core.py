@@ -1,7 +1,12 @@
 import chess
+import pytest
 
+from chesswhisper.engine_analyzer import PositionEval
 from chesswhisper.stats_engine import (
+    EVAL_CLAMP_CP,
+    _player_stats_for_color,
     classify_move,
+    cp_loss,
     game_phase,
     move_accuracy,
     win_percent,
@@ -56,3 +61,24 @@ def test_move_accuracy_no_drop_is_perfect():
 def test_move_accuracy_big_drop_is_low():
     acc = move_accuracy(90.0, 10.0)
     assert 0.0 <= acc < 20.0
+
+
+def _eval(ply, cp_before, cp_after, color=True):
+    return PositionEval(ply=ply, move_san="x", color=color, cp_before=cp_before, cp_after=cp_after, fen_after="")
+
+
+def test_cp_loss_clamps_mate_scores_to_a_decisive_advantage():
+    # Missing a mate in 2 while staying a queen up is a mistake, not a 99,000 cp loss.
+    assert cp_loss(_eval(1, 99_998, 900)) == EVAL_CLAMP_CP - 900
+    # Walking from +3 into a forced mate is still a blunder.
+    assert classify_move(cp_loss(_eval(1, 300, -99_995))) == "blunder"
+    # Mate kept or delivered costs nothing.
+    assert cp_loss(_eval(1, 99_998, 100_000)) == 0
+    assert cp_loss(_eval(1, 50, 80)) == 0
+
+
+def test_one_missed_mate_does_not_dominate_a_games_acpl():
+    evals = [_eval(2 * i + 1, 30, 30) for i in range(39)]
+    evals.append(_eval(79, 99_998, 900))
+    stats, _ = _player_stats_for_color(evals, True, {ev.ply: "middlegame" for ev in evals})
+    assert stats.acpl == pytest.approx(100 / 40)
