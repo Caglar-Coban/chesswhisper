@@ -3,9 +3,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import chess
+import pytest
 
 from chesswhisper.motifs import MATE_THRESHOLD
 from chesswhisper.web.puzzles import (
+    check_moves,
     filter_by_theme,
     legal_moves,
     order_puzzles,
@@ -157,3 +159,94 @@ def test_theme_counts_and_filtering():
     assert theme_counts(puzzles) == [("fork", 1), ("hanging", 1), ("defense", 1), ("positional", 1)]
     assert [p.index for p in filter_by_theme(puzzles, "defense")] == [3]
     assert filter_by_theme(puzzles, None) == puzzles
+
+
+# --- multi-move solutions -------------------------------------------------------
+
+SCHOLAR_FEN = "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3"
+
+
+def _one(entry):
+    [puzzle] = puzzles_from_records([_Record(1, datetime(2026, 9, 1), json.dumps([entry]))])
+    return puzzle
+
+
+def test_a_fork_plays_out_until_the_piece_is_taken():
+    puzzle = _one(_themed(FORK_FEN, "e1e2", "b5c7", best_line=["b5c7", "e8d7", "c7a8", "d7c8", "a8b6"]))
+
+    assert puzzle.solution == ("b5c7", "e8d7", "c7a8")
+    assert puzzle.steps == 2
+
+
+def test_a_mate_plays_out_until_mate():
+    entry = _themed(SCHOLAR_FEN, "a2a3", "d1h5", best_line=["d1h5", "g8f6", "h5f7", "e8e7"],
+                    cp_before=MATE_THRESHOLD + 3)
+
+    assert _one(entry).solution == ("d1h5", "g8f6", "h5f7")
+
+
+def test_positional_and_defense_puzzles_stay_one_move():
+    line = ["e2e4", "e7e5", "g1f3", "b8c6"]
+
+    assert _one(_themed(START, "a2a3", "e2e4", best_line=line)).solution == ("e2e4",)
+    assert _one(_themed(START, "a2a3", "e2e4", best_line=line, motif_side="allowed")).solution == ("e2e4",)
+
+
+def test_a_capture_on_the_first_move_is_the_whole_puzzle():
+    line = ["d1d5", "e8e7", "d5d7"]
+
+    assert _one(_themed(FREE_KNIGHT_FEN, "e1e2", "d1d5", best_line=line)).solution == ("d1d5",)
+
+
+def test_bad_lines_fall_back_to_one_move():
+    assert _one(_themed(FORK_FEN, "e1e2", "b5c7")).solution == ("b5c7",)  # saved before lines
+    assert _one(_themed(FORK_FEN, "e1e2", "b5c7", best_line=["b5a7", "e8d7"])).solution == ("b5c7",)
+    assert _one(_themed(FORK_FEN, "e1e2", "b5c7", best_line=["b5c7", "e8e7", "zz"])).solution == ("b5c7",)
+
+
+def test_a_line_that_stops_on_the_opponents_move_is_trimmed():
+    assert _one(_themed(FORK_FEN, "e1e2", "b5c7", best_line=["b5c7", "e8d7"])).solution == ("b5c7",)
+
+
+# --- checking answers -------------------------------------------------------------
+
+
+def _fork_puzzle():
+    return _one(_themed(FORK_FEN, "e1e2", "b5c7", best_line=["b5c7", "e8d7", "c7a8"]))
+
+
+def test_a_right_first_move_gets_the_reply_and_the_next_position():
+    progress = check_moves(_fork_puzzle(), ["b5c7"])
+
+    assert (progress.status, progress.step, progress.reply_uci, progress.reply_san) == ("continue", 0, "e8d7", "Kd7")
+    board = chess.Board(FORK_FEN)
+    board.push_uci("b5c7")
+    board.push_uci("e8d7")
+    assert progress.fen == board.fen()
+
+
+def test_the_whole_line_solves_it():
+    assert check_moves(_fork_puzzle(), ["b5c7", "c7a8"]).status == "solved"
+
+
+def test_a_wrong_move_at_any_step_is_wrong():
+    assert (check_moves(_fork_puzzle(), ["b5d6"]).status, check_moves(_fork_puzzle(), ["b5d6"]).step) == ("wrong", 0)
+    later = check_moves(_fork_puzzle(), ["b5c7", "c7e6"])
+    assert (later.status, later.step) == ("wrong", 1)
+
+
+def test_any_mating_move_is_right():
+    # Ra8# and the line's move are both mate; either solves it.
+    puzzle = _one(_themed("6k1/5ppp/8/8/8/8/8/RR4K1 w - - 0 1", "g1f1", "a1a8", best_line=["a1a8"]))
+
+    assert check_moves(puzzle, ["b1b8"]).status == "solved"
+
+
+@pytest.mark.parametrize("moves", [[], ["zz"], ["e1e3"], ["b5c7", "c7a8", "a8b6"]])
+def test_malformed_answers_are_rejected(moves):
+    with pytest.raises(ValueError):
+        check_moves(_fork_puzzle(), moves)
+
+
+def test_solution_san_reads_as_a_line():
+    assert _fork_puzzle().solution_san == "Nc7+ Kd7 Nxa8"

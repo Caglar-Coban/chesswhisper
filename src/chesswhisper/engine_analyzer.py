@@ -8,6 +8,8 @@ import chess.engine
 import chess.pgn
 
 _CLK_RE = re.compile(r"\[%clk (\d+):(\d+):(\d+(?:\.\d+)?)\]")
+# How much of the engine's principal variation to keep per position.
+BEST_LINE_PLIES = 10
 
 
 @dataclass
@@ -24,6 +26,9 @@ class PositionEval:
     fen_before: str | None = None
     move_uci: str | None = None
     best_move_uci: str | None = None
+    # The start of the engine's principal variation from fen_before (UCI,
+    # best_move_uci first): what a multi-move puzzle plays out.
+    best_line_uci: list[str] | None = None
 
 
 def parse_clock_seconds(comment: str) -> float | None:
@@ -57,6 +62,7 @@ def analyze_game(
         cp_before = info_before["score"].pov(mover).score(mate_score=100_000)
         pv = info_before.get("pv")
         best_move_uci = pv[0].uci() if pv else None
+        best_line_uci = [pv_move.uci() for pv_move in pv[:BEST_LINE_PLIES]] if pv else None
 
         board.push(move)
         info_after = engine.analyse(board, limit, game=game)
@@ -74,6 +80,7 @@ def analyze_game(
                 fen_before=fen_before,
                 move_uci=move.uci(),
                 best_move_uci=best_move_uci,
+                best_line_uci=best_line_uci,
             )
         )
         info_before = info_after

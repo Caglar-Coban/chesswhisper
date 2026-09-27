@@ -4,6 +4,24 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-09-27
+
+### Added
+
+- Multi-move puzzles. A tactical puzzle plays out the engine's line until
+  the tactic pays off (the capture or promotion that wins material, up to
+  3 moves) or to mate (up to 5 moves); the opponent's replies are played
+  for you. Any move that mates is accepted. Positional and defense puzzles
+  stay one move.
+- Analyses keep the start of the engine's principal variation for every
+  position (`best_line` in the critical moves).
+
+### Changed
+
+- The evaluation cache format changed, so games analyzed before are
+  analyzed once more to pick up the engine lines. Puzzles from analyses
+  saved before this release stay one move.
+
 ## [0.8.0] - 2026-09-27
 
 ### Added
@@ -193,6 +211,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.9.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.9.0
 [0.8.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.6.0

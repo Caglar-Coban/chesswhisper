@@ -59,3 +59,28 @@ def test_unreadable_entry_is_treated_as_a_miss(tmp_path):
         conn.execute("UPDATE evals SET payload = 'not json'")
 
     assert cache.get("k") is None
+
+
+def test_entries_saved_before_best_lines_still_load(tmp_path):
+    import json
+    import sqlite3
+
+    cache = EvalCache(tmp_path / "cache.sqlite3")
+    old_entry = {"ply": 1, "move_san": "e4", "color": True, "cp_before": 0, "cp_after": 10, "fen_after": "f"}
+    with sqlite3.connect(tmp_path / "cache.sqlite3") as conn:
+        conn.execute("INSERT INTO evals VALUES ('k', ?)", (json.dumps([old_entry]),))
+    conn.close()
+
+    [ev] = cache.get("k")
+
+    assert ev.best_line_uci is None
+
+
+def test_best_lines_round_trip(tmp_path):
+    cache = EvalCache(tmp_path / "cache.sqlite3")
+    ev = PositionEval(ply=1, move_san="e4", color=True, cp_before=0, cp_after=10, fen_after="f",
+                      best_line_uci=["d2d4", "d7d5"])
+
+    cache.put("k", [ev])
+
+    assert cache.get("k")[0].best_line_uci == ["d2d4", "d7d5"]

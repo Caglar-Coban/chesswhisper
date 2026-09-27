@@ -204,7 +204,8 @@ chesswhisper backup                 # database and keys to one zip; `restore` pu
 - **Game viewer:** board, evaluation graph and annotated move list; click,
   use the arrow keys or Home/End, and flip the board.
 - **Puzzles:** your blunders and mistakes as "find the better move"
-  exercises, scheduled with spaced repetition: reviews that are due come
+  exercises (tactical ones play out the engine's line over several moves),
+  scheduled with spaced repetition: reviews that are due come
   first, then new puzzles; one you get right comes back after 1, 3, 7, 14
   and then 30 days, one you miss comes back the next day. The same position
   from overlapping analyses appears once. Filter them by theme to practice

@@ -27,11 +27,12 @@
       <div class="viewer-board puzzle-board" id="board" role="img" aria-label="{{ t('viewer.board') }}"></div>
     </div>
     <div>
-      <p class="review-status">{% if review_status == "upcoming" %}{{ t("puzzles.status_upcoming", days=days_until_due) }}{% else %}{{ t("puzzles.status_" ~ review_status) }}{% endif %}</p>
+      <p class="review-status">{% if review_status == "upcoming" and days_until_due == 1 %}{{ t("puzzles.status_upcoming_tomorrow") }}{% elif review_status == "upcoming" %}{{ t("puzzles.status_upcoming", days=days_until_due) }}{% else %}{{ t("puzzles.status_" ~ review_status) }}{% endif %}</p>
       <p style="margin-top:0; font-weight:600;">{{ t("puzzles.to_move_" ~ puzzle.your_color) }}</p>
       <p style="font-size:14px;">
         {{ t("puzzles.context", n=puzzle.game_number, opponent=puzzle.opponent, move=puzzle.move_label, pawns="%.1f"|format(puzzle.cp_loss / 100)) }}
       </p>
+      {% if puzzle.steps > 1 %}<p style="font-size:14px;"><strong>{{ t("puzzles.steps", n=puzzle.steps) }}</strong></p>{% endif %}
       <p class="hint">{{ t("puzzles.hint") }}</p>
       <div class="puzzle-result" id="result" aria-live="polite"></div>
       <div class="puzzle-actions">
@@ -49,8 +50,10 @@
 {% include "_board_script.html" %}
 <script>
 (function () {
-  var FEN = {{ puzzle.fen | tojson }};
-  var LEGAL = {{ legal_moves | tojson }};
+  var START_FEN = {{ puzzle.fen | tojson }};
+  var START_LEGAL = {{ legal_moves | tojson }};
+  var FEN = START_FEN, LEGAL = START_LEGAL;
+  var played = [];  // the player's moves so far in this try
   var WHITE_BOTTOM = {{ (puzzle.your_color != "black") | tojson }};
   var ATTEMPT_URL = "/puzzles/{{ puzzle.record_id }}/{{ puzzle.index }}/attempt";
   var TEXT = {
@@ -59,6 +62,8 @@
     solution: {{ t("puzzles.solution") | tojson }},
     stats: {{ t("puzzles.stats") | tojson }},
     nextReview: {{ t("puzzles.next_review") | tojson }},
+    nextReviewTomorrow: {{ t("puzzles.next_review_tomorrow") | tojson }},
+    keepGoing: {{ t("puzzles.keep_going") | tojson }},
     failed: {{ t("puzzles.check_failed") | tojson }}
   };
 
@@ -87,6 +92,7 @@
     locked = true;
     var form = new FormData();
     form.append("move", move);
+    form.append("previous", played.join(","));
     form.append("csrf_token", document.getElementById("csrf").value);
     fetch(ATTEMPT_URL, { method: "POST", body: form })
       .then(function (response) {
@@ -94,12 +100,27 @@
         return response.json();
       })
       .then(function (data) {
+        if (data.status === "continue") {
+          played.push(move);
+          arrows = [{ from: move.slice(0, 2), to: move.slice(2, 4), color: "#2e8b57" }];
+          showResult(TEXT.keepGoing.replace("{move}", data.reply_san), "correct");
+          draw();
+          setTimeout(function () {
+            FEN = data.fen;
+            LEGAL = data.legal_moves;
+            arrows = [{ from: data.reply_uci.slice(0, 2), to: data.reply_uci.slice(2, 4), color: "#7f8c8d" }];
+            locked = false;
+            draw();
+          }, 600);
+          return;
+        }
         lastAnswer = data;
         document.querySelector(".viewer-head p").textContent =
           TEXT.stats.replace("{solved}", data.solved).replace("{total}", data.total);
         if (data.correct) {
           arrows = [{ from: data.best_uci.slice(0, 2), to: data.best_uci.slice(2, 4), color: "#2e8b57" }];
-          var reviewNote = data.next_review_days ? " " + TEXT.nextReview.replace("{days}", data.next_review_days) : "";
+          var days = data.next_review_days;
+          var reviewNote = !days ? "" : " " + (days === 1 ? TEXT.nextReviewTomorrow : TEXT.nextReview.replace("{days}", days));
           showResult(TEXT.correct.replace("{move}", data.best_san) + reviewNote, "correct");
           retry.hidden = true;
           solutionBtn.hidden = true;
@@ -140,6 +161,9 @@
 
   retry.addEventListener("click", function () {
     locked = false;
+    FEN = START_FEN;
+    LEGAL = START_LEGAL;
+    played = [];
     arrows = [];
     selected = null;
     showResult("", "");

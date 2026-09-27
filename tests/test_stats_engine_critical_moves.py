@@ -93,6 +93,7 @@ def test_entry_carries_what_a_board_diagram_needs():
         "uci": "e7e5",
         "best_uci": "c7c5",
         "best_san": "c5",
+        "best_line": None,
         "fen_before": evals[1].fen_before,
         "cp_before": 0,
         "cp_after": -500,

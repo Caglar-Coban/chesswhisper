@@ -48,6 +48,7 @@ from chesswhisper.web.models import AnalysisRecord, PuzzleAttempt, User, UserApi
 from chesswhisper.web.puzzles import THEMES as PUZZLE_THEMES
 from chesswhisper.web.puzzles import (
     Puzzle,
+    check_moves,
     filter_by_theme,
     legal_moves,
     order_puzzles,
@@ -807,19 +808,39 @@ async def puzzle_attempt(
     record_id: int,
     index: int,
     move: str = Form(...),
+    previous: str = Form(default=""),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> JSONResponse:
+    """Judge the player's latest *move*, after the *previous* ones (comma-separated) of this try."""
     puzzles, progress = _user_puzzles(db, current_user)
     puzzle = next((p for p in puzzles if p.key == (record_id, index)), None)
     if puzzle is None:
         return JSONResponse({"detail": "Puzzle not found."}, status_code=404)
-    move = move.strip().lower()
-    if not _UCI_RE.fullmatch(move) or move not in legal_moves(puzzle.fen):
+    moves = [m.strip().lower() for m in previous.split(",") if m.strip()] + [move.strip().lower()]
+    if not all(_UCI_RE.fullmatch(m) for m in moves):
+        return JSONResponse({"detail": "Not a legal move in this position."}, status_code=400)
+    try:
+        outcome = check_moves(puzzle, moves)
+    except ValueError:
         return JSONResponse({"detail": "Not a legal move in this position."}, status_code=400)
 
-    correct = move == puzzle.best_uci
+    expected = puzzle.solution[2 * outcome.step]
+    if outcome.status == "continue":
+        # Right so far: nothing is saved until the line is finished or missed.
+        return JSONResponse({
+            "correct": True,
+            "status": "continue",
+            "best_uci": moves[-1],
+            "reply_uci": outcome.reply_uci,
+            "reply_san": outcome.reply_san,
+            "fen": outcome.fen,
+            "legal_moves": legal_moves(outcome.fen) if outcome.fen else [],
+        })
+
+    correct = outcome.status == "solved"
+    move = moves[-1]
     now = utcnow()
     db.add(PuzzleAttempt(
         user_id=current_user.id, record_id=record_id, move_index=index, move_uci=move, solved=correct,
@@ -832,8 +853,9 @@ async def puzzle_attempt(
     return JSONResponse({
         "next_review_days": state.days_until_due(now),
         "correct": correct,
-        "best_uci": puzzle.best_uci,
-        "best_san": puzzle.best_san,
+        "status": outcome.status,
+        "best_uci": move if correct else expected,
+        "best_san": puzzle.solution_san,
         "played_uci": puzzle.played_uci,
         "played_san": puzzle.played_san,
         "solved": _solved_count(puzzles, solved),

@@ -131,7 +131,7 @@ class PvFakeEngine(FakeEngine):
         info = super().analyse(board, limit, **kwargs)
         pv = next(self._pvs)
         if pv is not None:
-            info["pv"] = [chess.Move.from_uci(pv)]
+            info["pv"] = [chess.Move.from_uci(move) for move in pv.split()]
         return info
 
 
@@ -150,6 +150,19 @@ def test_analyze_game_records_position_played_move_and_engine_best_move():
     assert evals[1].best_move_uci == "c7c5"
     assert evals[2].move_uci == "g1f3"
     assert evals[2].best_move_uci == "g1f3"
+
+
+def test_analyze_game_keeps_the_start_of_the_principal_variation():
+    from chesswhisper.engine_analyzer import BEST_LINE_PLIES
+
+    long_line = " ".join(["g1f3", "g8f6"] * 8)
+    engine = PvFakeEngine([0, 30, 20, 50], ["d2d4 d7d5 c2c4", long_line, None, None])
+
+    evals = analyze_game(_parse(SIMPLE_GAME), engine, movetime_ms=10)
+
+    assert evals[0].best_line_uci == ["d2d4", "d7d5", "c2c4"]
+    assert len(evals[1].best_line_uci) == BEST_LINE_PLIES
+    assert evals[2].best_line_uci is None
 
 
 def test_analyze_game_leaves_best_move_empty_when_engine_returns_no_pv():

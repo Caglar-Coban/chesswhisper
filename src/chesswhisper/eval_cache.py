@@ -25,12 +25,15 @@ from chesswhisper.engine_provision import STOCKFISH_RELEASE_TAG
 from chesswhisper.paths import data_dir
 
 CACHE_FILENAME = "eval_cache.sqlite3"
+# Bumped when PositionEval gains data older entries lack (2: best_line_uci),
+# so those games are analyzed again rather than served without it.
+CACHE_FORMAT = 2
 
 
 def cache_key(game: chess.pgn.Game, movetime_ms: int, depth: int | None) -> str:
     limit = f"depth:{depth}" if depth is not None else f"time:{movetime_ms}"
     moves = [(node.move.uci(), parse_clock_seconds(node.comment)) for node in game.mainline()]
-    material = json.dumps([STOCKFISH_RELEASE_TAG, limit, game.board().fen(), moves])
+    material = json.dumps([CACHE_FORMAT, STOCKFISH_RELEASE_TAG, limit, game.board().fen(), moves])
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 

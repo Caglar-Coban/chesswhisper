@@ -636,6 +636,7 @@ def critical_moves(game_reports: list, limit: int = CRITICAL_MOVES_LIMIT) -> lis
             "uci": ev.move_uci,
             "best_uci": ev.best_move_uci,
             "best_san": _best_san(ev.fen_before, ev.best_move_uci),
+            "best_line": ev.best_line_uci,
             "fen_before": ev.fen_before,
             "cp_before": ev.cp_before,
             "cp_after": ev.cp_after,

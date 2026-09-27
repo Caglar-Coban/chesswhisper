@@ -258,3 +258,51 @@ def test_a_missed_puzzle_comes_back_before_new_ones_once_due(client):
     _set_attempt_times(timedelta(days=1, minutes=1))
 
     assert client.get("/puzzles").headers["location"] == f"/puzzles/{record_id}/1"
+
+
+def _fork_line_entry():
+    return dict(_fork_entry(), best_line=["b5c7", "e8d7", "c7a8"])
+
+
+def test_a_multi_move_puzzle_says_how_many_moves(client):
+    record_id = _seed(entries=[_fork_line_entry()])
+
+    assert "Find the best line: 2 moves." in client.get(f"/puzzles/{record_id}/0").text
+
+
+def test_a_multi_move_puzzle_replies_then_is_solved_by_the_whole_line(client):
+    record_id = _seed(entries=[_fork_line_entry()])
+
+    first = _attempt(client, record_id, 0, "b5c7").json()
+    assert (first["status"], first["reply_san"]) == ("continue", "Kd7")
+    assert "c7a8" in first["legal_moves"]
+    db = next(get_db())
+    assert db.query(PuzzleAttempt).count() == 0  # nothing saved mid-line
+
+    page = client.get(f"/puzzles/{record_id}/0").text
+    token = re.search(r'name="csrf_token" value="([^"]*)"', page).group(1)
+    done = client.post(f"/puzzles/{record_id}/0/attempt", data={"move": "c7a8", "previous": "b5c7", "csrf_token": token}).json()
+
+    assert (done["status"], done["correct"], done["best_san"]) == ("solved", True, "Nc7+ Kd7 Nxa8")
+    assert next(get_db()).query(PuzzleAttempt).one().solved is True
+
+
+def test_a_wrong_second_move_counts_as_a_miss(client):
+    record_id = _seed(entries=[_fork_line_entry()])
+    page = client.get(f"/puzzles/{record_id}/0").text
+    token = re.search(r'name="csrf_token" value="([^"]*)"', page).group(1)
+
+    body = client.post(f"/puzzles/{record_id}/0/attempt", data={"move": "c7e6", "previous": "b5c7", "csrf_token": token}).json()
+
+    assert (body["status"], body["correct"], body["best_uci"]) == ("wrong", False, "c7a8")
+    assert next(get_db()).query(PuzzleAttempt).one().solved is False
+
+
+def test_previous_moves_must_be_legal(client):
+    record_id = _seed(entries=[_fork_line_entry()])
+    page = client.get(f"/puzzles/{record_id}/0").text
+    token = re.search(r'name="csrf_token" value="([^"]*)"', page).group(1)
+
+    response = client.post(f"/puzzles/{record_id}/0/attempt", data={"move": "c7a8", "previous": "zz,<>", "csrf_token": token})
+
+    assert response.status_code == 400
