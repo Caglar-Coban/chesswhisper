@@ -8,6 +8,7 @@ handful of games from producing confident-sounding noise.
 from __future__ import annotations
 
 from chesswhisper.i18n import t
+from chesswhisper.motifs import OTHER
 from chesswhisper.stats_engine import AggregateReport, PatternBucket, _TimeBuckets
 
 MIN_BUCKET_MOVES = 15
@@ -15,6 +16,8 @@ MIN_LOW_TIME_MOVES = 10
 MIN_SEGMENT_GAMES = 3
 HOTSPOT_RATIO = 1.5
 ACCURACY_GAP = 5.0
+MIN_MOTIF_ERRORS = 5
+MOTIF_SHARE = 0.3
 
 Finding = tuple[str, dict]
 
@@ -70,7 +73,28 @@ def key_findings(report: AggregateReport) -> list[Finding]:
             findings.append(("time_class", {"best": best.label, "best_acc": round(best.accuracy, 1),
                                             "worst": worst.label, "worst_acc": round(worst.accuracy, 1)}))
 
+    motif = _motif_finding(report)
+    if motif is not None:
+        findings.append(motif)
+
     return findings
+
+
+def _motif_finding(report: AggregateReport) -> Finding | None:
+    """The one motif and side behind a large share of the player's mistakes, if there is one."""
+    total = sum(stat.total for stat in report.motifs)
+    candidates = [
+        (count, stat.motif, side)
+        for stat in report.motifs
+        if stat.motif != OTHER
+        for side, count in (("allowed", stat.allowed), ("missed", stat.missed))
+    ]
+    if not total or not candidates:
+        return None
+    count, motif, side = max(candidates, key=lambda c: c[0])
+    if count < MIN_MOTIF_ERRORS or count / total < MOTIF_SHARE:
+        return None
+    return f"motif_{side}", {"motif": motif, "count": count, "total": total}
 
 
 def render_finding(finding: Finding, lang: str) -> str:
@@ -78,6 +102,8 @@ def render_finding(finding: Finding, lang: str) -> str:
     values = dict(params)
     if kind == "eval_state":
         values["state"] = t(f"state_{params['state']}", lang)
+    if kind in ("motif_allowed", "motif_missed"):
+        values["motif"] = t(f"motif_{params['motif']}", lang)
     if kind == "time_class":
         values["best"] = t(f"tc_{params['best']}", lang)
         values["worst"] = t(f"tc_{params['worst']}", lang)

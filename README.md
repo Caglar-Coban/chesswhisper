@@ -31,6 +31,9 @@ and Turkish.
 - **Breakdowns.** Results and accuracy by time control (bullet, blitz, rapid,
   classical) and by opponent strength, plus error rates by move number and by
   whether you were ahead, level or behind.
+- **Tactical motifs.** Each mistake and blunder is labeled with the tactic
+  behind it (fork, pin, hanging piece, mate, back-rank mate, promotion) and
+  whether you allowed it or missed it.
 - **Key findings.** The clearest patterns stated in a sentence each, such as
   "your mistakes cluster in moves 31-40", with minimum sample sizes so a few
   games don't produce noise.

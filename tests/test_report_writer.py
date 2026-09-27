@@ -147,3 +147,30 @@ def test_report_leaves_out_empty_breakdowns():
     assert "Performance by Time Control" not in md
     assert "Error Patterns" not in md
     assert "Key Findings" not in md
+
+
+def _with_motifs():
+    from chesswhisper.stats_engine import MotifStat
+
+    report = _sample_report()
+    report.motifs = [MotifStat("hanging", allowed=4, missed=1), MotifStat("other", unsided=3)]
+    return report
+
+
+def test_tactical_patterns_section_lists_each_motif():
+    md = render_markdown(_with_motifs(), commentary="", lang="en")
+
+    assert "## Tactical Patterns" in md
+    assert "| hanging piece | 4 | 1 | 5 |" in md
+    assert "| other (positional or deeper) | - | - | 3 |" in md
+
+
+def test_tactical_patterns_section_in_turkish():
+    md = render_markdown(_with_motifs(), commentary="", lang="tr")
+
+    assert "## Taktik Desenler" in md
+    assert "| korumasız taşı alma | 4 | 1 | 5 |" in md
+
+
+def test_no_tactical_patterns_section_without_mistakes():
+    assert "Tactical Patterns" not in render_markdown(_sample_report(), commentary="", lang="en")

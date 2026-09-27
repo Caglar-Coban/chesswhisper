@@ -1,5 +1,6 @@
 from chesswhisper.i18n import t
 from chesswhisper.insights import key_findings, render_finding
+from chesswhisper.motifs import OTHER
 from chesswhisper.stats_engine import PHASES
 
 _RESULT_KEY = {
@@ -111,6 +112,19 @@ def render_markdown(report, commentary: str, lang: str) -> str:
         parts.extend(
             _pattern_table(report.eval_states, "eval_state_column", lambda label: t(f"state_label_{label}", lang), lang)
         )
+        parts.append("")
+
+    if report.motifs:
+        parts.append(f"## {t('tactical_patterns', lang)}")
+        parts.append(t("tactical_patterns_note", lang))
+        parts.append("")
+        parts.append(
+            f"| {t('motif_column', lang)} | {t('allowed_column', lang)} | {t('missed_column', lang)} | {t('total_column', lang)} |"
+        )
+        parts.append("| --- | --- | --- | --- |")
+        for stat in report.motifs:
+            allowed, missed = (stat.allowed, stat.missed) if stat.motif != OTHER else ("-", "-")
+            parts.append(f"| {t('motif_' + stat.motif, lang)} | {allowed} | {missed} | {stat.total} |")
         parts.append("")
 
     parts.append(f"## {t('time_management', lang)}")

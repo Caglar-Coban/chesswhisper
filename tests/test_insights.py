@@ -73,3 +73,41 @@ def test_renders_findings_in_both_languages():
 
     assert "20%" in render_finding(finding, "en") and "ahead" in render_finding(finding, "en")
     assert "%20" in render_finding(finding, "tr") and "öndeyken" in render_finding(finding, "tr")
+
+
+def _with_motifs(*stats):
+    agg = _agg()
+    agg.motifs = list(stats)
+    return agg
+
+
+def test_flags_the_motif_behind_a_large_share_of_mistakes():
+    from chesswhisper.stats_engine import MotifStat
+
+    agg = _with_motifs(MotifStat("hanging", allowed=6, missed=1), MotifStat("fork", missed=2), MotifStat("other", unsided=6))
+
+    finding = ("motif_allowed", {"motif": "hanging", "count": 6, "total": 15})
+    assert finding in key_findings(agg)
+    assert render_finding(finding, "en") == "In 6 of your 15 mistakes and blunders you allowed a hanging piece."
+    assert render_finding(finding, "tr") == "15 hata ve gafının 6 tanesi rakibine korumasız taşı alma fırsatı verdi."
+
+
+def test_flags_a_missed_motif():
+    from chesswhisper.stats_engine import MotifStat
+
+    agg = _with_motifs(MotifStat("fork", allowed=1, missed=5), MotifStat("other", unsided=4))
+
+    finding = ("motif_missed", {"motif": "fork", "count": 5, "total": 10})
+    assert finding in key_findings(agg)
+    assert render_finding(finding, "en") == "In 5 of your 10 mistakes and blunders you missed a fork."
+
+
+def test_no_motif_finding_below_the_thresholds():
+    from chesswhisper.stats_engine import MotifStat
+
+    too_few = _with_motifs(MotifStat("fork", allowed=4))
+    too_small_a_share = _with_motifs(MotifStat("fork", allowed=5), MotifStat("other", unsided=20))
+    only_other = _with_motifs(MotifStat("other", unsided=20))
+
+    for agg in (too_few, too_small_a_share, only_other):
+        assert not [f for f in key_findings(agg) if f[0].startswith("motif")]

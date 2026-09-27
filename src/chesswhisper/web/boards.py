@@ -15,6 +15,8 @@ from dataclasses import dataclass
 import chess
 import chess.svg
 
+from chesswhisper.motifs import MOTIFS, SIDES
+
 logger = logging.getLogger(__name__)
 
 # python-chess encodes mate-in-N as +/-(100_000 - N) with mate_score=100_000.
@@ -52,6 +54,10 @@ class BoardCard:
     eval_after: str
     svg: str
     ply: int = 0
+    # The tactic behind the mistake and whether it was "allowed" or "missed";
+    # None for "other" and for records saved before motifs existed.
+    motif: str | None = None
+    motif_side: str | None = None
 
 
 def format_eval(cp: int) -> str:
@@ -65,6 +71,13 @@ def format_eval(cp: int) -> str:
 
 def _move_label(move_number: int, your_color: str, san: str) -> str:
     return f"{move_number}. {san}" if your_color == "white" else f"{move_number}... {san}"
+
+
+def _motif(entry: dict) -> dict:
+    motif, side = entry.get("motif"), entry.get("motif_side")
+    if motif in MOTIFS and side in SIDES:
+        return {"motif": motif, "motif_side": side}
+    return {}
 
 
 def _card(entry: dict) -> BoardCard:
@@ -92,6 +105,7 @@ def _card(entry: dict) -> BoardCard:
         eval_after=format_eval(int(entry["cp_after"])),
         svg=svg,
         ply=int(entry["ply"]),
+        **_motif(entry),
     )
 
 

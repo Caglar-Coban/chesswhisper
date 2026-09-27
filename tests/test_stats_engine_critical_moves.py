@@ -98,7 +98,31 @@ def test_entry_carries_what_a_board_diagram_needs():
         "cp_after": -500,
         "cp_loss": 500,
         "classification": "blunder",
+        # ...c5 is a quiet move and nothing refutes e5 here.
+        "motif": "other",
+        "motif_side": None,
     }
+
+
+def test_entry_names_the_motif_of_the_mistake():
+    # 3...Nf6?? lets White mate with 4. Qxf7#: the engine's best move at ply 7 is the refutation.
+    scholar = "1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#"
+    game = chess.pgn.read_game(io.StringIO(f'[White "Bob"]\n[Black "Alice"]\n[Result "1-0"]\n\n{scholar} 1-0\n'))
+    board = game.board()
+    evals = []
+    for ply, move in enumerate(game.mainline_moves(), start=1):
+        fen_before, san, color = board.fen(), board.san(move), board.turn
+        board.push(move)
+        evals.append(PositionEval(
+            ply=ply, move_san=san, color=color, cp_before=0, cp_after=-900 if ply == 6 else 0,
+            fen_after=board.fen(), fen_before=fen_before, move_uci=move.uci(),
+            best_move_uci="h5f7" if ply == 7 else None,
+        ))
+    report = build_game_report(LoadedGame(index=0, game=game, headers=dict(game.headers)), evals, "Alice", ECO)
+
+    [move] = critical_moves([report])
+
+    assert (move["ply"], move["motif"], move["motif_side"]) == (6, "mate", "allowed")
 
 
 def test_best_san_is_none_for_a_missing_or_illegal_best_move():

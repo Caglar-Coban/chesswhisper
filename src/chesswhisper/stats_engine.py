@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 import chess
 
+from chesswhisper.motifs import MOTIFS, OTHER, error_motif
 from chesswhisper.openings import match_opening
 
 INACCURACY_CP = 50
@@ -162,6 +163,10 @@ class MoveRecord:
     eval_before: int  # clamped, from the player's side
     cp_loss: int
     classification: str
+    # For mistakes and blunders: the tactic behind it (see motifs.py) and
+    # whether the player allowed it or missed it; None otherwise.
+    motif: str | None = None
+    motif_side: str | None = None
 
 
 TIME_CLASSES = ("bullet", "blitz", "rapid", "classical", "correspondence", "unknown")
@@ -268,6 +273,20 @@ _ERROR_CLASSES = ("mistake", "blunder")
 
 
 @dataclass
+class MotifStat:
+    """How many of the player's mistakes and blunders came from one motif, by side."""
+
+    motif: str
+    allowed: int = 0
+    missed: int = 0
+    unsided: int = 0  # "other": no recognizable tactic either way
+
+    @property
+    def total(self) -> int:
+        return self.allowed + self.missed + self.unsided
+
+
+@dataclass
 class AggregateReport:
     player: str
     games: list
@@ -280,6 +299,7 @@ class AggregateReport:
     by_opponent_strength: list[SegmentStats] = field(default_factory=list)
     move_ranges: list[PatternBucket] = field(default_factory=list)
     eval_states: list[PatternBucket] = field(default_factory=list)
+    motifs: list[MotifStat] = field(default_factory=list)
 
 
 def detect_player(loaded_games) -> str:
@@ -313,17 +333,27 @@ def _move_number(ev) -> int:
 
 
 def _move_records(evals, color) -> list[MoveRecord]:
-    return [
-        MoveRecord(
-            ply=ev.ply,
-            move_number=_move_number(ev),
-            eval_before=_clamp_eval(ev.cp_before),
-            cp_loss=cp_loss(ev),
-            classification=classify_move(cp_loss(ev)),
+    records = []
+    for index, ev in enumerate(evals):
+        if ev.color != color:
+            continue
+        classification = classify_move(cp_loss(ev))
+        motif = side = None
+        if classification in _ERROR_CLASSES:
+            next_ev = evals[index + 1] if index + 1 < len(evals) else None
+            motif, side = error_motif(ev, next_ev)
+        records.append(
+            MoveRecord(
+                ply=ev.ply,
+                move_number=_move_number(ev),
+                eval_before=_clamp_eval(ev.cp_before),
+                cp_loss=cp_loss(ev),
+                classification=classification,
+                motif=motif,
+                motif_side=side,
+            )
         )
-        for ev in evals
-        if ev.color == color
-    ]
+    return records
 
 
 def _player_stats_for_color(evals, color, ply_to_phase) -> tuple[PlayerGameStats, list]:
@@ -489,6 +519,24 @@ def _breakdowns(game_reports: list) -> dict:
     }
 
 
+def motif_stats(game_reports: list) -> list[MotifStat]:
+    """Motif counts over the player's mistakes and blunders: most frequent first, "other" last."""
+    stats: dict[str, MotifStat] = {}
+    for report in game_reports:
+        for move in report.moves:
+            if move.motif is None:
+                continue
+            stat = stats.setdefault(move.motif, MotifStat(move.motif))
+            if move.motif_side == "allowed":
+                stat.allowed += 1
+            elif move.motif_side == "missed":
+                stat.missed += 1
+            else:
+                stat.unsided += 1
+    order = {motif: index for index, motif in enumerate((*MOTIFS, OTHER))}
+    return sorted(stats.values(), key=lambda stat: (stat.motif == OTHER, -stat.total, order[stat.motif]))
+
+
 def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
     weighted_acpl_sum = 0.0
     weighted_accuracy_sum = 0.0
@@ -531,6 +579,7 @@ def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
         error_totals=error_totals,
         openings=sorted(opening_map.values(), key=lambda o: o.games, reverse=True),
         time_management=combined_time_buckets.to_stats(),
+        motifs=motif_stats(game_reports),
         **_breakdowns(game_reports),
     )
 
@@ -550,6 +599,11 @@ def _best_san(fen_before: str, best_uci: str | None) -> str | None:
     if move not in board.legal_moves:
         return None
     return board.san(move)
+
+
+def _motif_fields(report, ply: int) -> dict:
+    move = next((m for m in report.moves if m.ply == ply), None)
+    return {"motif": move.motif if move else None, "motif_side": move.motif_side if move else None}
 
 
 def critical_moves(game_reports: list, limit: int = CRITICAL_MOVES_LIMIT) -> list[dict]:
@@ -587,6 +641,7 @@ def critical_moves(game_reports: list, limit: int = CRITICAL_MOVES_LIMIT) -> lis
             "cp_after": ev.cp_after,
             "cp_loss": loss,
             "classification": classification,
+            **_motif_fields(report, ev.ply),
         }
         for loss, report, ev, classification in candidates[:limit]
     ]

@@ -1,4 +1,5 @@
 from chesswhisper.insights import key_findings, render_finding
+from chesswhisper.motifs import OTHER
 from chesswhisper.stats_engine import cp_loss
 
 _LANG_INSTRUCTION = {
@@ -41,6 +42,16 @@ def build_prompt(report, lang: str) -> str:
         for bucket in report.eval_states:
             if bucket.moves:
                 lines.append(f"  {bucket.label}: {bucket.errors}/{bucket.moves}")
+    if report.motifs:
+        lines.append(
+            "Tactical motifs behind the player's mistakes and blunders (allowed = the opponent's tactic "
+            "the move permitted, missed = the player's tactic the engine preferred):"
+        )
+        for stat in report.motifs:
+            if stat.motif == OTHER:
+                lines.append(f"  no clear tactic (positional or deeper): {stat.total}")
+            else:
+                lines.append(f"  {stat.motif}: allowed {stat.allowed}, missed {stat.missed}")
     findings = key_findings(report)
     if findings:
         lines.append("Automatically detected patterns:")

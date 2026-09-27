@@ -4,6 +4,21 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-09-27
+
+### Added
+
+- Tactical motifs: every mistake and blunder is labeled with the tactic
+  behind it (back-rank mate, mate, promotion, fork, pin or hanging piece)
+  and whether the move allowed it or missed it, judged from the engine's
+  refutation and preferred move with no extra engine time.
+- Reports get a "Tactical Patterns" table, a key finding when one motif is
+  behind at least 5 mistakes and 30% of them ("In 6 of your 15 mistakes
+  and blunders you allowed a hanging piece."), and the LLM prompt gets the
+  same counts.
+- Critical-move boards in the web UI name the motif ("Allowed: fork").
+  Analyses saved before this release show none.
+
 ## [0.5.0] - 2026-09-27
 
 ### Added
@@ -149,6 +164,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.6.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.3.0

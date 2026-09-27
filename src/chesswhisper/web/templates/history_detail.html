@@ -54,6 +54,7 @@
           {% endif %}
         </div>
         <div class="board-meta">{{ t("report.game_meta", n=c.game_number, opponent=c.opponent) }}</div>
+        {% if c.motif_side %}<div class="board-motif">{{ t("report.motif_" ~ c.motif_side, motif=t("motif." ~ c.motif)) }}</div>{% endif %}
         {% if c.best_san %}<div class="board-best">{{ t("report.better") }} <strong>{{ c.best_san }}</strong></div>{% endif %}
         <div class="board-eval">{{ c.eval_before }} → {{ c.eval_after }}</div>
         {% if games %}<a class="board-link" href="{{ games_url_prefix }}/{{ c.game_number }}?ply={{ c.ply }}">{{ t("report.show_in_game") }}</a>{% endif %}

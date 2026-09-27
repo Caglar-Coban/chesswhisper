@@ -65,3 +65,15 @@ def test_build_prompt_includes_breakdowns_and_findings():
     assert "winning: 6/20" in prompt
     assert "Automatically detected patterns:" in prompt
     assert "Your mistakes cluster in moves 21-30" in prompt
+
+
+def test_build_prompt_includes_tactical_motifs():
+    from chesswhisper.stats_engine import MotifStat
+
+    report = _sample_report()
+    report.motifs = [MotifStat("fork", allowed=2, missed=1), MotifStat("other", unsided=4)]
+
+    prompt = build_prompt(report, lang="en")
+
+    assert "fork: allowed 2, missed 1" in prompt
+    assert "no clear tactic (positional or deeper): 4" in prompt

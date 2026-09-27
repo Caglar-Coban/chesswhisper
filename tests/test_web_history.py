@@ -290,3 +290,25 @@ def test_report_page_offers_download_and_print(client):
 
     assert f'href="/history/{record_id}/report.md"' in page
     assert "window.print()" in page
+
+
+def test_history_detail_names_the_motif_on_a_board(client):
+    moves = json.loads(_critical_moves_json())
+    moves[0].update(motif="fork", motif_side="allowed")
+    record_id = _seed_record_with_moves("alice", json.dumps(moves))
+
+    response = client.get(f"/history/{record_id}")
+
+    assert "Allowed: fork" in response.text
+
+
+def test_history_detail_shows_no_motif_for_old_records_or_other(client):
+    moves = json.loads(_critical_moves_json())
+    other = dict(moves[0], motif="other", motif_side=None)
+    unknown = dict(moves[0], motif="bogus", motif_side="allowed")
+    record_id = _seed_record_with_moves("alice", json.dumps([moves[0], other, unknown]))
+
+    response = client.get(f"/history/{record_id}")
+
+    assert response.status_code == 200
+    assert 'class="board-motif"' not in response.text

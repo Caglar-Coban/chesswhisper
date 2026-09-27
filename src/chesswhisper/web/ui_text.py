@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from starlette.requests import Request
 
+from chesswhisper.i18n import t as report_text
+from chesswhisper.motifs import MOTIFS
+
 UI_LANGS = ("tr", "en")
 DEFAULT_UI_LANG = "en"
 _SESSION_KEY = "ui_lang"
@@ -204,6 +207,8 @@ _STRINGS: dict[str, dict[str, str]] = {
     "report.legend_best": {"tr": "motorun önerisi", "en": "engine's choice"},
     "report.game_meta": {"tr": "Oyun {n} · {opponent}", "en": "Game {n} · {opponent}"},
     "report.better": {"tr": "Daha iyisi:", "en": "Better:"},
+    "report.motif_allowed": {"tr": "Rakibe verilen: {motif}", "en": "Allowed: {motif}"},
+    "report.motif_missed": {"tr": "Kaçırılan: {motif}", "en": "Missed: {motif}"},
     "report.show_in_game": {"tr": "Oyunda göster →", "en": "Show in game →"},
     "report.practice": {"tr": "Bunları bulmaca olarak çöz →", "en": "Practice these as puzzles →"},
     "report.back": {"tr": "Geçmişe dön", "en": "Back to history"},
@@ -277,6 +282,12 @@ _STRINGS: dict[str, dict[str, str]] = {
     "error.demo_max_games": {"tr": "Demoda analiz başına en fazla {n} oyun çekilebilir.",
                              "en": "The demo fetches at most {n} games per analysis."},
 }
+
+
+# Motif names ("motif.fork", ...) come from the report's own translations.
+_STRINGS.update({
+    f"motif.{motif}": {lang: report_text(f"motif_{motif}", lang) for lang in UI_LANGS} for motif in MOTIFS
+})
 
 
 def ui_text(key: str, lang: str, **params) -> str:

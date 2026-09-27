@@ -86,6 +86,30 @@ _STRINGS = {
     "errors_column": {"tr": "Hata + gaf", "en": "Mistakes + blunders"},
     "error_rate_column": {"tr": "Hata oranı", "en": "Error rate"},
     "acpl_column": {"tr": "ACPL", "en": "ACPL"},
+    "finding_motif_allowed": {
+        "tr": "{total} hata ve gafının {count} tanesi rakibine {motif} fırsatı verdi.",
+        "en": "In {count} of your {total} mistakes and blunders you allowed a {motif}.",
+    },
+    "finding_motif_missed": {
+        "tr": "{total} hata ve gafının {count} tanesinde {motif} fırsatını kaçırdın.",
+        "en": "In {count} of your {total} mistakes and blunders you missed a {motif}.",
+    },
+    "motif_back_rank": {"tr": "arka sıra matı", "en": "back-rank mate"},
+    "motif_mate": {"tr": "mat", "en": "mate"},
+    "motif_promotion": {"tr": "piyon terfisi", "en": "promotion"},
+    "motif_fork": {"tr": "çatal", "en": "fork"},
+    "motif_pin": {"tr": "açmaz", "en": "pin"},
+    "motif_hanging": {"tr": "korumasız taşı alma", "en": "hanging piece"},
+    "motif_other": {"tr": "diğer (pozisyonel ya da derin)", "en": "other (positional or deeper)"},
+    "tactical_patterns": {"tr": "Taktik Desenler", "en": "Tactical Patterns"},
+    "tactical_patterns_note": {
+        "tr": "Hata ve gaflarının arkasındaki taktik. \"Rakibe verilen\": hamlenin rakibe açtığı taktik; \"Kaçırılan\": motorun önerdiği ama oynamadığın taktik.",
+        "en": "The tactic behind your mistakes and blunders. \"Allowed\": the opponent's tactic your move permitted; \"Missed\": the tactic the engine preferred and you did not play.",
+    },
+    "motif_column": {"tr": "Motif", "en": "Motif"},
+    "allowed_column": {"tr": "Rakibe verilen", "en": "Allowed"},
+    "missed_column": {"tr": "Kaçırılan", "en": "Missed"},
+    "total_column": {"tr": "Toplam", "en": "Total"},
 }
 
 
