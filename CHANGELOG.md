@@ -4,6 +4,14 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.17.0] - 2026-09-27
+
+### Added
+
+- Web UI theme choice: the header link steps between following the system
+  (as before), always light and always dark. Like the language it is kept
+  for the session, and printing stays black on white.
+
 ## [0.16.0] - 2026-09-27
 
 ### Added
@@ -298,6 +306,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.17.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.17.0
 [0.16.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.16.0
 [0.15.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.15.0
 [0.14.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.14.0

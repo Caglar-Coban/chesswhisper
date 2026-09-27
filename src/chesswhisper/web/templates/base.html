@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ ui_lang }}">
+<html lang="{{ ui_lang }}"{% if ui_theme != "system" %} data-theme="{{ ui_theme }}"{% endif %}>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,9 +22,11 @@
     --success-bg: #e8f5ec;
     --success-border: #9fd3b0;
     --radius: 10px;
+    color-scheme: light;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
+  {#- The dark palette: used when the system is dark and light wasn't chosen, or when dark was. #}
+  {%- set dark_palette %}
+      color-scheme: dark;
       --bg: #16181c;
       --surface: #1f2226;
       --text: #eaeaea;
@@ -39,7 +41,14 @@
       --danger: #f28b82;
       --success-bg: #173222;
       --success-border: #2f6b45;
+  {%- endset %}
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+{{ dark_palette }}
     }
+  }
+  :root[data-theme="dark"] {
+{{ dark_palette }}
   }
   * { box-sizing: border-box; }
   /* Class rules that set display must not override the hidden attribute. */
@@ -174,6 +183,7 @@
   .nav-links { display: flex; align-items: center; gap: 16px; font-size: 14px; }
   .nav-links a { text-decoration: none; }
   .nav-links a:hover { text-decoration: underline; }
+  .theme-switch { font-size: 13px; }
   .lang-switch { border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; font-size: 13px; }
   .link-button {
     background: none; border: none; padding: 0; margin: 0;
@@ -291,7 +301,7 @@
   .report-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
   .report-actions .secondary-button { display: inline-block; text-decoration: none; font-weight: 500; border-radius: 8px; }
   @media print {
-    :root { --bg: #fff; --surface: #fff; --text: #000; --text-muted: #444; --border: #ccc; }
+    :root, :root[data-theme] { --bg: #fff; --surface: #fff; --text: #000; --text-muted: #444; --border: #ccc; color-scheme: light; }
     body { background: #fff; }
     header.site-header, .no-print, .back-link, .games-card, .board-link { display: none !important; }
     .card { box-shadow: none; border: none; padding: 0; }
@@ -383,6 +393,7 @@
         <button type="submit" class="link-button">{{ t("nav.logout", name=current_user.username) }}</button>
       </form>
       {% endif %}
+      <a class="theme-switch" href="/theme/{{ next_theme }}?next={{ request.url.path | urlencode }}" title="{{ t('nav.theme_next.' ~ next_theme) }}">{{ t("nav.theme." ~ ui_theme) }}</a>
       {% set other_lang = "en" if ui_lang == "tr" else "tr" %}
       <a class="lang-switch" href="/language/{{ other_lang }}?next={{ request.url.path | urlencode }}" lang="{{ other_lang }}">{{ t("nav.switch_language") }}</a>
     </nav>

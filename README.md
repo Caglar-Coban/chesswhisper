@@ -230,6 +230,8 @@ chesswhisper backup                 # database and keys to one zip; `restore` pu
 - **Admin:** list users, see who is locked out, view anyone's history, reset
   a password or delete an account.
 - **Language:** English by default; switch to Turkish from the header.
+- **Theme:** follows the system's light or dark mode by default; the header
+  link switches to always light or always dark.
 
 Security: bcrypt password hashes; a 15-minute lockout after 5 failed logins
 on one account and at most 20 login attempts per client address per 5

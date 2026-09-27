@@ -69,6 +69,7 @@ from chesswhisper.web.security import (
     hash_password,
     verify_password,
 )
+from chesswhisper.web.theme import THEMES, next_theme, set_ui_theme, ui_theme
 from chesswhisper.web.trend import build_trend
 from chesswhisper.web.ui_text import UI_LANGS, set_ui_lang, ui_lang, ui_text
 from chesswhisper.web.worker import JobWorker, worker_count_from_env
@@ -154,12 +155,15 @@ def _tr(request: Request, key: str, **params) -> str:
 
 def _render(request: Request, template_name: str, context: dict, status_code: int = 200) -> HTMLResponse:
     lang = ui_lang(request)
+    theme = ui_theme(request)
     return templates.TemplateResponse(
         request, template_name,
         {
             **context,
             "csrf_token": get_csrf_token(request),
             "ui_lang": lang,
+            "ui_theme": theme,
+            "next_theme": next_theme(theme),
             "t": lambda key, **params: ui_text(key, lang, **params),
             "registration_open": registration_open(),
             "demo": demo_mode(),
@@ -320,16 +324,28 @@ def _render_game_viewer(
     )
 
 
+def _back_to(next_path: str) -> RedirectResponse:
+    # Only same-site paths, so the switches can't be used as an open redirect.
+    safe = next_path.startswith("/") and not next_path.startswith("//") and "\\" not in next_path
+    return RedirectResponse(next_path if safe else "/", status_code=303)
+
+
 @app.get("/language/{lang}", response_model=None)
 async def switch_language(
     request: Request, lang: str, next_path: str = Query("/", alias="next")
 ) -> RedirectResponse:
     if lang in UI_LANGS:
         set_ui_lang(request, lang)
-    # Only same-site paths, so the switch can't be used as an open redirect.
-    safe = next_path.startswith("/") and not next_path.startswith("//") and "\\" not in next_path
-    target = next_path if safe else "/"
-    return RedirectResponse(target, status_code=303)
+    return _back_to(next_path)
+
+
+@app.get("/theme/{theme}", response_model=None)
+async def switch_theme(
+    request: Request, theme: str, next_path: str = Query("/", alias="next")
+) -> RedirectResponse:
+    if theme in THEMES:
+        set_ui_theme(request, theme)
+    return _back_to(next_path)
 
 
 @app.get("/register", response_class=HTMLResponse, response_model=None)
