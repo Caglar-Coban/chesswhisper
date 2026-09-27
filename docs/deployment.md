@@ -63,6 +63,27 @@ as. Run every command (`create-admin`, `serve`) as that same user, with the
 same `CHESSWHISPER_DATA_DIR` if you set one, or they will each see their own
 empty database. With the setup above that means `sudo -u chesswhisper ...`.
 
+### PostgreSQL instead of SQLite
+
+SQLite is the default and is enough for a single server. To keep the
+database in PostgreSQL instead (a managed database, or one you already
+back up), install the driver and point chesswhisper at it:
+
+```
+pip install ".[web,postgres]"
+export CHESSWHISPER_DATABASE_URL=postgresql://chesswhisper:PASSWORD@db-host:5432/chesswhisper
+```
+
+`postgres://` URLs as hosting services hand them out work too. The
+database must exist and the user must be able to create tables in it; the
+schema is created and migrated on the first start, as with SQLite. The key
+files and the evaluation cache still live in the data directory, so keep
+`CHESSWHISPER_DATA_DIR` on persistent storage. `chesswhisper backup` and
+`restore` only handle the SQLite file: with PostgreSQL use `pg_dump` and
+`pg_restore`, and back up the two key files alongside the dump.
+
+Moving existing data from SQLite to PostgreSQL isn't automated.
+
 ## First start
 
 ```

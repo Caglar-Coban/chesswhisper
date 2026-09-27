@@ -287,6 +287,7 @@ curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/api/v1/analyses/12
 | `CHESSWHISPER_ALLOW_REGISTRATION` | `0` closes self-service sign-up in the web UI. |
 | `CHESSWHISPER_WORKERS` | How many web analyses run at once (default 2); the rest wait in a queue that survives restarts. |
 | `CHESSWHISPER_SYNC_MINUTES` | Minutes between checks for linked accounts' new games (default 60, at least 5; 0 turns the automatic checks off). |
+| `CHESSWHISPER_DATABASE_URL` | Keep the web UI's database in PostgreSQL (`postgresql://user:password@host/db`) instead of the SQLite file in the data directory. Needs `pip install ".[web,postgres]"`. See the [deployment guide](docs/deployment.md#postgresql-instead-of-sqlite). |
 | `CHESSWHISPER_DEMO` | `1` runs the web UI as a public demo: a banner, a one-click demo login, no LLM commentary or stored API keys, and at most 10 games per analysis. `chesswhisper seed-demo` fills the demo account. See the [deployment guide](docs/deployment.md#a-public-demo-on-hugging-face-spaces). |
 
 ## Development

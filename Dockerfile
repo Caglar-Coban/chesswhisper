@@ -15,7 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
-RUN pip install ".[web]"
+RUN pip install ".[web,postgres]"
 
 # Download the same Stockfish release the app pins, once, at build time, and
 # put it on PATH where chesswhisper looks first.

@@ -47,6 +47,33 @@ jobs:
           print(f"Coverage: {totals['percent_covered']:.1f}% of {totals['num_statements']} statements")
           EOF
 
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install package with dev, web and postgres dependencies
+        run: pip install -e ".[dev,web,postgres]"
+
+      - name: Run the tests against PostgreSQL
+        env:
+          CHESSWHISPER_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: pytest -q
+
   docker:
     runs-on: ubuntu-latest
     steps:

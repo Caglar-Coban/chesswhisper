@@ -4,6 +4,19 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.19.0] - 2026-09-28
+
+### Added
+
+- PostgreSQL support: set `CHESSWHISPER_DATABASE_URL` to a PostgreSQL URL
+  (install with the new `postgres` extra) and the web UI keeps its
+  database there instead of the SQLite file; migrations run on startup as
+  before, one process at a time. The Docker image includes the driver.
+  `backup` and `restore` stay SQLite-only and point to `pg_dump` and
+  `pg_restore` when a database URL is set.
+- The test suite can run against PostgreSQL with
+  `CHESSWHISPER_TEST_DATABASE_URL`, and CI does.
+
 ## [0.18.0] - 2026-09-28
 
 ### Added
@@ -318,6 +331,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.19.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.19.0
 [0.18.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.18.0
 [0.17.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.17.0
 [0.16.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.16.0

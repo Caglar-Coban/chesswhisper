@@ -16,6 +16,9 @@ from chesswhisper.backup import (
 )
 from chesswhisper.cli import cli
 
+# These tests open the SQLite files themselves (see conftest's PostgreSQL mode).
+pytestmark = pytest.mark.sqlite_only
+
 
 def _make_data_dir(path, users=("alice",), with_cache=True):
     """A data directory like the web UI leaves behind, at the latest schema."""

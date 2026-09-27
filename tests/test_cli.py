@@ -807,3 +807,14 @@ def test_cli_filter_options_narrow_the_report(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     report = output.read_text(encoding="utf-8")
     assert "**Filter:** Blitz, Rapid \u00b7 as White" in report
+
+
+@pytest.mark.parametrize(("args", "tool"), [(["backup"], "pg_dump"), (["restore", __file__], "pg_restore")])
+def test_backup_and_restore_point_to_postgres_tools_when_the_database_is_there(monkeypatch, args, tool):
+    monkeypatch.setenv("CHESSWHISPER_DATABASE_URL", "postgresql://u:p@db.example/cw")
+
+    result = CliRunner().invoke(cli, args)
+
+    assert result.exit_code == 1
+    assert tool in result.output
+    assert "api_key_encryption.key" in result.output

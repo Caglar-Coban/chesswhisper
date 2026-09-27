@@ -14,6 +14,9 @@ from chesswhisper.web import db as db_module
 from chesswhisper.web import models  # noqa: F401 -- registers tables on Base.metadata
 from chesswhisper.web.db import BASELINE_REVISION, Base, get_db, init_db, migrations_dir
 
+# These tests open the SQLite files themselves (see conftest's PostgreSQL mode).
+pytestmark = pytest.mark.sqlite_only
+
 HEAD = "0010_game_syncs"
 
 

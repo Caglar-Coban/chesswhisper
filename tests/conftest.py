@@ -69,3 +69,62 @@ def _reset_login_rate_limit():
     if module is not None:
         module.login_limiter.reset()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_database_url_from_the_environment(monkeypatch):
+    """A developer's own CHESSWHISPER_DATABASE_URL must not point tests at their database."""
+    monkeypatch.delenv("CHESSWHISPER_DATABASE_URL", raising=False)
+
+
+# Set to a PostgreSQL URL to run the web tests against PostgreSQL instead of
+# SQLite files. Every test starts from an empty schema in that database, so
+# never point it at one holding data. Tests marked sqlite_only are skipped.
+TEST_DATABASE_URL_ENV = "CHESSWHISPER_TEST_DATABASE_URL"
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "sqlite_only: the test inspects SQLite files directly")
+
+
+@pytest.fixture(autouse=True)
+def _postgres_instead_of_sqlite(request, monkeypatch):
+    import os
+
+    url = os.environ.get(TEST_DATABASE_URL_ENV)
+    if not url:
+        yield
+        return
+    if request.node.get_closest_marker("sqlite_only"):
+        pytest.skip("inspects SQLite files directly")
+
+    from sqlalchemy import make_url
+
+    from chesswhisper.web import db as web_db
+
+    url = make_url(url).set(drivername="postgresql+psycopg")
+    if web_db._engine is not None:
+        web_db._engine.dispose()
+    reset = web_db._create_engine(url)
+    with reset.begin() as connection:
+        # A session an earlier test left open would hold its locks and block the drop forever.
+        connection.exec_driver_sql(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE datname = current_database() AND pid <> pg_backend_pid()"
+        )
+        connection.exec_driver_sql("SET lock_timeout = '10s'")
+        connection.exec_driver_sql("DROP SCHEMA public CASCADE")
+        connection.exec_driver_sql("CREATE SCHEMA public")
+    reset.dispose()
+
+    engines = []
+
+    def pg_engine(db_path=None):
+        engine = web_db._create_engine(url)
+        engines.append(engine)
+        return engine
+
+    monkeypatch.setattr(web_db, "get_engine", pg_engine)
+    yield
+    for engine in engines:
+        engine.dispose()

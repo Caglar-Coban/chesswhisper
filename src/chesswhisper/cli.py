@@ -360,6 +360,20 @@ def seed_demo_command(analyses, movetime, threads):
         click.echo(f"Demo account {DEMO_USERNAME!r} already has analyses; nothing to do.")
 
 
+def _refuse_external_database(action: str, tool: str) -> None:
+    """backup/restore handle the SQLite file only; a PostgreSQL database has its own tools."""
+    if os.environ.get("CHESSWHISPER_DATABASE_URL", "").strip():
+        from chesswhisper.backup import KEY_FILES
+
+        click.echo(
+            f"Error: the database is on PostgreSQL (CHESSWHISPER_DATABASE_URL), so {action} it with {tool}. "
+            f"Keep {' and '.join(KEY_FILES)} from {data_dir()} with it: without them saved API keys "
+            "can't be decrypted.",
+            err=True,
+        )
+        sys.exit(1)
+
+
 @cli.command()
 @click.option("-o", "--output", "output_path", default=None, type=click.Path(dir_okay=False),
               help="Where to write the backup. Defaults to chesswhisper-backup-<date>-<time>.zip here.")
@@ -368,6 +382,7 @@ def backup(output_path, include_cache):
     """Back up the web UI's database and keys to a zip file. Safe while the server runs."""
     from chesswhisper.backup import BackupError, create_backup
 
+    _refuse_external_database("back up", "pg_dump")
     if output_path is None:
         output_path = f"chesswhisper-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
     try:
@@ -387,6 +402,7 @@ def restore(archive, force):
     """Restore a backup made with `chesswhisper backup`. Stop the server first."""
     from chesswhisper.backup import BackupError, restore_backup
 
+    _refuse_external_database("restore", "pg_restore or psql")
     target = data_dir()
     try:
         info = restore_backup(Path(archive), target, force=force)
