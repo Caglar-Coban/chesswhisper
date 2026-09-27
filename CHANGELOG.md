@@ -4,6 +4,24 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-09-27
+
+### Added
+
+- Spaced repetition for puzzles. A puzzle answered right comes back after
+  1, 3, 7, 14 and then 30 days for each review in a row answered right; one
+  answered wrong comes back the next day. Due reviews are offered first
+  (most overdue first), then new puzzles, then the rest. A retry in the
+  same sitting does not count as getting it right.
+- The puzzle page shows whether a puzzle is new or due, how many reviews
+  are due, and after a correct answer when it comes back.
+
+### Changed
+
+- Puzzles are no longer ordered new, then missed, then solved; see above.
+  The schedule is worked out from attempts already saved, so there is no
+  migration and past attempts count.
+
 ## [0.7.0] - 2026-09-27
 
 ### Added
@@ -175,6 +193,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.8.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.5.0

@@ -20,13 +20,14 @@
   {% else %}
   <div class="viewer-head">
     <h2>{{ t("puzzles.heading") }}</h2>
-    <p>{{ t("puzzles.stats", solved=solved_count, total=total) }}{% if solved_before %} · {{ t("puzzles.solved_before") }}{% endif %}</p>
+    <p>{{ t("puzzles.stats", solved=solved_count, total=total) }}{% if due_count %} · {{ t("puzzles.due", n=due_count) }}{% endif %}{% if solved_before %} · {{ t("puzzles.solved_before") }}{% endif %}</p>
   </div>
   <div class="viewer">
     <div>
       <div class="viewer-board puzzle-board" id="board" role="img" aria-label="{{ t('viewer.board') }}"></div>
     </div>
     <div>
+      <p class="review-status">{% if review_status == "upcoming" %}{{ t("puzzles.status_upcoming", days=days_until_due) }}{% else %}{{ t("puzzles.status_" ~ review_status) }}{% endif %}</p>
       <p style="margin-top:0; font-weight:600;">{{ t("puzzles.to_move_" ~ puzzle.your_color) }}</p>
       <p style="font-size:14px;">
         {{ t("puzzles.context", n=puzzle.game_number, opponent=puzzle.opponent, move=puzzle.move_label, pawns="%.1f"|format(puzzle.cp_loss / 100)) }}
@@ -57,6 +58,7 @@
     wrong: {{ t("puzzles.wrong") | tojson }},
     solution: {{ t("puzzles.solution") | tojson }},
     stats: {{ t("puzzles.stats") | tojson }},
+    nextReview: {{ t("puzzles.next_review") | tojson }},
     failed: {{ t("puzzles.check_failed") | tojson }}
   };
 
@@ -97,7 +99,8 @@
           TEXT.stats.replace("{solved}", data.solved).replace("{total}", data.total);
         if (data.correct) {
           arrows = [{ from: data.best_uci.slice(0, 2), to: data.best_uci.slice(2, 4), color: "#2e8b57" }];
-          showResult(TEXT.correct.replace("{move}", data.best_san), "correct");
+          var reviewNote = data.next_review_days ? " " + TEXT.nextReview.replace("{days}", data.next_review_days) : "";
+          showResult(TEXT.correct.replace("{move}", data.best_san) + reviewNote, "correct");
           retry.hidden = true;
           solutionBtn.hidden = true;
         } else {

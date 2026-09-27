@@ -4,7 +4,8 @@ import re
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from importlib.metadata import version as package_version
 
 import bleach
@@ -54,6 +55,7 @@ from chesswhisper.web.puzzles import (
     theme_counts,
 )
 from chesswhisper.web.ratelimit import SlidingWindowLimiter
+from chesswhisper.web.review import ReviewState, review_state
 from chesswhisper.web.security import (
     MIN_PASSWORD_LENGTH,
     decrypt_api_key,
@@ -694,17 +696,33 @@ async def index(request: Request, current_user: User = Depends(get_current_user)
 _UCI_RE = re.compile(r"[a-h][1-8][a-h][1-8][qrbn]?")
 
 
-def _user_puzzles(db: Session, user: User) -> tuple[list[Puzzle], dict[tuple[int, int], bool]]:
-    """The user's puzzles in the order to offer them, and which have been solved."""
+@dataclass
+class _PuzzleProgress:
+    solved: dict[tuple[int, int], bool]  # attempted puzzles: solved at least once?
+    attempts: dict[tuple[int, int], list[tuple[datetime, bool]]]
+    states: dict[tuple[int, int], ReviewState]
+
+
+def _user_puzzles(db: Session, user: User) -> tuple[list[Puzzle], _PuzzleProgress]:
+    """The user's puzzles in the order to offer them, and their progress on each."""
     records = (
         db.query(AnalysisRecord).filter_by(user_id=user.id).order_by(AnalysisRecord.created_at.desc()).all()
     )
     solved: dict[tuple[int, int], bool] = {}
-    for record_id, index, was_solved in (
-        db.query(PuzzleAttempt.record_id, PuzzleAttempt.move_index, PuzzleAttempt.solved).filter_by(user_id=user.id)
-    ):
-        solved[(record_id, index)] = solved.get((record_id, index), False) or was_solved
-    return order_puzzles(puzzles_from_records(records), solved), solved
+    attempts: dict[tuple[int, int], list[tuple[datetime, bool]]] = {}
+    for record_id, index, was_solved, created_at in db.query(
+        PuzzleAttempt.record_id, PuzzleAttempt.move_index, PuzzleAttempt.solved, PuzzleAttempt.created_at
+    ).filter_by(user_id=user.id):
+        key = (record_id, index)
+        solved[key] = solved.get(key, False) or was_solved
+        attempts.setdefault(key, []).append((created_at, was_solved))
+    states = {key: review_state(history) for key, history in attempts.items()}
+    progress = _PuzzleProgress(solved=solved, attempts=attempts, states=states)
+    return order_puzzles(puzzles_from_records(records), states, utcnow()), progress
+
+
+def _due_count(puzzles: list[Puzzle], progress: _PuzzleProgress, now: datetime) -> int:
+    return sum(1 for p in puzzles if p.key in progress.states and progress.states[p.key].status(now) == "due")
 
 
 def _solved_count(puzzles: list[Puzzle], solved: dict[tuple[int, int], bool]) -> int:
@@ -752,11 +770,13 @@ async def puzzle_page(
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
     theme = _theme_param(theme)
-    puzzles, solved = _user_puzzles(db, current_user)
+    puzzles, progress = _user_puzzles(db, current_user)
     themed = filter_by_theme(puzzles, theme)
     puzzle = next((p for p in puzzles if p.key == (record_id, index)), None)
     if puzzle is None:
         return _render_error(request, _tr(request, "error.puzzle_not_found"), 404, current_user)
+    now = utcnow()
+    state = progress.states.get(puzzle.key, ReviewState())
     record = db.get(AnalysisRecord, record_id)
     viewer_url = (
         f"/history/{record_id}/games/{puzzle.game_number}?ply={puzzle.ply}"
@@ -768,9 +788,12 @@ async def puzzle_page(
             "current_user": current_user,
             "puzzle": puzzle,
             "legal_moves": legal_moves(puzzle.fen),
-            "solved_before": solved.get(puzzle.key, False),
-            "solved_count": _solved_count(themed, solved),
+            "solved_before": progress.solved.get(puzzle.key, False),
+            "solved_count": _solved_count(themed, progress.solved),
             "total": len(themed),
+            "due_count": _due_count(themed, progress, now),
+            "review_status": state.status(now),
+            "days_until_due": state.days_until_due(now),
             **_theme_context(puzzles, theme),
             "viewer_url": viewer_url,
             "pieces": PIECE_SVGS,
@@ -788,7 +811,7 @@ async def puzzle_attempt(
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> JSONResponse:
-    puzzles, solved = _user_puzzles(db, current_user)
+    puzzles, progress = _user_puzzles(db, current_user)
     puzzle = next((p for p in puzzles if p.key == (record_id, index)), None)
     if puzzle is None:
         return JSONResponse({"detail": "Puzzle not found."}, status_code=404)
@@ -797,12 +820,17 @@ async def puzzle_attempt(
         return JSONResponse({"detail": "Not a legal move in this position."}, status_code=400)
 
     correct = move == puzzle.best_uci
+    now = utcnow()
     db.add(PuzzleAttempt(
         user_id=current_user.id, record_id=record_id, move_index=index, move_uci=move, solved=correct,
+        created_at=now,
     ))
     db.commit()
+    solved = progress.solved
     solved[puzzle.key] = solved.get(puzzle.key, False) or correct
+    state = review_state([*progress.attempts.get(puzzle.key, []), (now, correct)])
     return JSONResponse({
+        "next_review_days": state.days_until_due(now),
         "correct": correct,
         "best_uci": puzzle.best_uci,
         "best_san": puzzle.best_san,

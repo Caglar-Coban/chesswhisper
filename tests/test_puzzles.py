@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 import chess
 
@@ -12,6 +12,7 @@ from chesswhisper.web.puzzles import (
     puzzles_from_records,
     theme_counts,
 )
+from chesswhisper.web.review import ReviewState
 
 START = chess.STARTING_FEN
 AFTER_E4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
@@ -68,15 +69,21 @@ def test_records_without_critical_moves_or_with_bad_json_give_nothing():
     assert puzzles_from_records(records) == []
 
 
-def test_order_puts_new_puzzles_first_then_missed_then_solved_newest_first():
-    old = _Record(1, datetime(2026, 9, 1), json.dumps([_entry(best="e2e4"), _entry(best="d2d4")]))
-    new = _Record(2, datetime(2026, 9, 5), json.dumps([_entry(best="g1f3"), _entry(best="c2c4")]))
+def test_order_puts_due_reviews_first_then_new_then_upcoming():
+    old = _Record(1, datetime(2026, 9, 1), json.dumps([_entry(best="e2e4"), _entry(best="d2d4"), _entry(best="b1c3")]))
+    new = _Record(2, datetime(2026, 9, 5), json.dumps([_entry(best="g1f3"), _entry(best="c2c4"), _entry(best="f2f4")]))
     puzzles = puzzles_from_records([old, new])
-    attempts = {(2, 0): True, (1, 0): False}  # key -> solved at least once
+    now = datetime(2026, 9, 27, tzinfo=UTC)
+    states = {
+        (2, 0): ReviewState(streak=1, due_at=now + timedelta(days=3)),  # upcoming, later
+        (1, 2): ReviewState(streak=2, due_at=now + timedelta(days=1)),  # upcoming, sooner
+        (1, 0): ReviewState(streak=0, due_at=now - timedelta(hours=1)),  # due
+        (2, 2): ReviewState(streak=3, due_at=now - timedelta(days=4)),  # due, more overdue
+    }
 
-    ordered = order_puzzles(puzzles, attempts)
+    ordered = order_puzzles(puzzles, states, now)
 
-    assert [(p.record_id, p.index) for p in ordered] == [(2, 1), (1, 1), (1, 0), (2, 0)]
+    assert [(p.record_id, p.index) for p in ordered] == [(2, 2), (1, 0), (2, 1), (1, 1), (1, 2), (2, 0)]
 
 
 def test_legal_moves_lists_every_move_in_uci():

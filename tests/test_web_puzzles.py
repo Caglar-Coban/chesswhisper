@@ -206,3 +206,55 @@ def test_an_unknown_theme_is_ignored(client):
     response = client.get("/puzzles?theme=<script>")
 
     assert response.headers["location"] == f"/puzzles/{record_id}/0"
+
+
+def _set_attempt_times(delta):
+    """Move every saved attempt *delta* into the past, as if it were made earlier."""
+    from chesswhisper.web.db import session_scope
+
+    with session_scope() as db:
+        for attempt in db.query(PuzzleAttempt):
+            attempt.created_at = attempt.created_at - delta
+
+
+def test_a_new_puzzle_says_so(client):
+    record_id = _seed()
+
+    assert "New puzzle" in client.get(f"/puzzles/{record_id}/0").text
+
+
+def test_solving_reports_when_the_puzzle_comes_back(client):
+    record_id = _seed()
+
+    body = _attempt(client, record_id, 0, "e2e4").json()
+
+    assert body["correct"] is True
+    assert body["next_review_days"] == 1
+
+
+def test_a_solved_puzzle_waits_until_it_is_due(client):
+    from datetime import timedelta
+
+    record_id = _seed()
+    _attempt(client, record_id, 0, "e2e4")
+    _attempt(client, record_id, 1, "d2d4")
+
+    # Both answered right just now: nothing is due, so the next one shown is "upcoming".
+    page = client.get(client.get("/puzzles").headers["location"]).text
+    assert "caught up" in page
+
+    _set_attempt_times(timedelta(days=2))
+    location = client.get("/puzzles").headers["location"]
+    page = client.get(location).text
+    assert "Due for review" in page
+    assert "2 due for review" in page
+
+
+def test_a_missed_puzzle_comes_back_before_new_ones_once_due(client):
+    from datetime import timedelta
+
+    record_id = _seed(entries=[_entry(), _entry("h2h3", "d2d4", "Carol"), _entry("b2b3", "g1f3", "Dave")])
+    _attempt(client, record_id, 1, "a2a4")  # wrong
+    _set_attempt_times(timedelta(days=1, minutes=1))
+
+    assert client.get("/puzzles").headers["location"] == f"/puzzles/{record_id}/1"

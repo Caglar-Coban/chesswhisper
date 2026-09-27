@@ -204,9 +204,11 @@ chesswhisper backup                 # database and keys to one zip; `restore` pu
 - **Game viewer:** board, evaluation graph and annotated move list; click,
   use the arrow keys or Home/End, and flip the board.
 - **Puzzles:** your blunders and mistakes as "find the better move"
-  exercises. New puzzles come first, then ones you missed, then ones you've
-  solved; the same position from overlapping analyses appears once. Filter
-  them by theme to practice one kind of tactic.
+  exercises, scheduled with spaced repetition: reviews that are due come
+  first, then new puzzles; one you get right comes back after 1, 3, 7, 14
+  and then 30 days, one you miss comes back the next day. The same position
+  from overlapping analyses appears once. Filter them by theme to practice
+  one kind of tactic.
 - **History:** every past analysis and a trend chart of accuracy and ACPL for
   each player.
 - **Settings:** store, replace or remove your own Anthropic/OpenAI keys

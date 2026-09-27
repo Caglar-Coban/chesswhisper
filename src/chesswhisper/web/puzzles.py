@@ -20,6 +20,7 @@ from typing import Protocol
 import chess
 
 from chesswhisper.motifs import MATE_THRESHOLD, MOTIFS, tactic_motif
+from chesswhisper.web.review import ReviewState
 
 PuzzleKey = tuple[int, int]  # (analysis record id, index in its critical moves)
 
@@ -126,20 +127,25 @@ def puzzles_from_records(records) -> list[Puzzle]:
     return puzzles
 
 
-def order_puzzles(puzzles: list[Puzzle], solved: dict[PuzzleKey, bool]) -> list[Puzzle]:
-    """New puzzles first, then ones answered wrong, then solved ones; newest analysis first in each.
+def order_puzzles(puzzles: list[Puzzle], states: dict[PuzzleKey, ReviewState], now: datetime) -> list[Puzzle]:
+    """Reviews that are due (most overdue first), then new puzzles (newest analysis first),
+    then the rest by when they come due.
 
-    *solved* maps each attempted puzzle to whether any attempt was correct.
+    *states* has the review state of every attempted puzzle (see review.py).
     """
+    fresh = ReviewState()
 
-    def group(p: Puzzle) -> int:
-        if p.key not in solved:
-            return 0
-        return 2 if solved[p.key] else 1
+    def sort_key(p: Puzzle) -> tuple:
+        state = states.get(p.key, fresh)
+        status = state.status(now)
+        if status == "new":
+            return (1, 0.0)
+        assert state.due_at is not None
+        return (0 if status == "due" else 2, state.due_at.timestamp())
 
     # sorted() is stable: newest analysis first, then the critical moves' own order.
     by_recency = sorted(puzzles, key=lambda p: (-p.created_at.timestamp(), -p.record_id, p.index))
-    return sorted(by_recency, key=group)
+    return sorted(by_recency, key=sort_key)
 
 
 def legal_moves(fen: str) -> list[str]:
