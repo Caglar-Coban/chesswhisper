@@ -53,11 +53,6 @@ def _job_id_from_redirect(response):
     return response.headers["location"].rsplit("/", 1)[-1]
 
 
-def _real_start_background(target):
-    import threading
-    threading.Thread(target=target, daemon=True).start()
-
-
 def _fail_if_job_created(*args, **kwargs):
     raise AssertionError("a job should not have been created")
 
@@ -98,13 +93,19 @@ def test_analyze_job_completes_and_status_redirects_to_history(client, monkeypat
     assert body["redirect"] == f"/history/{records[0].id}?job={job_id}"
 
 
-def test_analyze_runs_on_a_real_background_thread(client, monkeypatch):
+def test_analyze_runs_on_a_real_worker_thread(client, monkeypatch):
     import time as time_module
+
+    from chesswhisper.web import app as app_module
+    from chesswhisper.web.worker import JobWorker
 
     monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
     # Undo the autouse inline-execution patch for this one test -- we want
-    # to prove the real threading.Thread path works, not just the seam.
-    monkeypatch.setattr("chesswhisper.web.app._start_background", _real_start_background)
+    # to prove the real worker pool path works, not just the seam.
+    pool = JobWorker(app_module._run_analysis_job, workers=1)
+    pool.start()
+    monkeypatch.setattr(app_module, "_worker", pool)
+    monkeypatch.setattr(app_module, "_enqueue", pool.submit)
 
     response = client.post(
         "/analyze",
@@ -117,9 +118,10 @@ def test_analyze_runs_on_a_real_background_thread(client, monkeypatch):
     status_body = None
     while time_module.monotonic() < deadline:
         status_body = client.get(f"/analyze/status/{job_id}").json()
-        if status_body["status"] != "running":
+        if status_body["status"] not in ("queued", "running"):
             break
         time_module.sleep(0.05)
+    pool.stop()
 
     assert status_body is not None
     assert status_body["status"] == "done", f"job did not complete in time: {status_body}"
@@ -220,8 +222,8 @@ def test_on_progress_updates_the_job_before_it_completes(client, monkeypatch):
     created_jobs = []
     original_create_job = jobs.create_job
 
-    def spy_create_job(user_id):
-        job = original_create_job(user_id)
+    def spy_create_job(user_id, inputs=None):
+        job = original_create_job(user_id, inputs)
         created_jobs.append(job)
         return job
 
@@ -232,10 +234,10 @@ def test_on_progress_updates_the_job_before_it_completes(client, monkeypatch):
     def fake_run_analysis(pgn_path, player, lang, llm_name, llm_api_key=None, on_progress=None, **kwargs):
         if on_progress is not None:
             on_progress(1, 2)
-        job = created_jobs[0]
-        # Snapshot state right after the callback but before this function
-        # returns -- a real concurrent status poll mid-run would see exactly
-        # this: progress recorded, but not yet marked done.
+        # Read the stored job right after the callback but before this
+        # function returns -- a real concurrent status poll mid-run would see
+        # exactly this: progress recorded, but not yet marked done.
+        job = jobs.get_job(created_jobs[0].id)
         captured["mid_run"] = (job.completed, job.total, job.status)
         return _fake_aggregate_report()
 

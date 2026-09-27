@@ -125,6 +125,8 @@ _STRINGS: dict[str, dict[str, str]] = {
 
     # Progress
     "progress.starting": {"tr": "Analiz başlıyor…", "en": "Starting the analysis…"},
+    "progress.queued": {"tr": "Sırada bekliyor: önünde {n} analiz var", "en": "Waiting in line: {n} analyses ahead"},
+    "progress.queued_next": {"tr": "Sırada bekliyor: sıradaki analiz bu", "en": "Waiting in line: this analysis is next"},
     "progress.count": {"tr": "{completed} / {total} oyun analiz edildi", "en": "{completed} / {total} games analyzed"},
     "progress.error": {"tr": "Hata:", "en": "Error:"},
     "progress.new_analysis": {"tr": "Yeni analiz", "en": "New analysis"},

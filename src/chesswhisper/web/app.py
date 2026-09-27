@@ -2,8 +2,8 @@ import json
 import os
 import re
 import tempfile
-import threading
-from collections.abc import Callable
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from importlib.metadata import version as package_version
 
@@ -41,7 +41,7 @@ from chesswhisper.web.auth import (
     verify_csrf,
 )
 from chesswhisper.web.boards import PIECE_SVGS, VIEWER_COLORS, board_cards
-from chesswhisper.web.db import get_db, utcnow
+from chesswhisper.web.db import get_db, session_scope, utcnow
 from chesswhisper.web.demo import DEMO_MAX_GAMES, DEMO_PASSWORD, DEMO_USERNAME, demo_mode
 from chesswhisper.web.models import AnalysisRecord, PuzzleAttempt, User, UserApiKey
 from chesswhisper.web.puzzles import Puzzle, legal_moves, order_puzzles, puzzles_from_records
@@ -58,6 +58,7 @@ from chesswhisper.web.security import (
 )
 from chesswhisper.web.trend import build_trend
 from chesswhisper.web.ui_text import UI_LANGS, set_ui_lang, ui_lang, ui_text
+from chesswhisper.web.worker import JobWorker, worker_count_from_env
 
 MAX_FAILED_LOGIN_ATTEMPTS = 5
 LOGIN_LOCKOUT_MINUTES = 15
@@ -100,7 +101,16 @@ def registration_open() -> bool:
     return os.environ.get(ALLOW_REGISTRATION_ENV, "1").strip().lower() not in ("0", "false", "no", "off")
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Picks up analyses a previous process left queued or unfinished.
+    await run_in_threadpool(_worker.start)
+    yield
+    await run_in_threadpool(_worker.stop)
+
+
 app = FastAPI(
+    lifespan=_lifespan,
     title="chesswhisper API",
     version=package_version("chesswhisper"),
     description=(
@@ -165,8 +175,8 @@ def _report_to_safe_html(report_markdown: str) -> str:
     return bleach.clean(raw_html, tags=_ALLOWED_TAGS, attributes=_ALLOWED_ATTRS, strip=True)
 
 
-def _start_background(target: Callable[[], None]) -> None:
-    threading.Thread(target=target, daemon=True).start()
+def _enqueue(job_id: str) -> None:
+    _worker.submit(job_id)
 
 
 def save_analysis(
@@ -194,22 +204,39 @@ def save_analysis(
     return record
 
 
-def _run_analysis_job(
-    job_id: str,
-    user_id: int,
-    tmp_path: str,
-    player: str | None,
-    lang: str,
-    llm: str,
-    llm_api_key: str | None,
-    fetch_warnings: list[str],
-    ui_language: str = "en",
-) -> None:
+def _llm_key_for(user_id: int, llm: str) -> str | None:
+    """The user's saved key for *llm*, decrypted, or None if there is none."""
+    with session_scope() as db:
+        key_row = db.get(UserApiKey, user_id)
+        encrypted = None
+        if key_row is not None:
+            encrypted = key_row.anthropic_key_encrypted if llm == "claude" else key_row.openai_key_encrypted
+        return decrypt_api_key(encrypted) if encrypted else None
+
+
+def _run_analysis_job(job_id: str) -> None:
+    """Run one queued job to the end; called by the worker pool."""
+    job = jobs.get_job(job_id)
+    inputs = jobs.job_inputs(job_id)
+    if job is None or inputs is None or not jobs.mark_running(job_id):
+        return
+    ui_language = inputs.ui_language
+    tmp_path = None
     db = next(get_db())
     try:
+        llm_api_key = None
+        if inputs.llm != "none":
+            # Read now rather than stored with the job, so no key sits in the queue.
+            llm_api_key = _llm_key_for(job.user_id, inputs.llm)
+            if llm_api_key is None:
+                jobs.mark_error(job_id, ui_text("settings.msg.missing_key", ui_language))
+                return
+        with tempfile.NamedTemporaryFile(suffix=".pgn", delete=False) as tmp:
+            tmp.write(inputs.pgn_text.encode("utf-8"))
+            tmp_path = tmp.name
         try:
             aggregate, commentary, warnings = run_analysis(
-                tmp_path, player, lang, llm,
+                tmp_path, inputs.player, inputs.lang, inputs.llm,
                 llm_api_key=llm_api_key,
                 on_progress=lambda completed, total: jobs.update_progress(job_id, completed, total),
             )
@@ -220,20 +247,21 @@ def _run_analysis_job(
             jobs.mark_error(job_id, ui_text("error.engine_setup", ui_language, detail=exc))
             return
 
-        record = save_analysis(db, user_id, aggregate, commentary, lang, llm)
-        jobs.mark_done(job_id, record.id, fetch_warnings + warnings)
+        record = save_analysis(db, job.user_id, aggregate, commentary, inputs.lang, inputs.llm)
+        jobs.mark_done(job_id, record.id, inputs.fetch_warnings + warnings)
     except Exception:
-        # Last-resort safety net: without this, an exception type this
-        # function doesn't already handle (e.g. a database error on commit)
-        # would propagate out of the background thread silently, leaving
-        # the job stuck in "running" forever from the client's point of
-        # view. Message text matches the existing top-level
+        # Last-resort safety net: an exception type not handled above (e.g. a
+        # database error on commit) must still end the job, or its progress
+        # page would wait forever. Message text matches the top-level
         # _unhandled_exception_handler for the same failure class.
         jobs.mark_error(job_id, ui_text("error.unexpected", ui_language))
     finally:
         db.close()
-        if os.path.exists(tmp_path):
+        if tmp_path is not None and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+_worker = JobWorker(_run_analysis_job, workers=worker_count_from_env())
 
 
 def _timelines(record: AnalysisRecord) -> list[dict]:
@@ -831,7 +859,6 @@ async def start_analysis(
             raise fail(413, "error.file_too_large", mb=MAX_UPLOAD_BYTES // (1024 * 1024))
         contents = pgn_bytes
 
-    llm_api_key = None
     if llm != "none":
         key_row = db.get(UserApiKey, user_id)
         encrypted = None
@@ -839,7 +866,6 @@ async def start_analysis(
             encrypted = key_row.anthropic_key_encrypted if llm == "claude" else key_row.openai_key_encrypted
         if not encrypted:
             raise MissingLlmKey()
-        llm_api_key = decrypt_api_key(encrypted)
 
     fetch_warnings: list[str] = []
     if fetching:
@@ -853,20 +879,19 @@ async def start_analysis(
         fetch_warnings = fetched.warnings
         player = player or fetched.player
 
-    with tempfile.NamedTemporaryFile(suffix=".pgn", delete=False) as tmp:
-        tmp.write(contents)
-        tmp_path = tmp.name
-
-    job, created = jobs.create_job_unless_running(user_id)
+    inputs = jobs.JobInputs(
+        pgn_text=contents.decode("utf-8", errors="replace"),
+        player=player or None,
+        lang=lang,
+        llm=llm,
+        ui_language=ui_language,
+        fetch_warnings=fetch_warnings,
+    )
+    job, created = jobs.create_job_unless_running(user_id, inputs)
     if not created:
         # Another submission started an analysis while this one was fetching.
-        os.remove(tmp_path)
         raise AnalysisAlreadyRunning(job)
-    _start_background(
-        lambda: _run_analysis_job(
-            job.id, user_id, tmp_path, player or None, lang, llm, llm_api_key, fetch_warnings, ui_language
-        )
-    )
+    _enqueue(job.id)
     return job
 
 
@@ -929,7 +954,9 @@ async def analyze_status(
         return JSONResponse({"status": "error", "message": _tr(request, "error.unauthorized")}, status_code=403)
 
     body: dict[str, object] = {"status": job.status, "completed": job.completed, "total": job.total}
-    if job.status == "done":
+    if job.status == "queued":
+        body["position"] = jobs.queue_position(job.id)
+    elif job.status == "done":
         body["redirect"] = f"/history/{job.record_id}?job={job.id}"
     elif job.status == "error":
         body["message"] = job.error_message

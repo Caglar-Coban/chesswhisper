@@ -40,31 +40,16 @@ class CsrfClient(TestClient):
 
 @pytest.fixture(autouse=True)
 def _run_background_jobs_inline(monkeypatch):
-    """chesswhisper.web.app starts analysis jobs on a background thread;
-    tests need deterministic, synchronous execution instead of racing a
-    real thread. This patches that one seam -- but only if the module is
-    already imported (checked via sys.modules, which never triggers an
-    import itself), so a CLI-only test run never has to import or
-    initialize the FastAPI app.
+    """chesswhisper.web.app hands analysis jobs to a worker pool; tests need
+    deterministic, synchronous execution instead of racing its threads.
+    This patches that one seam so a job runs as soon as it is queued -- but
+    only if the module is already imported (checked via sys.modules, which
+    never triggers an import itself), so a CLI-only test run never has to
+    import or initialize the FastAPI app.
     """
     module = sys.modules.get("chesswhisper.web.app")
     if module is not None:
-        monkeypatch.setattr(module, "_start_background", lambda target: target())
-
-
-@pytest.fixture(autouse=True)
-def _isolate_job_registry():
-    """The job registry is process-wide and every test database's first user
-    has id 1, so a job one test leaves "running" would otherwise count as
-    that user's in-progress analysis in the next test.
-    """
-    module = sys.modules.get("chesswhisper.web.jobs")
-    if module is not None:
-        module._jobs.clear()
-    yield
-    module = sys.modules.get("chesswhisper.web.jobs")
-    if module is not None:
-        module._jobs.clear()
+        monkeypatch.setattr(module, "_enqueue", module._run_analysis_job)
 
 
 @pytest.fixture(autouse=True)

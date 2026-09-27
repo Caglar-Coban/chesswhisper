@@ -30,6 +30,7 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     puzzle_attempts: Mapped[list[PuzzleAttempt]] = relationship(cascade="all, delete-orphan")
+    analysis_jobs: Mapped[list[AnalysisJob]] = relationship(cascade="all, delete-orphan")
 
 
 class UserApiKey(Base):
@@ -81,3 +82,31 @@ class PuzzleAttempt(Base):
     move_uci: Mapped[str] = mapped_column(String(5))
     solved: Mapped[bool]
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class AnalysisJob(Base):
+    """A web analysis waiting, running or finished (see web/jobs.py and web/worker.py).
+
+    The inputs are kept so a job interrupted by a restart can run again;
+    pgn_text is emptied once the job finishes.
+    """
+
+    __tablename__ = "analysis_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(10), index=True)  # queued | running | done | error
+    completed: Mapped[int] = mapped_column(default=0)
+    total: Mapped[int] = mapped_column(default=0)
+    attempts: Mapped[int] = mapped_column(default=0)
+    record_id: Mapped[int | None] = mapped_column(default=None)
+    warnings_json: Mapped[str] = mapped_column(Text, default="[]")
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    pgn_text: Mapped[str] = mapped_column(Text, default="")
+    player: Mapped[str | None] = mapped_column(String(200), default=None)
+    lang: Mapped[str] = mapped_column(String(8), default="en")
+    llm: Mapped[str] = mapped_column(String(20), default="none")
+    ui_language: Mapped[str] = mapped_column(String(8), default="en")
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(default=None)
+    finished_at: Mapped[datetime | None] = mapped_column(default=None)

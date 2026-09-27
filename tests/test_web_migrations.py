@@ -14,7 +14,7 @@ from chesswhisper.web import db as db_module
 from chesswhisper.web import models  # noqa: F401 -- registers tables on Base.metadata
 from chesswhisper.web.db import BASELINE_REVISION, Base, get_db, init_db, migrations_dir
 
-HEAD = "0006_puzzle_attempts"
+HEAD = "0007_analysis_jobs"
 
 
 def _engine(db_path):

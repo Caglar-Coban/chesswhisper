@@ -13,7 +13,12 @@
 </div>
 <script>
   var jobId = "{{ job_id }}";
-  var TEXT = { starting: {{ t("progress.starting") | tojson }}, count: {{ t("progress.count") | tojson }} };
+  var TEXT = {
+    starting: {{ t("progress.starting") | tojson }},
+    count: {{ t("progress.count") | tojson }},
+    queued: {{ t("progress.queued") | tojson }},
+    queuedNext: {{ t("progress.queued_next") | tojson }}
+  };
 
   function poll() {
     fetch("/analyze/status/" + jobId)
@@ -29,7 +34,11 @@
         if (data === null) {
           return;
         }
-        if (data.status === "running") {
+        if (data.status === "queued") {
+          document.getElementById("progress-text").textContent =
+            data.position > 0 ? TEXT.queued.replace("{n}", data.position) : TEXT.queuedNext;
+          setTimeout(poll, 1000);
+        } else if (data.status === "running") {
           document.getElementById("progress-text").textContent =
             data.total > 0
               ? TEXT.count.replace("{completed}", data.completed).replace("{total}", data.total)

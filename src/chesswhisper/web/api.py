@@ -72,7 +72,8 @@ class JobCreated(BaseModel):
 
 class JobStatus(BaseModel):
     job_id: str
-    status: Literal["running", "done", "error"]
+    status: Literal["queued", "running", "done", "error"]
+    position: int | None = Field(default=None, description="Queued jobs ahead of this one, while it waits.")
     completed: int
     total: int
     analysis_id: int | None = None
@@ -163,7 +164,7 @@ async def create_analysis(
 def job_status(job_id: str, user: User = Depends(api_user)) -> JobStatus:
     job = jobs.get_job(job_id)
     if job is None or job.user_id != user.id:
-        raise HTTPException(status_code=404, detail="Job not found. Finished jobs are kept for an hour.")
+        raise HTTPException(status_code=404, detail="Job not found. Finished jobs are kept for 7 days.")
     return JobStatus(
         job_id=job.id,
         status=job.status,  # type: ignore[arg-type]
@@ -173,6 +174,7 @@ def job_status(job_id: str, user: User = Depends(api_user)) -> JobStatus:
         analysis_url=f"/api/v1/analyses/{job.record_id}" if job.record_id is not None else None,
         error=job.error_message,
         warnings=job.warnings,
+        position=jobs.queue_position(job.id) if job.status == "queued" else None,
     )
 
 

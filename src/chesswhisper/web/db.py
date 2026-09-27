@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -120,3 +121,18 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+@contextmanager
+def session_scope() -> Iterator[Session]:
+    """A session for code outside a request: commits on success, rolls back on error."""
+    db_gen = get_db()
+    db = next(db_gen)
+    try:
+        yield db
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+    finally:
+        db_gen.close()

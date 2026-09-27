@@ -79,7 +79,7 @@ def test_analyze_rejects_an_oversized_upload(client):
 
 def test_analyze_sends_you_to_your_running_job_instead_of_starting_another(client, monkeypatch):
     running = jobs.create_job(_user().id)
-    monkeypatch.setattr("chesswhisper.web.app._start_background", lambda target: pytest.fail("started a job"))
+    monkeypatch.setattr("chesswhisper.web.app._enqueue", lambda job_id: pytest.fail("queued a job"))
 
     response = client.post(
         "/analyze", data={"lang": "en", "llm": "none"}, files={"pgn": ("g.pgn", b"1. e4 *", "text/plain")}
