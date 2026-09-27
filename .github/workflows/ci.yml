@@ -34,8 +34,18 @@ jobs:
       - name: Type-check with mypy
         run: mypy src
 
-      - name: Run tests
-        run: pytest -v
+      - name: Run tests with coverage
+        run: pytest -v --cov --cov-report=term --cov-report=json
+
+      - name: Report coverage
+        if: always()
+        shell: bash
+        run: |
+          python - <<'EOF' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          totals = json.load(open("coverage.json"))["totals"]
+          print(f"Coverage: {totals['percent_covered']:.1f}% of {totals['num_statements']} statements")
+          EOF
 
   docker:
     runs-on: ubuntu-latest

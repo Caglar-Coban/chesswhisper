@@ -44,3 +44,24 @@ def test_build_prompt_includes_key_numbers():
 def test_build_prompt_english_instruction():
     prompt = build_prompt(_sample_report(), lang="en")
     assert "Write your response in English." in prompt
+
+
+def test_build_prompt_includes_breakdowns_and_findings():
+    from chesswhisper.stats_engine import PatternBucket, SegmentStats
+
+    report = _sample_report()
+    report.by_time_class = [SegmentStats("blitz", games=4, wins=3, losses=1, acpl=30.0, accuracy=88.0)]
+    report.by_opponent_strength = [SegmentStats("stronger", games=2, wins=1, losses=1)]
+    report.move_ranges = [PatternBucket("1-10", moves=40, errors=1), PatternBucket("21-30", moves=40, errors=12),
+                          PatternBucket("41+", moves=0)]
+    report.eval_states = [PatternBucket("winning", moves=20, errors=6), PatternBucket("equal", moves=60, errors=7)]
+
+    prompt = build_prompt(report, lang="en")
+
+    assert "blitz: 4 games, 3W/1L/0D, ACPL 30.0, accuracy 88.0%" in prompt
+    assert "stronger: 2 games, 1W/1L/0D" in prompt
+    assert "moves 21-30: 12/40" in prompt
+    assert "moves 41+" not in prompt  # empty buckets are left out
+    assert "winning: 6/20" in prompt
+    assert "Automatically detected patterns:" in prompt
+    assert "Your mistakes cluster in moves 21-30" in prompt

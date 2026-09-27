@@ -1,6 +1,7 @@
 # chesswhisper
 
 [![CI](https://github.com/Caglar-Coban/chesswhisper/actions/workflows/ci.yml/badge.svg)](https://github.com/Caglar-Coban/chesswhisper/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)](https://github.com/Caglar-Coban/chesswhisper/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -216,11 +217,13 @@ upgrades.
 pip install -e ".[dev,web]"
 ruff check src tests   # lint
 mypy src               # type-check
-pytest                 # about 400 tests; a real-Stockfish smoke test runs when one is on PATH
+pytest --cov           # about 400 tests with coverage; a real-Stockfish smoke test runs when one is on PATH
 ```
 
 CI runs lint, type checks and tests on Linux and Windows with Python 3.11,
-3.12 and 3.13, and builds the Docker image and checks it serves requests.
+3.12 and 3.13, fails if test coverage drops below 90% (it is about 97%; each
+run's summary shows the exact figure), and builds the Docker image and checks
+it serves requests.
 Dependabot keeps dependencies, actions and the base image current. Pushing a
 `v*` tag builds the wheel and source distribution and attaches them to the
 GitHub release.

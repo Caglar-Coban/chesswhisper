@@ -22,3 +22,5 @@ stockfish*
 
 # Scratch database used by the Alembic CLI (see alembic.ini)
 /dev.db
+coverage.json
+.coverage
