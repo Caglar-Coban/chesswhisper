@@ -64,6 +64,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "en": "No puzzles yet. They're made from the blunders and mistakes in your analyses, so run one first.",
     },
     "puzzles.start_analysis": {"tr": "Analiz başlat", "en": "Start an analysis"},
+    "puzzles.themes": {"tr": "Temalar", "en": "Themes"},
+    "puzzles.theme_all": {"tr": "Hepsi", "en": "All"},
+    "puzzles.theme_empty": {"tr": "Bu temada henüz bulmaca yok.", "en": "No puzzles with this theme yet."},
+    "theme.defense": {"tr": "Savunma", "en": "Defense"},
+    "theme.positional": {"tr": "Pozisyonel", "en": "Positional"},
 
     # Public demo
     "demo.banner": {"tr": "Herkese açık demo: veriler yeniden başlatmada sıfırlanır; LLM yorumu kapalı ve analiz başına en fazla 10 oyun.",
@@ -284,9 +289,14 @@ _STRINGS: dict[str, dict[str, str]] = {
 }
 
 
-# Motif names ("motif.fork", ...) come from the report's own translations.
+# Motif names ("motif.fork", ...) come from the report's own translations, and
+# capitalized they label the puzzle themes ("theme.fork", ...).
 _STRINGS.update({
     f"motif.{motif}": {lang: report_text(f"motif_{motif}", lang) for lang in UI_LANGS} for motif in MOTIFS
+})
+_STRINGS.update({
+    f"theme.{motif}": {lang: report_text(f"motif_{motif}", lang).capitalize() for lang in UI_LANGS}
+    for motif in MOTIFS
 })
 
 

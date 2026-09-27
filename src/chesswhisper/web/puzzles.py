@@ -4,6 +4,10 @@ Every critical move saved with an analysis already has what a puzzle needs:
 the position before the move, the move that was played, and the engine's
 preferred move. The player gets the position back and has to find the
 engine's move.
+
+Each puzzle has a theme for filtering: the tactic in the solution (see
+motifs.py), else "defense" when the mistake allowed the opponent a tactic
+(the solution is to see it coming), else "positional".
 """
 
 from __future__ import annotations
@@ -14,6 +18,8 @@ from datetime import datetime
 from typing import Protocol
 
 import chess
+
+from chesswhisper.motifs import MATE_THRESHOLD, MOTIFS, tactic_motif
 
 PuzzleKey = tuple[int, int]  # (analysis record id, index in its critical moves)
 
@@ -41,10 +47,27 @@ class Puzzle:
     cp_loss: int
     classification: str
     ply: int = 0
+    theme: str = "positional"
 
     @property
     def key(self) -> PuzzleKey:
         return (self.record_id, self.index)
+
+
+THEMES = (*MOTIFS, "defense", "positional")
+
+
+def _theme(entry: dict, fen: str, best_uci: str) -> str:
+    try:
+        forced_mate = int(entry.get("cp_before", 0)) >= MATE_THRESHOLD
+    except (TypeError, ValueError):
+        forced_mate = False
+    motif = tactic_motif(fen, best_uci, forced_mate=forced_mate)
+    if motif is not None:
+        return motif
+    if entry.get("motif_side") == "allowed":
+        return "defense"
+    return "positional"
 
 
 def _puzzle(record: _PuzzleSource, index: int, entry: dict) -> Puzzle | None:
@@ -76,6 +99,7 @@ def _puzzle(record: _PuzzleSource, index: int, entry: dict) -> Puzzle | None:
         cp_loss=int(entry.get("cp_loss", 0)),
         classification=str(entry.get("classification", "")),
         ply=int(entry.get("ply", 0)),
+        theme=_theme(entry, board.fen(), best_uci),
     )
 
 
@@ -120,3 +144,15 @@ def order_puzzles(puzzles: list[Puzzle], solved: dict[PuzzleKey, bool]) -> list[
 
 def legal_moves(fen: str) -> list[str]:
     return [move.uci() for move in chess.Board(fen).legal_moves]
+
+
+def filter_by_theme(puzzles: list[Puzzle], theme: str | None) -> list[Puzzle]:
+    return puzzles if theme is None else [p for p in puzzles if p.theme == theme]
+
+
+def theme_counts(puzzles: list[Puzzle]) -> list[tuple[str, int]]:
+    """(theme, number of puzzles) for every theme that has any, in THEMES order."""
+    counts = {theme: 0 for theme in THEMES}
+    for puzzle in puzzles:
+        counts[puzzle.theme] += 1
+    return [(theme, count) for theme, count in counts.items() if count]

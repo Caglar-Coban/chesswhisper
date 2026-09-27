@@ -4,6 +4,17 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-09-27
+
+### Added
+
+- Puzzles have themes: the tactic in the solution (fork, pin, hanging
+  piece, mate, back-rank mate, promotion), "defense" when the mistake
+  allowed the opponent a tactic, or "positional". The puzzle page filters
+  by theme, with a count for each, and the filter carries over to the next
+  puzzle. Themes are worked out when puzzles are shown, so puzzles from
+  analyses saved before 0.6.0 get them too.
+
 ## [0.6.0] - 2026-09-27
 
 ### Added
@@ -164,6 +175,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.7.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.4.0

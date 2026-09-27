@@ -44,7 +44,15 @@ from chesswhisper.web.boards import PIECE_SVGS, VIEWER_COLORS, board_cards
 from chesswhisper.web.db import get_db, session_scope, utcnow
 from chesswhisper.web.demo import DEMO_MAX_GAMES, DEMO_PASSWORD, DEMO_USERNAME, demo_mode
 from chesswhisper.web.models import AnalysisRecord, PuzzleAttempt, User, UserApiKey
-from chesswhisper.web.puzzles import Puzzle, legal_moves, order_puzzles, puzzles_from_records
+from chesswhisper.web.puzzles import THEMES as PUZZLE_THEMES
+from chesswhisper.web.puzzles import (
+    Puzzle,
+    filter_by_theme,
+    legal_moves,
+    order_puzzles,
+    puzzles_from_records,
+    theme_counts,
+)
 from chesswhisper.web.ratelimit import SlidingWindowLimiter
 from chesswhisper.web.security import (
     MIN_PASSWORD_LENGTH,
@@ -703,17 +711,35 @@ def _solved_count(puzzles: list[Puzzle], solved: dict[tuple[int, int], bool]) ->
     return sum(1 for p in puzzles if solved.get(p.key))
 
 
+def _theme_param(theme: str | None) -> str | None:
+    return theme if theme in PUZZLE_THEMES else None
+
+
+def _theme_query(theme: str | None) -> str:
+    return f"?theme={theme}" if theme else ""
+
+
+def _theme_context(puzzles: list[Puzzle], theme: str | None) -> dict:
+    return {"theme": theme, "theme_counts": theme_counts(puzzles), "next_url": f"/puzzles{_theme_query(theme)}"}
+
+
 @app.get("/puzzles", response_class=HTMLResponse, response_model=None)
 async def puzzles_next(
     request: Request,
+    theme: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> HTMLResponse | RedirectResponse:
+    theme = _theme_param(theme)
     puzzles, _ = _user_puzzles(db, current_user)
-    if not puzzles:
-        return _render(request, "puzzle.html", {"current_user": current_user, "puzzle": None})
-    first = puzzles[0]
-    return RedirectResponse(f"/puzzles/{first.record_id}/{first.index}", status_code=303)
+    themed = filter_by_theme(puzzles, theme)
+    if not themed:
+        return _render(
+            request, "puzzle.html",
+            {"current_user": current_user, "puzzle": None, "has_any": bool(puzzles), **_theme_context(puzzles, theme)},
+        )
+    first = themed[0]
+    return RedirectResponse(f"/puzzles/{first.record_id}/{first.index}{_theme_query(theme)}", status_code=303)
 
 
 @app.get("/puzzles/{record_id}/{index}", response_class=HTMLResponse)
@@ -721,10 +747,13 @@ async def puzzle_page(
     request: Request,
     record_id: int,
     index: int,
+    theme: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> HTMLResponse:
+    theme = _theme_param(theme)
     puzzles, solved = _user_puzzles(db, current_user)
+    themed = filter_by_theme(puzzles, theme)
     puzzle = next((p for p in puzzles if p.key == (record_id, index)), None)
     if puzzle is None:
         return _render_error(request, _tr(request, "error.puzzle_not_found"), 404, current_user)
@@ -740,8 +769,9 @@ async def puzzle_page(
             "puzzle": puzzle,
             "legal_moves": legal_moves(puzzle.fen),
             "solved_before": solved.get(puzzle.key, False),
-            "solved_count": _solved_count(puzzles, solved),
-            "total": len(puzzles),
+            "solved_count": _solved_count(themed, solved),
+            "total": len(themed),
+            **_theme_context(puzzles, theme),
             "viewer_url": viewer_url,
             "pieces": PIECE_SVGS,
             "board_colors": VIEWER_COLORS,

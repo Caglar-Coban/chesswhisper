@@ -44,7 +44,8 @@ and Turkish.
   Turkish, written from all of the above.
 - **Puzzles from your own mistakes.** Every blunder and mistake becomes a
   "find the better move" puzzle in the position where you went wrong, with
-  your progress tracked.
+  your progress tracked and a filter by theme (fork, pin, hanging piece,
+  mate, defense...).
 - **Web UI** with accounts, encrypted per-user API keys, background analysis
   with a progress page, history with a trend chart, critical-move boards, a
   game viewer, Markdown download and a print/PDF layout.
@@ -204,7 +205,8 @@ chesswhisper backup                 # database and keys to one zip; `restore` pu
   use the arrow keys or Home/End, and flip the board.
 - **Puzzles:** your blunders and mistakes as "find the better move"
   exercises. New puzzles come first, then ones you missed, then ones you've
-  solved; the same position from overlapping analyses appears once.
+  solved; the same position from overlapping analyses appears once. Filter
+  them by theme to practice one kind of tactic.
 - **History:** every past analysis and a trend chart of accuracy and ACPL for
   each player.
 - **Settings:** store, replace or remove your own Anthropic/OpenAI keys

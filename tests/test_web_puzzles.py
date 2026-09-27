@@ -156,3 +156,53 @@ def test_report_page_offers_the_puzzles(client):
     record_id = _seed()
 
     assert 'id="practice-link" href="/puzzles"' in client.get(f"/history/{record_id}").text
+
+
+FORK_FEN = "r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1"
+
+
+def _fork_entry():
+    board = chess.Board(FORK_FEN)
+    return dict(
+        _entry(), san=board.san(chess.Move.from_uci("e1e2")), uci="e1e2", best_uci="b5c7",
+        best_san=board.san(chess.Move.from_uci("b5c7")), fen_before=FORK_FEN,
+    )
+
+
+def test_puzzle_page_offers_theme_filters_with_counts(client):
+    record_id = _seed(entries=[_entry(), _fork_entry()])
+
+    page = client.get(f"/puzzles/{record_id}/0").text
+
+    assert 'href="/puzzles?theme=fork"' in page
+    assert "Fork (1)" in page
+    assert "Positional (1)" in page
+
+
+def test_a_theme_filter_starts_with_a_puzzle_of_that_theme(client):
+    record_id = _seed(entries=[_entry(), _fork_entry()])
+
+    response = client.get("/puzzles?theme=fork")
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/puzzles/{record_id}/1?theme=fork"
+    page = client.get(response.headers["location"]).text
+    assert "0 of 1 solved" in page
+    assert 'href="/puzzles?theme=fork"' in page  # next puzzle keeps the filter
+
+
+def test_an_empty_theme_says_so(client):
+    _seed(entries=[_entry()])
+
+    page = client.get("/puzzles?theme=pin")
+
+    assert page.status_code == 200
+    assert "No puzzles with this theme yet" in page.text
+
+
+def test_an_unknown_theme_is_ignored(client):
+    record_id = _seed(entries=[_entry()])
+
+    response = client.get("/puzzles?theme=<script>")
+
+    assert response.headers["location"] == f"/puzzles/{record_id}/0"

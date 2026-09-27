@@ -4,7 +4,14 @@ from datetime import datetime
 
 import chess
 
-from chesswhisper.web.puzzles import legal_moves, order_puzzles, puzzles_from_records
+from chesswhisper.motifs import MATE_THRESHOLD
+from chesswhisper.web.puzzles import (
+    filter_by_theme,
+    legal_moves,
+    order_puzzles,
+    puzzles_from_records,
+    theme_counts,
+)
 
 START = chess.STARTING_FEN
 AFTER_E4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
@@ -90,3 +97,56 @@ def test_the_same_position_from_overlapping_analyses_is_one_puzzle():
     puzzles = puzzles_from_records([newer, older])
 
     assert [(p.record_id, p.index) for p in puzzles] == [(9, 0), (9, 1)]
+
+
+# --- themes ----------------------------------------------------------------------
+
+FORK_FEN = "r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1"  # Nc7+ forks king and rook
+FREE_KNIGHT_FEN = "4k3/8/8/3n4/8/8/8/3RK3 w - - 0 1"  # Rxd5 wins a loose knight
+
+
+def _themed(fen, uci, best, **fields):
+    entry = _entry(fen=fen, uci=uci, best=best)
+    entry.update(fields)
+    return entry
+
+
+def test_the_theme_is_the_tactic_in_the_solution():
+    record = _Record(1, datetime(2026, 9, 1), json.dumps([
+        _themed(FORK_FEN, "e1e2", "b5c7"),
+        _themed(FREE_KNIGHT_FEN, "e1e2", "d1d5"),
+    ]))
+
+    assert [p.theme for p in puzzles_from_records([record])] == ["fork", "hanging"]
+
+
+def test_a_quiet_solution_to_a_mistake_that_allowed_a_tactic_is_defense():
+    record = _Record(1, datetime(2026, 9, 1), json.dumps([
+        _themed(START, "a2a3", "e2e4", motif="fork", motif_side="allowed"),
+        _themed(START, "h2h3", "d2d4", motif="other", motif_side=None),
+        _themed(START, "b2b3", "g1f3"),  # saved before motifs existed
+    ]))
+
+    assert [p.theme for p in puzzles_from_records([record])] == ["defense", "positional", "positional"]
+
+
+def test_a_forced_mate_in_the_evaluation_makes_a_mate_puzzle():
+    entry = _themed("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1", "g1f1", "g1h1", cp_before=MATE_THRESHOLD + 3)
+
+    [puzzle] = puzzles_from_records([_Record(1, datetime(2026, 9, 1), json.dumps([entry]))])
+
+    assert puzzle.theme == "mate"
+
+
+def test_theme_counts_and_filtering():
+    record = _Record(1, datetime(2026, 9, 1), json.dumps([
+        _themed(FORK_FEN, "e1e2", "b5c7"),
+        _themed(FREE_KNIGHT_FEN, "e1e2", "d1d5"),
+        _themed(START, "a2a3", "e2e4"),
+        _themed(START, "h2h3", "d2d4", motif="pin", motif_side="allowed"),
+    ]))
+    puzzles = puzzles_from_records([record])
+
+    assert theme_counts(puzzles) == [("fork", 1), ("hanging", 1), ("defense", 1), ("positional", 1)]
+    assert [p.index for p in filter_by_theme(puzzles, "defense")] == [3]
+    assert filter_by_theme(puzzles, None) == puzzles
