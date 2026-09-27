@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, String, Text
+from sqlalchemy import Float, ForeignKey, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from chesswhisper.web.db import Base, utcnow
@@ -74,6 +74,8 @@ class AnalysisRecord(Base):
     # summary.report_summary() of the analysis, for comparing two of them;
     # None for records saved before 0.15.
     summary_json: Mapped[str | None] = mapped_column(Text, default=None)
+    # An analysis the automatic sync added that its owner hasn't looked at yet.
+    unseen: Mapped[bool] = mapped_column(default=False, server_default=false())
 
     user: Mapped[User] = relationship(back_populates="analyses")
     puzzle_attempts: Mapped[list[PuzzleAttempt]] = relationship(cascade="all, delete-orphan")
@@ -117,6 +119,7 @@ class AnalysisJob(Base):
     llm: Mapped[str] = mapped_column(String(20), default="none")
     ui_language: Mapped[str] = mapped_column(String(8), default="en")
     filters_json: Mapped[str | None] = mapped_column(Text, default=None)
+    origin: Mapped[str] = mapped_column(String(10), default="manual", server_default="manual")
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(default=None)
     finished_at: Mapped[datetime | None] = mapped_column(default=None)

@@ -251,3 +251,56 @@ def test_deleting_a_user_deletes_their_link(client, monkeypatch):
         assert db.query(GameSync).count() == 0
     finally:
         db.close()
+
+
+# --- new analyses badge -------------------------------------------------------
+
+
+class _Engine:
+    def analyse(self, board, limit, **kwargs):
+        import chess.engine
+
+        return {"score": chess.engine.PovScore(chess.engine.Cp(20), chess.WHITE)}
+
+
+def test_analyses_from_the_sync_are_new_until_history_is_visited(tmp_path, monkeypatch):
+    from chesswhisper.web import app as web_app
+
+    init_db(tmp_path / "badge.db")
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: _Engine())
+    c = CsrfClient(app, follow_redirects=False)
+    c.post("/register", data={"username": "alice", "password": "correct-horse"})
+    source = FakeSource(1)
+    monkeypatch.setattr(game_sources, "fetch_pgn", source)
+    c.post("/settings/sync", data={"platform": "lichess", "username": "alice", "lang": "en"})
+
+    # A manual analysis doesn't count; the sync's does, once it has run.
+    web_app._run_analysis_job(jobs.create_job(1, jobs.JobInputs(
+        pgn_text=_game(9), player="Alice", lang="en", llm="none", ui_language="en")).id)
+    source.add(2)
+    c.post("/settings/sync/check")  # conftest runs queued jobs at once
+
+    page = c.get("/settings").text
+    assert '<span class="nav-badge" title="1 new analyses from automatic sync">1</span>' in page
+
+    history = c.get("/history").text
+    assert history.count('class="new-tag"') == 1
+    assert 'class="nav-badge"' not in c.get("/history").text
+
+
+def test_opening_a_new_analysis_counts_as_seeing_it(client):
+    with session_scope() as db:
+        user = db.query(User).filter_by(username="alice").one()
+        from chesswhisper.web.models import AnalysisRecord
+
+        record = AnalysisRecord(
+            user_id=user.id, player_name="Alice", lang="en", llm_used="none", games_count=1,
+            overall_acpl=10.0, overall_accuracy=90.0, report_markdown="# Report", unseen=True,
+        )
+        db.add(record)
+        db.flush()
+        record_id = record.id
+
+    assert 'class="nav-badge"' in client.get("/settings").text
+    client.get(f"/history/{record_id}")
+    assert 'class="nav-badge"' not in client.get("/settings").text

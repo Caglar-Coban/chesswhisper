@@ -27,6 +27,8 @@ _STRINGS: dict[str, dict[str, str]] = {
     "nav.admin": {"tr": "Admin", "en": "Admin"},
     "nav.logout": {"tr": "Çıkış ({name})", "en": "Log out ({name})"},
     "nav.switch_language": {"tr": "English", "en": "Türkçe"},
+    "nav.unseen": {"tr": "Otomatik analizde {n} yeni analiz", "en": "{n} new analyses from automatic sync"},
+    "history.new": {"tr": "Yeni", "en": "New"},
     # The theme link shows the current theme; its tooltip names the one a click switches to.
     "nav.theme.system": {"tr": "◐ Tema: sistem", "en": "◐ Theme: system"},
     "nav.theme.light": {"tr": "☀ Tema: açık", "en": "☀ Theme: light"},

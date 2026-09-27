@@ -172,6 +172,7 @@ def check(user_id: int, enqueue: Callable[[str], None], fetch=None) -> str:
             lang=status.lang,
             llm="none",
             ui_language=status.lang,
+            origin="sync",
         )
         job, created = jobs.create_job_unless_running(user_id, inputs)
         if not created:

@@ -157,6 +157,14 @@ def _tr(request: Request, key: str, **params) -> str:
     return ui_text(key, ui_lang(request), **params)
 
 
+def _unseen_count(user: User | None) -> int:
+    """Analyses the automatic sync added that *user* hasn't looked at, for the header badge."""
+    if user is None:
+        return 0
+    with session_scope() as db:
+        return db.query(AnalysisRecord).filter_by(user_id=user.id, unseen=True).count()
+
+
 def _render(request: Request, template_name: str, context: dict, status_code: int = 200) -> HTMLResponse:
     lang = ui_lang(request)
     theme = ui_theme(request)
@@ -167,6 +175,7 @@ def _render(request: Request, template_name: str, context: dict, status_code: in
             "csrf_token": get_csrf_token(request),
             "ui_lang": lang,
             "ui_theme": theme,
+            "unseen_analyses": _unseen_count(context.get("current_user")),
             "next_theme": next_theme(theme),
             "t": lambda key, **params: ui_text(key, lang, **params),
             "registration_open": registration_open(),
@@ -202,7 +211,7 @@ def _enqueue(job_id: str) -> None:
 
 def save_analysis(
     db: Session, user_id: int, aggregate, commentary: str, lang: str, llm: str, created_at=None,
-    pgn_text: str | None = None, filters_json: str | None = None,
+    pgn_text: str | None = None, filters_json: str | None = None, unseen: bool = False,
 ) -> AnalysisRecord:
     """Store a finished analysis: the report plus what the boards, viewer and puzzles need."""
     moves = critical_moves(aggregate.games)
@@ -221,6 +230,7 @@ def save_analysis(
         pgn_text=pgn_text,
         filters_json=filters_json,
         summary_json=json.dumps(report_summary(aggregate)),
+        unseen=unseen,
     )
     if created_at is not None:
         record.created_at = created_at
@@ -276,6 +286,7 @@ def _run_analysis_job(job_id: str) -> None:
         record = save_analysis(
             db, job.user_id, aggregate, commentary, inputs.lang, inputs.llm,
             pgn_text=inputs.pgn_text, filters_json=inputs.filters_json,
+            unseen=inputs.origin == "sync",
         )
         jobs.mark_done(job_id, record.id, inputs.fetch_warnings + warnings)
     except Exception:
@@ -691,10 +702,15 @@ async def history_list(
         .order_by(AnalysisRecord.created_at.desc())
         .all()
     )
+    # Tagged "new" on this visit, then counted as seen.
+    new_ids = {record.id for record in records if record.unseen}
+    if new_ids:
+        db.query(AnalysisRecord).filter(AnalysisRecord.id.in_(new_ids)).update({"unseen": False})
+        db.commit()
     return _render(
         request, "history_list.html",
         {
-            "current_user": current_user, "records": records,
+            "current_user": current_user, "records": records, "new_ids": new_ids,
             "trend": build_trend(records, player),
             "detail_url_prefix": "/history", "viewing_as_admin": False,
             "can_compare": len(records) >= 2,
@@ -766,6 +782,9 @@ async def history_detail(
     record = db.get(AnalysisRecord, record_id)
     if record is None or record.user_id != current_user.id:
         return _render_error(request, _tr(request, "error.record_not_found"), 404, current_user)
+    if record.unseen:
+        record.unseen = False
+        db.commit()
 
     warnings: list[str] = []
     job_id = request.query_params.get("job")

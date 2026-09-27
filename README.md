@@ -229,7 +229,8 @@ chesswhisper backup                 # database and keys to one zip; `restore` pu
   token.
 - **Automatic analysis:** link a Lichess or chess.com account in Settings
   and its new games are analysed (without LLM commentary) about once an
-  hour and added to History; "Check now" looks straight away.
+  hour and added to History; "Check now" looks straight away. A badge on
+  the History link counts the ones you haven't looked at yet.
 - **Admin:** list users, see who is locked out, view anyone's history, reset
   a password or delete an account.
 - **Language:** English by default; switch to Turkish from the header.

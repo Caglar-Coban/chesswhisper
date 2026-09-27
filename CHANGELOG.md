@@ -4,6 +4,14 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.20.0] - 2026-09-28
+
+### Added
+
+- Analyses the automatic sync adds are marked as new: the History link in
+  the header shows how many you haven't looked at, and History tags them
+  "New" on your next visit. Opening one also counts as seeing it.
+
 ## [0.19.0] - 2026-09-28
 
 ### Added
@@ -331,6 +339,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.20.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.20.0
 [0.19.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.19.0
 [0.18.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.18.0
 [0.17.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.17.0

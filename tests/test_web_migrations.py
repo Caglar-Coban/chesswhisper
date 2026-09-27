@@ -17,7 +17,7 @@ from chesswhisper.web.db import BASELINE_REVISION, Base, get_db, init_db, migrat
 # These tests open the SQLite files themselves (see conftest's PostgreSQL mode).
 pytestmark = pytest.mark.sqlite_only
 
-HEAD = "0010_game_syncs"
+HEAD = "0011_unseen_analyses"
 
 
 def _engine(db_path):
