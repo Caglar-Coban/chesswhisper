@@ -224,6 +224,7 @@ _STRINGS: dict[str, dict[str, str]] = {
     "report.game_meta": {"tr": "Oyun {n} · {opponent}", "en": "Game {n} · {opponent}"},
     "report.better": {"tr": "Daha iyisi:", "en": "Better:"},
     "report.motif_allowed": {"tr": "Rakibe verilen: {motif}", "en": "Allowed: {motif}"},
+    "report.missed_chance": {"tr": "Kaçırılan fırsat: rakip az önce hata yapmıştı", "en": "Missed chance: your opponent had just gone wrong"},
     "report.motif_missed": {"tr": "Kaçırılan: {motif}", "en": "Missed: {motif}"},
     "report.show_in_game": {"tr": "Oyunda göster →", "en": "Show in game →"},
     "report.practice": {"tr": "Bunları bulmaca olarak çöz →", "en": "Practice these as puzzles →"},

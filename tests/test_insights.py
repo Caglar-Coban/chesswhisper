@@ -144,3 +144,23 @@ def test_no_theory_finding_for_small_or_mild_drops():
 
     for agg in (few, mild):
         assert not [f for f in key_findings(agg) if f[0].startswith("theory")]
+
+
+def test_flags_unpunished_opponent_errors():
+    from chesswhisper.chances import ChanceStats
+
+    agg = _agg()
+    agg.chances = ChanceStats(total=8, punished=3, missed_by_motif=[("other", 5)])
+
+    finding = ("chances", {"punished": 3, "total": 8})
+    assert finding in key_findings(agg)
+    assert render_finding(finding, "en").startswith("You punished only 3 of your opponents' 8 mistakes")
+
+
+def test_no_chances_finding_when_most_are_punished_or_too_few():
+    from chesswhisper.chances import ChanceStats
+
+    for stats in (ChanceStats(total=8, punished=5, missed_by_motif=[]), ChanceStats(total=4, punished=0, missed_by_motif=[])):
+        agg = _agg()
+        agg.chances = stats
+        assert not [f for f in key_findings(agg) if f[0] == "chances"]

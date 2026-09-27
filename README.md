@@ -34,6 +34,8 @@ and Turkish.
 - **Tactical motifs.** Each mistake and blunder is labeled with the tactic
   behind it (fork, pin, hanging piece, mate, back-rank mate, promotion) and
   whether you allowed it or missed it.
+- **Missed chances.** How many of your opponents' mistakes you punished,
+  and what the ones you let go needed.
 - **Key findings.** The clearest patterns stated in a sentence each, such as
   "your mistakes cluster in moves 31-40", with minimum sample sizes so a few
   games don't produce noise.

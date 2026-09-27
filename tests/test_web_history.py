@@ -312,3 +312,11 @@ def test_history_detail_shows_no_motif_for_old_records_or_other(client):
 
     assert response.status_code == 200
     assert 'class="board-motif"' not in response.text
+
+
+def test_history_detail_marks_a_missed_chance(client):
+    moves = json.loads(_critical_moves_json())
+    moves[0]["missed_chance"] = True
+    record_id = _seed_record_with_moves("alice", json.dumps(moves))
+
+    assert "Missed chance: your opponent had just gone wrong" in client.get(f"/history/{record_id}").text

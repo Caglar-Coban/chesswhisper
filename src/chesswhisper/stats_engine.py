@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 import chess
 
+from chesswhisper.chances import Chance, ChanceStats, chance_stats, opponent_chances
 from chesswhisper.motifs import MOTIFS, OTHER, error_motif
 from chesswhisper.openings import match_opening
 from chesswhisper.theory import TheoryExit, TheoryStats, book_prefixes, theory_exit, theory_stats
@@ -227,6 +228,8 @@ class GameReport:
     evals: list = field(default_factory=list)
     # Where the game left opening theory (see theory.py); None for set-up positions.
     theory: TheoryExit | None = None
+    # The opponent's mistakes and blunders and whether they were punished (see chances.py).
+    chances: list[Chance] = field(default_factory=list)
 
 
 @dataclass
@@ -304,6 +307,7 @@ class AggregateReport:
     eval_states: list[PatternBucket] = field(default_factory=list)
     motifs: list[MotifStat] = field(default_factory=list)
     opening_theory: list[TheoryStats] = field(default_factory=list)
+    chances: ChanceStats = field(default_factory=lambda: ChanceStats(total=0, punished=0, missed_by_motif=[]))
 
 
 def detect_player(loaded_games) -> str:
@@ -450,6 +454,7 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
         black=black,
         evals=list(evals),
         theory=theory_exit(evals, your_bool_color, book_prefixes(eco_table), custom_start=is_custom_start),
+        chances=opponent_chances(evals, your_bool_color),
     )
 
 
@@ -586,6 +591,7 @@ def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
         time_management=combined_time_buckets.to_stats(),
         motifs=motif_stats(game_reports),
         opening_theory=theory_stats(game_reports),
+        chances=chance_stats(game_reports),
         **_breakdowns(game_reports),
     )
 
@@ -609,7 +615,12 @@ def _best_san(fen_before: str, best_uci: str | None) -> str | None:
 
 def _motif_fields(report, ply: int) -> dict:
     move = next((m for m in report.moves if m.ply == ply), None)
-    return {"motif": move.motif if move else None, "motif_side": move.motif_side if move else None}
+    missed_chance = any(c.reply_ply == ply and not c.punished for c in report.chances)
+    return {
+        "motif": move.motif if move else None,
+        "motif_side": move.motif_side if move else None,
+        "missed_chance": missed_chance,
+    }
 
 
 def critical_moves(game_reports: list, limit: int = CRITICAL_MOVES_LIMIT) -> list[dict]:

@@ -127,6 +127,20 @@ _STRINGS = {
         "tr": "{opening} açılışında teoriden çıktıktan 10 hamle sonra ortalama {pawns} piyon gerideysin ({n} oyun): ana varyantlarına çalışmaya değer.",
         "en": "In the {opening} you are {pawns} pawns worse on average ten moves after leaving theory ({n} games): its main lines are worth studying.",
     },
+    "opponent_errors": {"tr": "Rakibin Hataları", "en": "Opponents' Mistakes"},
+    "opponent_errors_summary": {
+        "tr": "Rakiplerin {total} hata ve gaf yaptı; bunların {punished} tanesini cezalandırdın (%{pct}).",
+        "en": "Your opponents made {total} mistakes and blunders; you punished {punished} of them ({pct}%).",
+    },
+    "opponent_errors_missed_note": {
+        "tr": "Cezalandıramadıkların, cevabında oynanması gereken taktiğe göre:",
+        "en": "The ones you let go, by the tactic the reply needed:",
+    },
+    "game_chances": {"tr": "Rakibin hatalarından cezalandırılan: {punished} / {total}", "en": "Opponent errors punished: {punished} of {total}"},
+    "finding_chances": {
+        "tr": "Rakiplerinin {total} hata ve gafının yalnızca {punished} tanesini cezalandırdın: rakip hata yaptığında cevap vermeden önce taktik ara.",
+        "en": "You punished only {punished} of your opponents' {total} mistakes and blunders: when your opponent slips, look for the tactic before you reply.",
+    },
     "motif_column": {"tr": "Motif", "en": "Motif"},
     "allowed_column": {"tr": "Rakibe verilen", "en": "Allowed"},
     "missed_column": {"tr": "Kaçırılan", "en": "Missed"},

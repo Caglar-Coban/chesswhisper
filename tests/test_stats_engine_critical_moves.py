@@ -102,6 +102,7 @@ def test_entry_carries_what_a_board_diagram_needs():
         # ...c5 is a quiet move and nothing refutes e5 here.
         "motif": "other",
         "motif_side": None,
+        "missed_chance": False,
     }
 
 

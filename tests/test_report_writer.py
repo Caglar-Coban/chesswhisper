@@ -209,3 +209,28 @@ def test_opening_theory_in_turkish_and_a_game_that_stayed_in_book():
 
 def test_no_opening_theory_section_when_no_game_left_the_book():
     assert "Opening Theory" not in render_markdown(_sample_report(), commentary="", lang="en")
+
+
+def _with_chances():
+    from chesswhisper.chances import Chance, ChanceStats
+
+    report = _sample_report()
+    report.chances = ChanceStats(total=4, punished=1, missed_by_motif=[("hanging", 2), ("other", 1)])
+    report.games[0].chances = [
+        Chance(ply=3, classification="blunder", gain=400, reply_ply=4, reply_loss=10, punished=True, motif="other", reply_san="Nxe5"),
+        Chance(ply=9, classification="mistake", gain=200, reply_ply=10, reply_loss=250, punished=False, motif="hanging", reply_san="a3"),
+    ]
+    return report
+
+
+def test_opponent_errors_section_and_per_game_line():
+    md = render_markdown(_with_chances(), commentary="", lang="en")
+
+    assert "## Opponents' Mistakes" in md
+    assert "Your opponents made 4 mistakes and blunders; you punished 1 of them (25%)." in md
+    assert "| hanging piece | 2 |" in md
+    assert "- Opponent errors punished: 1 of 2" in md
+
+
+def test_no_opponent_errors_section_without_any():
+    assert "Opponents' Mistakes" not in render_markdown(_sample_report(), commentary="", lang="en")

@@ -62,6 +62,13 @@ def build_prompt(report, lang: str) -> str:
                 lines.append(f"  no clear tactic (positional or deeper): {stat.total}")
             else:
                 lines.append(f"  {stat.motif}: allowed {stat.allowed}, missed {stat.missed}")
+    if report.chances.total:
+        chances = report.chances
+        missed = ", ".join(f"{motif} {count}" for motif, count in chances.missed_by_motif) or "none"
+        lines.append(
+            f"Opponents' mistakes and blunders: {chances.total}, punished by the player: {chances.punished}; "
+            f"missed ones by the tactic the reply needed: {missed}"
+        )
     findings = key_findings(report)
     if findings:
         lines.append("Automatically detected patterns:")

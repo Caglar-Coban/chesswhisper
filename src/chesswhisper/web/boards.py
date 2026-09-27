@@ -58,6 +58,7 @@ class BoardCard:
     # None for "other" and for records saved before motifs existed.
     motif: str | None = None
     motif_side: str | None = None
+    missed_chance: bool = False  # the opponent had just blundered or made a mistake
 
 
 def format_eval(cp: int) -> str:
@@ -106,6 +107,7 @@ def _card(entry: dict) -> BoardCard:
         svg=svg,
         ply=int(entry["ply"]),
         **_motif(entry),
+        missed_chance=entry.get("missed_chance") is True,
     )
 
 

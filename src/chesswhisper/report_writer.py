@@ -160,6 +160,21 @@ def render_markdown(report, commentary: str, lang: str) -> str:
             parts.append(f"| {t('motif_' + stat.motif, lang)} | {allowed} | {missed} | {stat.total} |")
         parts.append("")
 
+    if report.chances.total:
+        chances = report.chances
+        parts.append(f"## {t('opponent_errors', lang)}")
+        parts.append(t("opponent_errors_summary", lang).format(
+            total=chances.total, punished=chances.punished, pct=round((chances.punish_rate or 0) * 100)))
+        if chances.missed_by_motif:
+            parts.append("")
+            parts.append(t("opponent_errors_missed_note", lang))
+            parts.append("")
+            parts.append(f"| {t('motif_column', lang)} | {t('missed_column', lang)} |")
+            parts.append("| --- | --- |")
+            for motif, count in chances.missed_by_motif:
+                parts.append(f"| {t('motif_' + motif, lang)} | {count} |")
+        parts.append("")
+
     parts.append(f"## {t('time_management', lang)}")
     parts.extend(_time_management_lines(report.time_management, lang))
     parts.append("")
@@ -179,6 +194,9 @@ def render_markdown(report, commentary: str, lang: str) -> str:
         theory_line = _theory_line(game.theory, lang)
         if theory_line:
             parts.append(f"- {theory_line}")
+        if game.chances:
+            punished = sum(1 for chance in game.chances if chance.punished)
+            parts.append(f"- {t('game_chances', lang).format(punished=punished, total=len(game.chances))}")
         parts.append(f"- {t('acpl', lang)}: {game.your_stats.acpl:.1f}")
         parts.append(f"- {t('accuracy', lang)}: {game.your_stats.accuracy:.1f}%")
         if game.top_mistakes:

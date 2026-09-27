@@ -19,6 +19,8 @@ ACCURACY_GAP = 5.0
 MIN_MOTIF_ERRORS = 5
 MOTIF_SHARE = 0.3
 MIN_THEORY_GAMES = 3
+MIN_CHANCES = 5
+PUNISH_RATE_FLOOR = 0.5
 THEORY_DROP_CP = 100
 THEORY_OPENING_DROP_CP = 150
 
@@ -81,6 +83,10 @@ def key_findings(report: AggregateReport) -> list[Finding]:
         findings.append(motif)
 
     findings.extend(_theory_findings(report))
+
+    chances = report.chances
+    if chances.total >= MIN_CHANCES and (chances.punish_rate or 0) < PUNISH_RATE_FLOOR:
+        findings.append(("chances", {"punished": chances.punished, "total": chances.total}))
 
     return findings
 

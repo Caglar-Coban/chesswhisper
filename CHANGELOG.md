@@ -4,6 +4,18 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-09-27
+
+### Added
+
+- Missed chances: every mistake and blunder by the opponent is checked
+  against the player's next move. Reports say how many were punished, list
+  the ones let go by the tactic the reply needed, add a line per game, and
+  make a key finding when fewer than half of at least five were punished.
+  The LLM prompt gets the counts.
+- Critical-move boards say "Missed chance" when the opponent had just gone
+  wrong.
+
 ## [0.10.0] - 2026-09-27
 
 ### Added
@@ -228,6 +240,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.11.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.11.0
 [0.10.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.10.0
 [0.9.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.9.0
 [0.8.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.8.0

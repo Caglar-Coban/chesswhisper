@@ -90,3 +90,12 @@ def test_build_prompt_includes_opening_theory():
 
     assert "Ruy Lopez: 3 games, 6.0 moves in book on average, left by the player 2x" in prompt
     assert "change over the next 10 moves -90" in prompt
+
+
+def test_build_prompt_includes_opponent_errors():
+    from chesswhisper.chances import ChanceStats
+
+    report = _sample_report()
+    report.chances = ChanceStats(total=6, punished=2, missed_by_motif=[("fork", 3), ("other", 1)])
+
+    assert "Opponents' mistakes and blunders: 6, punished by the player: 2; missed ones by the tactic the reply needed: fork 3, other 1" in build_prompt(report, lang="en")
