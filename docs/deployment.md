@@ -140,12 +140,17 @@ container starts. Set `CHESSWHISPER_ALLOW_REGISTRATION: "0"` in
 7860, runs with `CHESSWHISPER_DEMO=1` (a "public demo" banner, a one-click
 demo login, no LLM commentary or stored API keys, at most 10 games per
 analysis) and seeds a `demo` account at build time with `chesswhisper
-seed-demo`. Free Spaces have no persistent disk, so each restart returns to
-that seeded state.
+seed-demo`. Spaces without paid storage have no persistent disk, so each
+restart returns to that seeded state.
+
+Hugging Face only hosts Docker Spaces for accounts with a PRO subscription
+(or an organization plan); on a free account the upload fails with
+`402 Payment Required`. Static Spaces are still free, but this app needs a
+running server.
 
 The **Deploy demo** workflow publishes it on every push to `master`:
 
-1. Create a Hugging Face account and a token with write access
+1. Create a Hugging Face account with PRO and a token with write access
    (Settings → Access Tokens).
 2. In the GitHub repository, add the token as the secret `HF_TOKEN` and the
    Space name as the variable `HF_SPACE`, for example

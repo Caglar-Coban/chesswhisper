@@ -2,8 +2,8 @@
 #
 # Differences from the repository's main Dockerfile: it listens on 7860 (the
 # Spaces default), runs in demo mode, and seeds the demo account at build time.
-# Free Spaces have no persistent disk, so every restart comes back to exactly
-# this seeded state.
+# Docker Spaces need a PRO account. Without paid storage there is no
+# persistent disk, so every restart comes back to exactly this seeded state.
 
 FROM python:3.12-slim
 
