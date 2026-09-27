@@ -330,6 +330,14 @@
   .game-list-meta { display: block; color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
   .viewer { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 1fr); gap: 24px; align-items: start; }
   .viewer-board svg { display: block; width: 100%; height: auto; border-radius: 6px; }
+  .repertoire-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .repertoire-controls select { width: auto; margin: 0; }
+  .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .segmented button { margin: 0; border: 0; border-radius: 0; background: var(--surface); color: var(--text); padding: 6px 12px; font-size: 14px; }
+  .segmented button.current { background: var(--accent); color: #fff; }
+  .repertoire-line { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-bottom: 14px; font-size: 14px; }
+  .repertoire-line a[aria-current] { font-weight: 600; text-decoration: none; color: var(--text); }
+  .repertoire-summary { margin-top: 0; font-size: 14px; }
   .viewer-controls { display: flex; gap: 6px; margin-top: 10px; }
   .viewer-controls button { margin: 0; padding: 7px 12px; font-size: 14px; }
   .viewer-controls .spacer { flex: 1; }
@@ -388,6 +396,7 @@
       {% if current_user %}
       <a href="/">{{ t("nav.analyze") }}</a>
       <a href="/history">{{ t("nav.history") }}{% if unseen_analyses %} <span class="nav-badge" title="{{ t('nav.unseen', n=unseen_analyses) }}">{{ unseen_analyses }}</span>{% endif %}</a>
+      <a href="/repertoire">{{ t("nav.repertoire") }}</a>
       <a href="/puzzles">{{ t("nav.puzzles") }}</a>
       <a href="/settings">{{ t("nav.settings") }}</a>
       {% if current_user.is_admin %}<a href="/admin">{{ t("nav.admin") }}</a>{% endif %}

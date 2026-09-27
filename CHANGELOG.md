@@ -4,6 +4,18 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.21.0] - 2026-09-28
+
+### Added
+
+- Opening repertoire (`/repertoire`, "Repertoire" in the header): an
+  explorer over your analysed games from the starting position, as White
+  or as Black and for each player you analyse. Every position lists the
+  moves played from it with the number of games, your score, how often
+  your own move there was an inaccuracy or worse, and whether it is still
+  opening theory; click a move to follow it, up to 20 plies deep. A game
+  saved in more than one analysis counts once.
+
 ## [0.20.0] - 2026-09-28
 
 ### Added
@@ -339,6 +351,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.21.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.21.0
 [0.20.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.20.0
 [0.19.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.19.0
 [0.18.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.18.0

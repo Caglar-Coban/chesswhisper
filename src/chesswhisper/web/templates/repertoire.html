@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — {{ t("title.repertoire") }}{% endblock %}
+{% block content %}
+{% macro line_url(uci_list) -%}
+/repertoire?{{ {"player": selected, "color": color, "line": uci_list | join(",")} | urlencode }}
+{%- endmacro %}
+<div class="card">
+  <h2 class="section-title">{{ t("repertoire.title") }}</h2>
+  <p class="hint" style="margin-top:0;">{{ t("repertoire.intro") }}</p>
+  {% if not position %}
+  <p class="trend-empty">{{ t("repertoire.empty") }} <a href="/">{{ t("history.start_first") }}</a>.</p>
+  {% else %}
+  <form method="get" action="/repertoire" class="repertoire-controls">
+    {% if players | length > 1 %}
+    <label class="inline" for="rep-player">{{ t("history.player") }}</label>
+    <select id="rep-player" name="player" onchange="this.form.submit()">
+      {% for p in players %}<option value="{{ p }}"{% if p == selected %} selected{% endif %}>{{ p }}</option>{% endfor %}
+    </select>
+    {% else %}<input type="hidden" name="player" value="{{ selected }}">{% endif %}
+    <span class="segmented">
+      {% for c in ("white", "black") %}
+      <button type="submit" name="color" value="{{ c }}" class="{{ 'current' if c == color else '' }}">{{ t("repertoire.as_" ~ c) }}</button>
+      {% endfor %}
+    </span>
+  </form>
+
+  <nav class="repertoire-line" aria-label="{{ t('repertoire.line') }}">
+    <a href="{{ line_url([]) }}">{{ t("repertoire.start") }}</a>
+    {% for san in position.line_san %}
+    <span aria-hidden="true">›</span>
+    <a href="{{ line_url(position.line_uci[:loop.index]) }}"{% if loop.last %} aria-current="page"{% endif %}>{% if loop.index0 % 2 == 0 %}{{ loop.index0 // 2 + 1 }}. {% endif %}{{ san }}</a>
+    {% endfor %}
+  </nav>
+
+  <div class="viewer">
+    <div class="viewer-board" id="board" role="img" aria-label="{{ t('viewer.board') }}"></div>
+    <div>
+      <p class="repertoire-summary">
+        {% if position.opening %}<strong>{{ position.opening }}</strong><br>{% endif %}
+        {{ t("repertoire.games_here", n=position.games) }} ·
+        {{ t("repertoire.your_move") if position.player_to_move else t("repertoire.their_move") }}
+      </p>
+      {% if position.moves %}
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr>
+            <th>{{ t("repertoire.move") }}</th><th class="num">{{ t("history.games") }}</th>
+            <th class="num">{{ t("repertoire.score") }}</th>
+            {% if position.player_to_move %}<th class="num">{{ t("repertoire.errors") }}</th>{% endif %}
+            <th>{{ t("repertoire.book") }}</th>
+          </tr></thead>
+          <tbody>
+            {% for m in position.moves %}
+            <tr>
+              <td><a href="{{ line_url(position.line_uci + [m.uci]) }}">{{ m.san }}</a></td>
+              <td class="num">{{ m.games }}</td>
+              <td class="num">{{ "%.0f%%" | format(m.score_pct) if m.score_pct is not none else "—" }}</td>
+              {% if position.player_to_move %}<td class="num">{{ "%.0f%%" | format(m.error_pct) }}</td>{% endif %}
+              <td>{{ t("repertoire.in_book") if m.in_book else t("repertoire.out_of_book") }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">{{ t("repertoire.legend") }}</p>
+      {% else %}
+      <p class="hint">{{ t("repertoire.no_more") }}</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% if position %}
+{% include "_board_script.html" %}
+<script>
+  (function () {
+    var line = {{ position.line_uci | tojson }};
+    var last = line.length ? line[line.length - 1] : null;
+    ChessBoard.render(document.getElementById("board"), {{ position.fen | tojson }}, {
+      whiteBottom: {{ (color == "white") | tojson }},
+      highlight: last ? [last.slice(0, 2), last.slice(2, 4)] : []
+    });
+  })();
+</script>
+{% endif %}
+{% endblock %}

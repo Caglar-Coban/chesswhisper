@@ -1,7 +1,9 @@
+import functools
 import json
 import os
 import re
 import tempfile
+from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -18,6 +20,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
+from chesswhisper import repertoire
 from chesswhisper.cli import run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
 from chesswhisper.game_filter import FILTER_TIME_CLASSES, GameFilter
@@ -29,6 +32,7 @@ from chesswhisper.game_sources import (
     fetch_pgn,
     is_valid_username,
 )
+from chesswhisper.openings import load_eco_table
 from chesswhisper.report_writer import render_markdown
 from chesswhisper.stats_engine import critical_moves
 from chesswhisper.summary import compare, report_summary
@@ -881,6 +885,48 @@ async def index(request: Request, current_user: User = Depends(get_current_user)
 
 
 _UCI_RE = re.compile(r"[a-h][1-8][a-h][1-8][qrbn]?")
+
+
+@functools.cache
+def _eco_table():
+    return load_eco_table()
+
+
+@app.get("/repertoire", response_class=HTMLResponse)
+async def repertoire_page(
+    request: Request,
+    player: str | None = None,
+    color: str = "white",
+    line: str = "",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """The opening explorer over the user's analysed games, for one player and colour."""
+    records = db.query(AnalysisRecord).filter_by(user_id=current_user.id).all()
+    counts = Counter(record.player_name for record in records)
+    players = sorted(counts, key=lambda name: (-counts[name], name))
+    selected = player if player in counts else (players[0] if players else None)
+    if color not in repertoire.COLORS:
+        color = "white"
+    line_uci = [uci for uci in line.split(",") if uci][: repertoire.MAX_PLIES]
+    if not all(_UCI_RE.fullmatch(uci) for uci in line_uci):
+        line_uci = []
+
+    position = None
+    if selected is not None:
+        timelines = [t for r in records if r.player_name == selected for t in _timelines(r)]
+        tree = repertoire.build_tree(timelines, color)
+        # A line these games never reached (another player's, say) starts over.
+        position = repertoire.explore(tree, color, line_uci, _eco_table()) or repertoire.explore(
+            tree, color, [], _eco_table()
+        )
+    return _render(
+        request, "repertoire.html",
+        {
+            "current_user": current_user, "players": players, "selected": selected, "color": color,
+            "position": position, "pieces": PIECE_SVGS, "board_colors": VIEWER_COLORS,
+        },
+    )
 
 
 @dataclass
