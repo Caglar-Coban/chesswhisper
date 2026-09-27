@@ -46,16 +46,19 @@ def database_url_from_env() -> URL | None:
     services hand them out) use the psycopg 3 driver.
     """
     raw = os.environ.get(DATABASE_URL_ENV, "").strip()
-    if not raw:
-        return None
+    return postgres_url(raw, DATABASE_URL_ENV) if raw else None
+
+
+def postgres_url(raw: str, name: str = "The database URL") -> URL:
+    """*raw* as a PostgreSQL URL for the psycopg 3 driver; ValueError (naming *name*) otherwise."""
     try:
-        url = make_url(raw)
+        url = make_url(raw.strip())
     except Exception as exc:
-        raise ValueError(f"{DATABASE_URL_ENV} is not a database URL.") from exc
+        raise ValueError(f"{name} is not a database URL.") from exc
     if url.drivername in ("postgres", "postgresql"):
         url = url.set(drivername="postgresql+psycopg")
     if url.get_backend_name() != "postgresql":
-        raise ValueError(f"{DATABASE_URL_ENV} must be a PostgreSQL URL (postgresql://user:password@host/db).")
+        raise ValueError(f"{name} must be a PostgreSQL URL (postgresql://user:password@host/db).")
     return url
 
 
@@ -63,7 +66,7 @@ def is_sqlite(engine: Engine) -> bool:
     return engine.dialect.name == "sqlite"
 
 
-def _create_engine(url: URL | str, **kwargs) -> Engine:
+def create_engine_for(url: URL | str, **kwargs) -> Engine:
     if make_url(url).get_backend_name() == "sqlite":
         return create_engine(url, connect_args={"check_same_thread": False}, **kwargs)
     # Timestamps are stored without a zone and meant as UTC, whatever the server's zone is.
@@ -75,10 +78,10 @@ def get_engine(db_path: Path | None = None) -> Engine:
     """The engine for *db_path*, else CHESSWHISPER_DATABASE_URL, else the data directory's SQLite file."""
     url = database_url_from_env() if db_path is None else None
     if url is not None:
-        return _create_engine(url)
+        return create_engine_for(url)
     path = db_path or _default_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    return _create_engine(f"sqlite:///{path}")
+    return create_engine_for(f"sqlite:///{path}")
 
 
 def migrations_dir() -> Path:
@@ -95,7 +98,7 @@ def _migration_engine(engine: Engine) -> Engine:
     also makes a second process starting at the same time wait for the
     first one's migration instead of racing it.
     """
-    migration_engine = _create_engine(engine.url, poolclass=NullPool)
+    migration_engine = create_engine_for(engine.url, poolclass=NullPool)
     if not is_sqlite(engine):
         return migration_engine
 

@@ -82,7 +82,19 @@ files and the evaluation cache still live in the data directory, so keep
 `restore` only handle the SQLite file: with PostgreSQL use `pg_dump` and
 `pg_restore`, and back up the two key files alongside the dump.
 
-Moving existing data from SQLite to PostgreSQL isn't automated.
+To move an existing install over, stop the server and copy its SQLite
+database into the new, empty PostgreSQL database, then start the server
+with the URL set:
+
+```
+chesswhisper copy-to-postgres postgresql://chesswhisper:PASSWORD@db-host:5432/chesswhisper
+```
+
+It reads the SQLite file in the data directory (or the one given with
+`--from`), creates the schema in PostgreSQL and copies every table in one
+transaction, so a failure leaves the target empty. It refuses a target that
+already has data and never changes the SQLite file. Keep the data
+directory: the key files in it are still needed.
 
 ## First start
 

@@ -4,6 +4,17 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.23.0] - 2026-09-28
+
+### Added
+
+- `chesswhisper copy-to-postgres URL` moves an existing install to
+  PostgreSQL: it brings the SQLite database to the latest schema, creates
+  the schema in the empty target and copies every table in one
+  transaction (a failure leaves the target empty), then moves the id
+  sequences on. It refuses a target with data and only reads the SQLite
+  file (`--from` picks another one).
+
 ## [0.22.0] - 2026-09-28
 
 ### Added
@@ -367,6 +378,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.23.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.23.0
 [0.22.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.22.0
 [0.21.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.21.0
 [0.20.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.20.0

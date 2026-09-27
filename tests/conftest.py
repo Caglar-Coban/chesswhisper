@@ -105,7 +105,7 @@ def _postgres_instead_of_sqlite(request, monkeypatch):
     url = make_url(url).set(drivername="postgresql+psycopg")
     if web_db._engine is not None:
         web_db._engine.dispose()
-    reset = web_db._create_engine(url)
+    reset = web_db.create_engine_for(url)
     with reset.begin() as connection:
         # A session an earlier test left open would hold its locks and block the drop forever.
         connection.exec_driver_sql(
@@ -120,7 +120,7 @@ def _postgres_instead_of_sqlite(request, monkeypatch):
     engines = []
 
     def pg_engine(db_path=None):
-        engine = web_db._create_engine(url)
+        engine = web_db.create_engine_for(url)
         engines.append(engine)
         return engine
 

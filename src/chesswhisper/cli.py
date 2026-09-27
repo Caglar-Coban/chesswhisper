@@ -445,3 +445,58 @@ def create_admin(username, password):
     db.add(User(username=username, password_hash=hash_password(password), is_admin=True))
     db.commit()
     click.echo(f"Admin user {username!r} created.")
+
+
+@cli.command("copy-to-postgres")
+@click.argument("url")
+@click.option("--from", "source_path", default=None, type=click.Path(exists=True, dir_okay=False),
+              help="The SQLite database to copy. Defaults to the one in the data directory.")
+def copy_to_postgres(url, source_path):
+    """Copy the web UI's SQLite database into an empty PostgreSQL database at URL. Stop the server first."""
+    try:
+        from sqlalchemy.exc import SQLAlchemyError
+
+        from chesswhisper.web.db import create_engine_for, postgres_url
+        from chesswhisper.web.db_copy import CopyError, copy_database
+    except ImportError:
+        click.echo(
+            'Error: the web UI requires extra dependencies. Install them with: pip install -e ".[web,postgres]"',
+            err=True,
+        )
+        sys.exit(1)
+
+    try:
+        target_url = postgres_url(url, "URL")
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    source = Path(source_path) if source_path else data_dir() / "chesswhisper.db"
+    if not source.is_file():
+        click.echo(f"Error: there is no database to copy at {source}.", err=True)
+        sys.exit(1)
+    try:
+        target = create_engine_for(target_url)
+    except ImportError:
+        click.echo('Error: the PostgreSQL driver is missing. Install it with: pip install -e ".[web,postgres]"', err=True)
+        sys.exit(1)
+
+    # Always the SQLite file, even with CHESSWHISPER_DATABASE_URL already set.
+    source_engine = create_engine_for(f"sqlite:///{source}")
+    try:
+        counts = copy_database(source_engine, target)
+    except CopyError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    except SQLAlchemyError as exc:
+        click.echo(f"Error: the copy failed and nothing was kept: {getattr(exc, 'orig', None) or exc}", err=True)
+        sys.exit(1)
+    finally:
+        source_engine.dispose()
+        target.dispose()
+
+    for table, rows in counts.items():
+        click.echo(f"  {table}: {rows}")
+    shown = target_url.set(drivername="postgresql").render_as_string(hide_password=True)
+    click.echo(f"Copied {sum(counts.values())} rows from {source}.")
+    click.echo(f"To use it, set CHESSWHISPER_DATABASE_URL={shown} (with the real password) and start the server.")
+    click.echo("Keep the data directory: its key files are still needed to read saved API keys and sessions.")

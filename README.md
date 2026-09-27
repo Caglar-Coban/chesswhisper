@@ -202,6 +202,7 @@ pip install ".[web]"
 chesswhisper create-admin          # prompts for a username and password
 chesswhisper serve                  # http://127.0.0.1:8000
 chesswhisper backup                 # database and keys to one zip; `restore` puts it back
+chesswhisper copy-to-postgres URL   # move the SQLite database into an empty PostgreSQL one
 ```
 
 - **Analyze:** upload a PGN (up to 5 MB) or type a Lichess or chess.com
