@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Float, ForeignKey, String, Text, false
+from sqlalchemy import Float, ForeignKey, String, Text, UniqueConstraint, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from chesswhisper.web.db import Base, utcnow
@@ -31,7 +31,7 @@ class User(Base):
     )
     puzzle_attempts: Mapped[list[PuzzleAttempt]] = relationship(cascade="all, delete-orphan")
     analysis_jobs: Mapped[list[AnalysisJob]] = relationship(cascade="all, delete-orphan")
-    game_sync: Mapped[GameSync | None] = relationship(uselist=False, cascade="all, delete-orphan")
+    linked_accounts: Mapped[list[LinkedAccount]] = relationship(cascade="all, delete-orphan")
     puzzle_rush_runs: Mapped[list[PuzzleRushRun]] = relationship(cascade="all, delete-orphan")
 
 
@@ -140,12 +140,14 @@ class AnalysisJob(Base):
     finished_at: Mapped[datetime | None] = mapped_column(default=None)
 
 
-class GameSync(Base):
+class LinkedAccount(Base):
     """A Lichess or chess.com account whose new games are analysed automatically (see web/sync.py)."""
 
-    __tablename__ = "game_syncs"
+    __tablename__ = "linked_accounts"
+    __table_args__ = (UniqueConstraint("user_id", "platform", "username"),)
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     platform: Mapped[str] = mapped_column(String(10))  # lichess | chesscom
     username: Mapped[str] = mapped_column(String(80))
     lang: Mapped[str] = mapped_column(String(8), default="en")  # the reports' language

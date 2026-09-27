@@ -1,12 +1,12 @@
-"""Automatic analysis of new games from a linked Lichess or chess.com account.
+"""Automatic analysis of new games from linked Lichess and chess.com accounts.
 
-A user links one account in Settings. Every CHESSWHISPER_SYNC_MINUTES
-(default 60, 0 turns it off) a background thread fetches that account's
-latest games and queues an analysis of the ones it hasn't seen before,
-without LLM commentary so it costs nothing. The first check only takes
-note of the games already there: linking an account doesn't analyse its
-past. A user whose analysis is still running is skipped until the next
-round, so nothing is lost.
+A user links up to MAX_ACCOUNTS accounts in Settings. Every
+CHESSWHISPER_SYNC_MINUTES (default 60, 0 turns it off) a background thread
+fetches each account's latest games and queues an analysis of the ones it
+hasn't seen before, without LLM commentary so it costs nothing. The first
+check of an account only takes note of the games already there: linking
+it doesn't analyse its past. While one of the user's analyses is running
+their accounts wait for the next round, so nothing is lost.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from chesswhisper import game_sources
 from chesswhisper.game_sources import GameFetchError
 from chesswhisper.web import jobs
 from chesswhisper.web.db import session_scope, utcnow
-from chesswhisper.web.models import GameSync
+from chesswhisper.web.models import LinkedAccount
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +36,20 @@ DEFAULT_SYNC_MINUTES = 60
 MIN_SYNC_MINUTES = 5  # the platforms' APIs are free; don't lean on them
 SYNC_FETCH_GAMES = 20  # the newest games looked at in each check
 MAX_SEEN_KEYS = 200
+MAX_ACCOUNTS = 5  # per user
 # The first automatic check waits this long after startup.
 STARTUP_DELAY_SECONDS = 60
 
 # One check at a time, so the scheduler and a "Check now" can't queue the same games twice.
 _check_lock = threading.Lock()
+
+
+class LinkError(Exception):
+    """An account can't be linked; *reason* is "duplicate" or "limit"."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 def sync_minutes_from_env() -> int:
@@ -53,7 +62,8 @@ def sync_minutes_from_env() -> int:
 
 
 @dataclass(frozen=True)
-class SyncStatus:
+class AccountStatus:
+    id: int
     platform: str
     username: str
     lang: str
@@ -76,40 +86,57 @@ def game_key(game: chess.pgn.Game) -> str:
     return "sha1:" + hashlib.sha1(text.encode("utf-8")).hexdigest()
 
 
-def get_sync(user_id: int) -> SyncStatus | None:
+def _status(row: LinkedAccount) -> AccountStatus:
+    return AccountStatus(
+        id=row.id, platform=row.platform, username=row.username, lang=row.lang,
+        baseline_taken=row.seen_keys_json is not None,
+        last_checked_at=row.last_checked_at, last_new_games=row.last_new_games,
+        last_job_id=row.last_job_id, last_error=row.last_error,
+    )
+
+
+def accounts(user_id: int) -> list[AccountStatus]:
+    """The user's linked accounts, oldest first."""
     with session_scope() as db:
-        row = db.get(GameSync, user_id)
-        if row is None:
-            return None
-        return SyncStatus(
-            platform=row.platform, username=row.username, lang=row.lang,
-            baseline_taken=row.seen_keys_json is not None,
-            last_checked_at=row.last_checked_at, last_new_games=row.last_new_games,
-            last_job_id=row.last_job_id, last_error=row.last_error,
+        rows = (
+            db.query(LinkedAccount).filter_by(user_id=user_id)
+            .order_by(LinkedAccount.created_at, LinkedAccount.id).all()
         )
+        return [_status(row) for row in rows]
 
 
-def link_account(user_id: int, platform: str, username: str, lang: str) -> None:
-    """Link (or replace) the user's account; the next check takes note of its current games."""
+def get_account(account_id: int) -> AccountStatus | None:
+    with session_scope() as db:
+        row = db.get(LinkedAccount, account_id)
+        return _status(row) if row is not None else None
+
+
+def link_account(user_id: int, platform: str, username: str, lang: str) -> int:
+    """Link another account; the first check takes note of its current games. Returns its id.
+
+    Raises LinkError("duplicate") if it is already linked (usernames compare
+    without case) or LinkError("limit") at MAX_ACCOUNTS.
+    """
     with _check_lock, session_scope() as db:
-        row = db.get(GameSync, user_id)
-        if row is None:
-            row = GameSync(user_id=user_id)
-            db.add(row)
-        row.platform, row.username, row.lang = platform, username, lang
-        row.seen_keys_json = None
-        row.created_at = utcnow()
-        row.last_checked_at = None
-        row.last_new_games = 0
-        row.last_job_id = None
-        row.last_error = None
+        existing = db.query(LinkedAccount).filter_by(user_id=user_id).all()
+        if any(row.platform == platform and row.username.lower() == username.lower() for row in existing):
+            raise LinkError("duplicate")
+        if len(existing) >= MAX_ACCOUNTS:
+            raise LinkError("limit")
+        row = LinkedAccount(user_id=user_id, platform=platform, username=username, lang=lang)
+        db.add(row)
+        db.flush()
+        return row.id
 
 
-def unlink_account(user_id: int) -> None:
+def unlink_account(user_id: int, account_id: int) -> bool:
+    """Remove one of the user's accounts; False if they have no such account."""
     with _check_lock, session_scope() as db:
-        row = db.get(GameSync, user_id)
-        if row is not None:
-            db.delete(row)
+        row = db.get(LinkedAccount, account_id)
+        if row is None or row.user_id != user_id:
+            return False
+        db.delete(row)
+        return True
 
 
 def _parse(pgn_text: str) -> list[chess.pgn.Game]:
@@ -120,9 +147,9 @@ def _parse(pgn_text: str) -> list[chess.pgn.Game]:
     return games
 
 
-def _save(user_id: int, **fields) -> None:
+def _save(account_id: int, **fields) -> None:
     with session_scope() as db:
-        row = db.get(GameSync, user_id)
+        row = db.get(LinkedAccount, account_id)
         if row is None:  # unlinked meanwhile
             return
         for name, value in fields.items():
@@ -130,40 +157,42 @@ def _save(user_id: int, **fields) -> None:
         row.last_checked_at = utcnow()
 
 
-def check(user_id: int, enqueue: Callable[[str], None], fetch=None) -> str:
-    """Look for new games once. Returns what happened:
+def check(account_id: int, enqueue: Callable[[str], None], fetch=None) -> str:
+    """Look for new games on one account once. Returns what happened:
 
-    "unlinked" (no account), "busy" (an analysis is already running; try
-    later), "error" (the fetch failed; kept in last_error), "baseline" (first
-    check: games noted, none analysed), "none" (nothing new) or "queued".
+    "unlinked" (no such account), "busy" (an analysis of the user's is
+    already running; try later), "error" (the fetch failed; kept in
+    last_error), "baseline" (first check: games noted, none analysed),
+    "none" (nothing new) or "queued".
     """
     fetch = fetch or game_sources.fetch_pgn
     with _check_lock:
-        status = get_sync(user_id)
-        if status is None:
-            return "unlinked"
+        with session_scope() as db:
+            row = db.get(LinkedAccount, account_id)
+            if row is None:
+                return "unlinked"
+            user_id = row.user_id
+            status = _status(row)
+            seen = json.loads(row.seen_keys_json) if row.seen_keys_json else None
         if jobs.running_job_for(user_id) is not None:
             return "busy"
         try:
             fetched = fetch(status.platform, status.username, SYNC_FETCH_GAMES)
         except GameFetchError as exc:
-            _save(user_id, last_error=str(exc))
+            _save(account_id, last_error=str(exc))
             return "error"
 
         games = _parse(fetched.pgn_text)
         keys = [game_key(game) for game in games]
-        with session_scope() as db:
-            row = db.get(GameSync, user_id)
-            seen = json.loads(row.seen_keys_json) if row is not None and row.seen_keys_json else None
         merged = json.dumps((keys + [k for k in (seen or []) if k not in keys])[:MAX_SEEN_KEYS])
         if seen is None:
-            _save(user_id, seen_keys_json=merged, last_new_games=0, last_error=None)
+            _save(account_id, seen_keys_json=merged, last_new_games=0, last_error=None)
             return "baseline"
 
         seen_set = set(seen)
         new_games = [game for game, key in zip(games, keys, strict=True) if key not in seen_set]
         if not new_games:
-            _save(user_id, seen_keys_json=merged, last_new_games=0, last_error=None)
+            _save(account_id, seen_keys_json=merged, last_new_games=0, last_error=None)
             return "none"
 
         inputs = jobs.JobInputs(
@@ -177,19 +206,24 @@ def check(user_id: int, enqueue: Callable[[str], None], fetch=None) -> str:
         job, created = jobs.create_job_unless_running(user_id, inputs)
         if not created:
             return "busy"
-        _save(user_id, seen_keys_json=merged, last_new_games=len(new_games), last_job_id=job.id, last_error=None)
+        _save(account_id, seen_keys_json=merged, last_new_games=len(new_games), last_job_id=job.id, last_error=None)
     enqueue(job.id)
     return "queued"
 
 
+def check_user(user_id: int, enqueue: Callable[[str], None], fetch=None) -> dict[int, str]:
+    """Check each of the user's accounts; outcome per account id."""
+    return {account.id: check(account.id, enqueue, fetch) for account in accounts(user_id)}
+
+
 def check_all(enqueue: Callable[[str], None], fetch=None) -> None:
     with session_scope() as db:
-        user_ids = [row.user_id for row in db.query(GameSync.user_id).all()]
-    for user_id in user_ids:
+        account_ids = [row.id for row in db.query(LinkedAccount.id).order_by(LinkedAccount.id).all()]
+    for account_id in account_ids:
         try:
-            check(user_id, enqueue, fetch)
+            check(account_id, enqueue, fetch)
         except Exception:
-            logger.exception("Game sync for user %s failed", user_id)
+            logger.exception("Game sync for linked account %s failed", account_id)
 
 
 class SyncScheduler:

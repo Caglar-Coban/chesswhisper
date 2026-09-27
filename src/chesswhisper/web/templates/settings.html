@@ -59,25 +59,42 @@
   <p class="hint" style="margin-top:0;">{{ t("settings.sync.intro", minutes=sync_minutes) if sync_minutes else t("settings.sync.intro_off") }}</p>
   {% if sync_error %}<div class="banner error">{{ sync_error }}</div>{% endif %}
   {% if sync_message %}<div class="banner success">{{ sync_message }}</div>{% endif %}
-  {% if game_sync %}
-  <p style="font-size:14px;">
-    {{ t("settings.sync.linked", platform=t("analyze.source_" ~ game_sync.platform), username=game_sync.username) }}
-    {% if game_sync.last_checked_at %}<br>{{ t("settings.sync.last_checked") }}
-    <time class="local-time" datetime="{{ game_sync.last_checked_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ game_sync.last_checked_at.strftime("%Y-%m-%d %H:%M") }} UTC</time>{% endif %}
-    {% if game_sync.last_error %}<br><span class="danger-text">{{ game_sync.last_error }}</span>
-    {% elif game_sync.last_job_id and game_sync.last_new_games %}<br><a href="/analyze/progress/{{ game_sync.last_job_id }}">{{ t("settings.sync.last_found", n=game_sync.last_new_games) }}</a>{% endif %}
-  </p>
-  <div class="key-row">
-    <form method="post" action="/settings/sync/check">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="secondary-button">{{ t("settings.sync.check_now") }}</button>
-    </form>
-    <form method="post" action="/settings/sync/delete">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="link-button danger">{{ t("settings.sync.unlink") }}</button>
-    </form>
-  </div>
-  {% else %}
+  {% if linked_accounts %}
+  <ul class="linked-accounts">
+    {% for account in linked_accounts %}
+    <li>
+      <div>
+        <strong>{{ t("analyze.source_" ~ account.platform) }} {{ account.username }}</strong>
+        <span class="hint">
+          {% if account.last_checked_at %}· {{ t("settings.sync.last_checked") }}
+          <time class="local-time" datetime="{{ account.last_checked_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ account.last_checked_at.strftime("%Y-%m-%d %H:%M") }} UTC</time>{% endif %}
+        </span>
+        {% set result = sync_results.get(account.id) %}
+        {% if result %}<div class="{{ 'danger-text' if result[1] else 'success-text' }}">{{ result[0] }}</div>
+        {% elif account.last_error %}<div class="danger-text">{{ account.last_error }}</div>
+        {% elif account.last_job_id and account.last_new_games %}<div><a href="/analyze/progress/{{ account.last_job_id }}">{{ t("settings.sync.last_found", n=account.last_new_games) }}</a></div>{% endif %}
+      </div>
+      <div class="key-row">
+        <form method="post" action="/settings/sync/{{ account.id }}/check">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="secondary-button">{{ t("settings.sync.check_now") }}</button>
+        </form>
+        <form method="post" action="/settings/sync/{{ account.id }}/delete">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="link-button danger">{{ t("settings.sync.unlink") }}</button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if linked_accounts | length > 1 %}
+  <form method="post" action="/settings/sync/check" style="margin-bottom:14px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary-button">{{ t("settings.sync.check_all") }}</button>
+  </form>
+  {% endif %}
+  {% endif %}
+  {% if can_link_more %}
   <form method="post" action="/settings/sync">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label for="sync_platform">{{ t("settings.sync.platform") }}</label>
@@ -91,8 +108,10 @@
       <option value="tr"{% if ui_lang == "tr" %} selected{% endif %}>Türkçe</option>
       <option value="en"{% if ui_lang == "en" %} selected{% endif %}>English</option>
     </select>
-    <button type="submit">{{ t("settings.sync.link") }}</button>
+    <button type="submit">{{ t("settings.sync.link") if not linked_accounts else t("settings.sync.link_another") }}</button>
   </form>
+  {% else %}
+  <p class="hint">{{ t("settings.sync.at_limit", n=max_accounts) }}</p>
   {% endif %}
 </div>
 {% endif %}

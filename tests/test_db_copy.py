@@ -11,7 +11,7 @@ from chesswhisper.web.db import Base, create_engine_for, run_migrations
 from chesswhisper.web.models import (
     AnalysisJob,
     AnalysisRecord,
-    GameSync,
+    LinkedAccount,
     PuzzleAttempt,
     PuzzleRushRun,
     User,
@@ -44,7 +44,7 @@ def _filled_source(path):
             UserApiKey(user_id=alice.id, anthropic_key_encrypted="enc"),
             PuzzleAttempt(user_id=alice.id, record_id=record.id, move_index=0, move_uci="e2e4", solved=True),
             PuzzleRushRun(user_id=bob.id, minutes=3, solved=7, misses=3),
-            GameSync(user_id=bob.id, platform="lichess", username="bob", lang="tr", seen_keys_json="[]"),
+            LinkedAccount(user_id=bob.id, platform="lichess", username="bob", lang="tr", seen_keys_json="[]"),
             AnalysisJob(id="job-1", user_id=alice.id, status="done", record_id=record.id, origin="sync"),
         ])
         db.commit()
@@ -65,7 +65,7 @@ def test_every_table_is_copied_as_it_was(tmp_path):
 
     counts = db_copy.copy_database(source, target)
 
-    assert counts["users"] == 2 and counts["analysis_records"] == 1 and counts["game_syncs"] == 1
+    assert counts["users"] == 2 and counts["analysis_records"] == 1 and counts["linked_accounts"] == 1
     assert _rows(target) == _rows(source)
 
 

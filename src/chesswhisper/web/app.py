@@ -492,9 +492,10 @@ def _render_settings(
     new_api_token: str | None = None,
     sync_message: str | None = None,
     sync_error: str | None = None,
+    sync_results: dict[int, tuple[str, bool]] | None = None,
 ) -> HTMLResponse:
     key_row = db.get(UserApiKey, current_user.id)
-    game_sync = sync.get_sync(current_user.id)
+    linked = sync.accounts(current_user.id)
     return _render(
         request, "settings.html",
         {
@@ -506,10 +507,13 @@ def _render_settings(
             "message": message,
             "password_message": password_message,
             "password_error": password_error,
-            "game_sync": game_sync,
+            "linked_accounts": linked,
+            "can_link_more": len(linked) < sync.MAX_ACCOUNTS,
+            "max_accounts": sync.MAX_ACCOUNTS,
             "sync_minutes": sync.sync_minutes_from_env(),
             "sync_message": sync_message,
             "sync_error": sync_error,
+            "sync_results": sync_results or {},
             "fetch_sources": FETCH_SOURCES,
             "report_langs": REPORT_LANGS,
         },
@@ -524,15 +528,22 @@ _SYNC_OUTCOME_KEYS = {
 }
 
 
-async def _sync_now(request: Request, current_user: User, db: Session) -> HTMLResponse:
-    """Run a check and show its outcome on the settings page."""
-    outcome = await run_in_threadpool(sync.check, current_user.id, _enqueue)
+def _outcome_text(request: Request, account_id: int, outcome: str) -> tuple[str, bool] | None:
+    """What a check's *outcome* says beside its account, and whether it is an error."""
     if outcome == "error":
-        status = sync.get_sync(current_user.id)
-        error = _tr(request, "settings.sync.msg.error", detail=status.last_error if status else "")
-        return _render_settings(request, current_user, db, sync_error=error)
+        status = sync.get_account(account_id)
+        return _tr(request, "settings.sync.msg.error", detail=status.last_error if status else ""), True
     key = _SYNC_OUTCOME_KEYS.get(outcome)
-    return _render_settings(request, current_user, db, sync_message=_tr(request, key) if key else None)
+    return (_tr(request, key), False) if key else None
+
+
+async def _show_checks(request: Request, current_user: User, db: Session, outcomes: dict[int, str]) -> HTMLResponse:
+    results = {}
+    for account_id, outcome in outcomes.items():
+        text = _outcome_text(request, account_id, outcome)
+        if text is not None:
+            results[account_id] = text
+    return _render_settings(request, current_user, db, sync_results=results)
 
 
 @app.post("/settings/sync", response_class=HTMLResponse)
@@ -554,13 +565,18 @@ async def settings_link_sync(
         return _render_error(request, _tr(request, "error.bad_lang"), 400, current_user)
     if not is_valid_username(username):
         return _render_settings(request, current_user, db, sync_error=_tr(request, "settings.sync.bad_username"))
-    await run_in_threadpool(sync.link_account, current_user.id, platform, username, lang)
+    try:
+        account_id = await run_in_threadpool(sync.link_account, current_user.id, platform, username, lang)
+    except sync.LinkError as exc:
+        error = _tr(request, f"settings.sync.link_{exc.reason}", n=sync.MAX_ACCOUNTS)
+        return _render_settings(request, current_user, db, sync_error=error)
     # The first check verifies the account and takes note of the games already there.
-    return await _sync_now(request, current_user, db)
+    outcome = await run_in_threadpool(sync.check, account_id, _enqueue)
+    return await _show_checks(request, current_user, db, {account_id: outcome})
 
 
 @app.post("/settings/sync/check", response_class=HTMLResponse)
-async def settings_check_sync(
+async def settings_check_all_accounts(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -568,17 +584,40 @@ async def settings_check_sync(
 ) -> HTMLResponse:
     if demo_mode():
         return _render_error(request, _tr(request, "demo.sync_off"), 403, current_user)
-    return await _sync_now(request, current_user, db)
+    outcomes = await run_in_threadpool(sync.check_user, current_user.id, _enqueue)
+    return await _show_checks(request, current_user, db, outcomes)
 
 
-@app.post("/settings/sync/delete", response_class=HTMLResponse)
-async def settings_unlink_sync(
+def _own_account(current_user: User, account_id: int) -> bool:
+    return any(account.id == account_id for account in sync.accounts(current_user.id))
+
+
+@app.post("/settings/sync/{account_id}/check", response_class=HTMLResponse)
+async def settings_check_account(
     request: Request,
+    account_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse:
-    await run_in_threadpool(sync.unlink_account, current_user.id)
+    if demo_mode():
+        return _render_error(request, _tr(request, "demo.sync_off"), 403, current_user)
+    if not _own_account(current_user, account_id):
+        return _render_error(request, _tr(request, "settings.sync.not_found"), 404, current_user)
+    outcome = await run_in_threadpool(sync.check, account_id, _enqueue)
+    return await _show_checks(request, current_user, db, {account_id: outcome})
+
+
+@app.post("/settings/sync/{account_id}/delete", response_class=HTMLResponse)
+async def settings_unlink_account(
+    request: Request,
+    account_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse:
+    if not await run_in_threadpool(sync.unlink_account, current_user.id, account_id):
+        return _render_error(request, _tr(request, "settings.sync.not_found"), 404, current_user)
     return _render_settings(request, current_user, db, sync_message=_tr(request, "settings.sync.msg.unlinked"))
 
 

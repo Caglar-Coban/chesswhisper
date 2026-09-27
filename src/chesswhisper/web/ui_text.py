@@ -269,9 +269,9 @@ _STRINGS: dict[str, dict[str, str]] = {
     "settings.change_password": {"tr": "Parola değiştir", "en": "Change password"},
     "settings.sync.title": {"tr": "Yeni oyunları otomatik analiz et", "en": "Analyse new games automatically"},
     "settings.sync.intro": {
-        "tr": "Bir Lichess ya da chess.com hesabı bağla: yaklaşık {minutes} dakikada bir yeni oyunlarına bakılır ve "
+        "tr": "Lichess ya da chess.com hesaplarını bağla: yaklaşık {minutes} dakikada bir yeni oyunlarına bakılır ve "
               "yeniler LLM yorumu olmadan (ücretsiz) analiz edilip Geçmiş'e eklenir. Bağlamadan önceki oyunlar analiz edilmez.",
-        "en": "Link a Lichess or chess.com account: about every {minutes} minutes its new games are checked, and new "
+        "en": "Link your Lichess or chess.com accounts: about every {minutes} minutes their new games are checked, and new "
               "ones are analysed without LLM commentary (free) and added to History. Games from before linking aren't analysed.",
     },
     "settings.sync.intro_off": {
@@ -281,11 +281,17 @@ _STRINGS: dict[str, dict[str, str]] = {
     "settings.sync.platform": {"tr": "Site", "en": "Site"},
     "settings.sync.username": {"tr": "Kullanıcı adı", "en": "Username"},
     "settings.sync.link": {"tr": "Hesabı bağla", "en": "Link account"},
-    "settings.sync.linked": {"tr": "Bağlı hesap: {platform} {username}", "en": "Linked: {platform} {username}"},
     "settings.sync.last_checked": {"tr": "Son kontrol:", "en": "Last checked:"},
     "settings.sync.last_found": {"tr": "Son kontrolde {n} yeni oyun bulundu: analize git",
                                  "en": "{n} new game(s) found in the last check: see the analysis"},
     "settings.sync.check_now": {"tr": "Şimdi kontrol et", "en": "Check now"},
+    "settings.sync.check_all": {"tr": "Hepsini şimdi kontrol et", "en": "Check all now"},
+    "settings.sync.link_another": {"tr": "Başka bir hesap bağla", "en": "Link another account"},
+    "settings.sync.link_duplicate": {"tr": "Bu hesap zaten bağlı.", "en": "That account is already linked."},
+    "settings.sync.link_limit": {"tr": "En fazla {n} hesap bağlanabilir.", "en": "You can link at most {n} accounts."},
+    "settings.sync.at_limit": {"tr": "{n} hesabın bağlı; bu en fazlası. Yenisi için birini kaldır.",
+                               "en": "You have {n} accounts linked, the most allowed. Unlink one to add another."},
+    "settings.sync.not_found": {"tr": "Böyle bir bağlı hesabın yok.", "en": "You have no such linked account."},
     "settings.sync.unlink": {"tr": "Bağlantıyı kaldır", "en": "Unlink"},
     "settings.sync.bad_username": {"tr": "Geçersiz kullanıcı adı: 2-30 harf, rakam, '_' ya da '-'.",
                                    "en": "Invalid username: use 2-30 letters, digits, '_' or '-'."},

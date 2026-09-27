@@ -17,7 +17,7 @@ from chesswhisper.web.db import BASELINE_REVISION, Base, get_db, init_db, migrat
 # These tests open the SQLite files themselves (see conftest's PostgreSQL mode).
 pytestmark = pytest.mark.sqlite_only
 
-HEAD = "0012_puzzle_rush"
+HEAD = "0013_linked_accounts"
 
 
 def _engine(db_path):
@@ -292,3 +292,36 @@ def test_critical_moves_database_gains_games_json_column_and_keeps_rows(tmp_path
     with engine.connect() as conn:
         rows = conn.execute(text("SELECT critical_moves_json, games_json FROM analysis_records")).all()
     assert [tuple(r) for r in rows] == [("[]", None)]
+
+
+def test_a_linked_account_moves_to_linked_accounts_and_back(tmp_path):
+    db_path = tmp_path / "at_0012.db"
+    engine = _engine(db_path)
+    _build_schema_at(engine, "0012_puzzle_rush")
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO users (id, username, password_hash, is_admin, created_at, failed_login_attempts, "
+            "session_version) VALUES (1, 'alice', 'h', 0, '2026-01-01 00:00:00', 0, 0)"
+        ))
+        conn.execute(text(
+            "INSERT INTO game_syncs (user_id, platform, username, lang, seen_keys_json, created_at, "
+            "last_new_games) VALUES (1, 'lichess', 'alice', 'tr', '[\"k1\"]', '2026-01-01 00:00:00', 0)"
+        ))
+    engine.dispose()
+
+    init_db(db_path)
+
+    engine = _engine(db_path)
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT id, user_id, platform, username, lang, seen_keys_json FROM linked_accounts"))
+        assert [tuple(r) for r in rows] == [(1, 1, "lichess", "alice", "tr", '["k1"]')]
+        assert "game_syncs" not in inspect(conn).get_table_names()
+
+    with engine.begin() as conn:
+        config = Config()
+        config.set_main_option("script_location", str(migrations_dir()))
+        config.attributes["connection"] = conn
+        command.downgrade(config, "0012_puzzle_rush")
+    with engine.connect() as conn:
+        assert [tuple(r) for r in conn.execute(text("SELECT user_id, username FROM game_syncs"))] == [(1, "alice")]
+    engine.dispose()

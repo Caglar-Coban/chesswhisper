@@ -4,6 +4,18 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.24.0] - 2026-09-28
+
+### Added
+
+- Link up to 5 Lichess and chess.com accounts for automatic analysis
+  instead of one. Each is listed in Settings with its last check and its
+  own "Check now" and "Unlink"; "Check all now" checks every one. The
+  same account can't be linked twice. Each account's new games are
+  analysed separately, under that account's name. An account linked
+  before this release carries over with the games it had already seen
+  (migration 0013).
+
 ## [0.23.0] - 2026-09-28
 
 ### Added
@@ -378,6 +390,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.24.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.24.0
 [0.23.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.23.0
 [0.22.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.22.0
 [0.21.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.21.0

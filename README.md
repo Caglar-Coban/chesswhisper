@@ -232,8 +232,8 @@ chesswhisper copy-to-postgres URL   # move the SQLite database into an empty Pos
 - **Settings:** store, replace or remove your own Anthropic/OpenAI keys
   (encrypted at rest), change your password, and create or revoke an API
   token.
-- **Automatic analysis:** link a Lichess or chess.com account in Settings
-  and its new games are analysed (without LLM commentary) about once an
+- **Automatic analysis:** link up to five Lichess or chess.com accounts in
+  Settings and their new games are analysed (without LLM commentary) about once an
   hour and added to History; "Check now" looks straight away. A badge on
   the History link counts the ones you haven't looked at yet.
 - **Admin:** list users, see who is locked out, view anyone's history, reset
