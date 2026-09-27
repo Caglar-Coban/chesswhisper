@@ -4,6 +4,18 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.18.0] - 2026-09-28
+
+### Added
+
+- Automatic analysis of new games: link a Lichess or chess.com account
+  under Settings and the server checks it every
+  `CHESSWHISPER_SYNC_MINUTES` (default 60; 0 turns it off). New games are
+  analysed without LLM commentary, so it costs nothing, and land in
+  History. Linking checks the account at once and only takes note of the
+  games already there; "Check now" looks straight away. While one of your
+  analyses is running, the check waits for the next round.
+
 ## [0.17.0] - 2026-09-27
 
 ### Added
@@ -306,6 +318,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.18.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.18.0
 [0.17.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.17.0
 [0.16.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.16.0
 [0.15.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.15.0

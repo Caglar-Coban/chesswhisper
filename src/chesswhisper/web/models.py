@@ -31,6 +31,7 @@ class User(Base):
     )
     puzzle_attempts: Mapped[list[PuzzleAttempt]] = relationship(cascade="all, delete-orphan")
     analysis_jobs: Mapped[list[AnalysisJob]] = relationship(cascade="all, delete-orphan")
+    game_sync: Mapped[GameSync | None] = relationship(uselist=False, cascade="all, delete-orphan")
 
 
 class UserApiKey(Base):
@@ -119,3 +120,22 @@ class AnalysisJob(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(default=None)
     finished_at: Mapped[datetime | None] = mapped_column(default=None)
+
+
+class GameSync(Base):
+    """A Lichess or chess.com account whose new games are analysed automatically (see web/sync.py)."""
+
+    __tablename__ = "game_syncs"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    platform: Mapped[str] = mapped_column(String(10))  # lichess | chesscom
+    username: Mapped[str] = mapped_column(String(80))
+    lang: Mapped[str] = mapped_column(String(8), default="en")  # the reports' language
+    # JSON list of the keys of games already seen (newest first, capped);
+    # None until the first check, which only takes note of what is there.
+    seen_keys_json: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    last_checked_at: Mapped[datetime | None] = mapped_column(default=None)
+    last_new_games: Mapped[int] = mapped_column(default=0)
+    last_job_id: Mapped[str | None] = mapped_column(String(36), default=None)
+    last_error: Mapped[str | None] = mapped_column(Text, default=None)

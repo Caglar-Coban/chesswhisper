@@ -227,6 +227,9 @@ chesswhisper backup                 # database and keys to one zip; `restore` pu
 - **Settings:** store, replace or remove your own Anthropic/OpenAI keys
   (encrypted at rest), change your password, and create or revoke an API
   token.
+- **Automatic analysis:** link a Lichess or chess.com account in Settings
+  and its new games are analysed (without LLM commentary) about once an
+  hour and added to History; "Check now" looks straight away.
 - **Admin:** list users, see who is locked out, view anyone's history, reset
   a password or delete an account.
 - **Language:** English by default; switch to Turkish from the header.
@@ -283,6 +286,7 @@ curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/api/v1/analyses/12
 | `CHESSWHISPER_DATA_DIR` | Where to keep Stockfish, the evaluation cache and the web UI's database and keys. Defaults to the per-user data directory (`~/.local/share/chesswhisper` on Linux, `%LOCALAPPDATA%\chesswhisper\chesswhisper` on Windows); `/data` in Docker. |
 | `CHESSWHISPER_ALLOW_REGISTRATION` | `0` closes self-service sign-up in the web UI. |
 | `CHESSWHISPER_WORKERS` | How many web analyses run at once (default 2); the rest wait in a queue that survives restarts. |
+| `CHESSWHISPER_SYNC_MINUTES` | Minutes between checks for linked accounts' new games (default 60, at least 5; 0 turns the automatic checks off). |
 | `CHESSWHISPER_DEMO` | `1` runs the web UI as a public demo: a banner, a one-click demo login, no LLM commentary or stored API keys, and at most 10 games per analysis. `chesswhisper seed-demo` fills the demo account. See the [deployment guide](docs/deployment.md#a-public-demo-on-hugging-face-spaces). |
 
 ## Development

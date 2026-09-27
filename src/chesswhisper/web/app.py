@@ -27,12 +27,13 @@ from chesswhisper.game_sources import (
     GameFetchError,
     GameSourceUnavailable,
     fetch_pgn,
+    is_valid_username,
 )
 from chesswhisper.report_writer import render_markdown
 from chesswhisper.stats_engine import critical_moves
 from chesswhisper.summary import compare, report_summary
 from chesswhisper.timeline import game_timelines
-from chesswhisper.web import jobs
+from chesswhisper.web import jobs, sync
 from chesswhisper.web.auth import (
     Forbidden,
     RedirectToLogin,
@@ -119,7 +120,10 @@ def registration_open() -> bool:
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Picks up analyses a previous process left queued or unfinished.
     await run_in_threadpool(_worker.start)
+    if not demo_mode():
+        _sync_scheduler.start()
     yield
+    await run_in_threadpool(_sync_scheduler.stop)
     await run_in_threadpool(_worker.stop)
 
 
@@ -287,6 +291,9 @@ def _run_analysis_job(job_id: str) -> None:
 
 
 _worker = JobWorker(_run_analysis_job, workers=worker_count_from_env())
+_sync_scheduler = sync.SyncScheduler(
+    _enqueue, sync.sync_minutes_from_env() * 60, first_delay=sync.STARTUP_DELAY_SECONDS
+)
 
 
 def _timelines(record: AnalysisRecord) -> list[dict]:
@@ -464,8 +471,11 @@ def _render_settings(
     password_message: str | None = None,
     password_error: str | None = None,
     new_api_token: str | None = None,
+    sync_message: str | None = None,
+    sync_error: str | None = None,
 ) -> HTMLResponse:
     key_row = db.get(UserApiKey, current_user.id)
+    game_sync = sync.get_sync(current_user.id)
     return _render(
         request, "settings.html",
         {
@@ -477,8 +487,80 @@ def _render_settings(
             "message": message,
             "password_message": password_message,
             "password_error": password_error,
+            "game_sync": game_sync,
+            "sync_minutes": sync.sync_minutes_from_env(),
+            "sync_message": sync_message,
+            "sync_error": sync_error,
+            "fetch_sources": FETCH_SOURCES,
+            "report_langs": REPORT_LANGS,
         },
     )
+
+
+_SYNC_OUTCOME_KEYS = {
+    "baseline": "settings.sync.msg.baseline",
+    "none": "settings.sync.msg.none",
+    "queued": "settings.sync.msg.queued",
+    "busy": "settings.sync.msg.busy",
+}
+
+
+async def _sync_now(request: Request, current_user: User, db: Session) -> HTMLResponse:
+    """Run a check and show its outcome on the settings page."""
+    outcome = await run_in_threadpool(sync.check, current_user.id, _enqueue)
+    if outcome == "error":
+        status = sync.get_sync(current_user.id)
+        error = _tr(request, "settings.sync.msg.error", detail=status.last_error if status else "")
+        return _render_settings(request, current_user, db, sync_error=error)
+    key = _SYNC_OUTCOME_KEYS.get(outcome)
+    return _render_settings(request, current_user, db, sync_message=_tr(request, key) if key else None)
+
+
+@app.post("/settings/sync", response_class=HTMLResponse)
+async def settings_link_sync(
+    request: Request,
+    platform: str = Form(...),
+    username: str = Form(...),
+    lang: str = Form(default="en"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse:
+    if demo_mode():
+        return _render_error(request, _tr(request, "demo.sync_off"), 403, current_user)
+    username = username.strip()
+    if platform not in FETCH_SOURCES:
+        return _render_error(request, _tr(request, "error.bad_source"), 400, current_user)
+    if lang not in REPORT_LANGS:
+        return _render_error(request, _tr(request, "error.bad_lang"), 400, current_user)
+    if not is_valid_username(username):
+        return _render_settings(request, current_user, db, sync_error=_tr(request, "settings.sync.bad_username"))
+    await run_in_threadpool(sync.link_account, current_user.id, platform, username, lang)
+    # The first check verifies the account and takes note of the games already there.
+    return await _sync_now(request, current_user, db)
+
+
+@app.post("/settings/sync/check", response_class=HTMLResponse)
+async def settings_check_sync(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse:
+    if demo_mode():
+        return _render_error(request, _tr(request, "demo.sync_off"), 403, current_user)
+    return await _sync_now(request, current_user, db)
+
+
+@app.post("/settings/sync/delete", response_class=HTMLResponse)
+async def settings_unlink_sync(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse:
+    await run_in_threadpool(sync.unlink_account, current_user.id)
+    return _render_settings(request, current_user, db, sync_message=_tr(request, "settings.sync.msg.unlinked"))
 
 
 @app.get("/settings", response_class=HTMLResponse)

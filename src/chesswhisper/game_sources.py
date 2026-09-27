@@ -38,10 +38,14 @@ class FetchResult:
     warnings: list[str] = field(default_factory=list)
 
 
+def is_valid_username(username: str) -> bool:
+    return isinstance(username, str) and _USERNAME_RE.fullmatch(username) is not None
+
+
 def _validate(platform: str, username: str, max_games: int) -> None:
     if platform not in _FETCHERS:
         raise GameFetchError(f"Unknown platform {platform!r}; expected one of: {', '.join(sorted(_FETCHERS))}.")
-    if not isinstance(username, str) or not _USERNAME_RE.fullmatch(username):
+    if not is_valid_username(username):
         raise GameFetchError("Invalid username: use 2-30 letters, digits, '_' or '-'.")
     if isinstance(max_games, bool) or not isinstance(max_games, int) or not 1 <= max_games <= MAX_GAMES_LIMIT:
         raise GameFetchError(f"The number of games must be a whole number between 1 and {MAX_GAMES_LIMIT}.")

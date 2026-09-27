@@ -1,5 +1,15 @@
 {% extends "base.html" %}
-{% block title %}chesswhisper — {{ t("title.settings") }}{% endblock %}
+{% block title %}chesswhisper — {{ t("title.settings") }}<script>
+  // Stored times are UTC; show them in the viewer's own time zone.
+  document.querySelectorAll("time.local-time").forEach(function (el) {
+    var d = new Date(el.getAttribute("datetime"));
+    if (isNaN(d)) return;
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    el.textContent = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  });
+</script>
+{% endblock %}
 {% block content %}
 {% if demo %}
 <div class="card">
@@ -43,6 +53,50 @@
 
 {% endif %}
 
+{% if not demo %}
+<div class="card">
+  <h2 class="section-title">{{ t("settings.sync.title") }}</h2>
+  <p class="hint" style="margin-top:0;">{{ t("settings.sync.intro", minutes=sync_minutes) if sync_minutes else t("settings.sync.intro_off") }}</p>
+  {% if sync_error %}<div class="banner error">{{ sync_error }}</div>{% endif %}
+  {% if sync_message %}<div class="banner success">{{ sync_message }}</div>{% endif %}
+  {% if game_sync %}
+  <p style="font-size:14px;">
+    {{ t("settings.sync.linked", platform=t("analyze.source_" ~ game_sync.platform), username=game_sync.username) }}
+    {% if game_sync.last_checked_at %}<br>{{ t("settings.sync.last_checked") }}
+    <time class="local-time" datetime="{{ game_sync.last_checked_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ game_sync.last_checked_at.strftime("%Y-%m-%d %H:%M") }} UTC</time>{% endif %}
+    {% if game_sync.last_error %}<br><span class="danger-text">{{ game_sync.last_error }}</span>
+    {% elif game_sync.last_job_id and game_sync.last_new_games %}<br><a href="/analyze/progress/{{ game_sync.last_job_id }}">{{ t("settings.sync.last_found", n=game_sync.last_new_games) }}</a>{% endif %}
+  </p>
+  <div class="key-row">
+    <form method="post" action="/settings/sync/check">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="secondary-button">{{ t("settings.sync.check_now") }}</button>
+    </form>
+    <form method="post" action="/settings/sync/delete">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="link-button danger">{{ t("settings.sync.unlink") }}</button>
+    </form>
+  </div>
+  {% else %}
+  <form method="post" action="/settings/sync">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="sync_platform">{{ t("settings.sync.platform") }}</label>
+    <select id="sync_platform" name="platform">
+      {% for source in fetch_sources %}<option value="{{ source }}">{{ t("analyze.source_" ~ source) }}</option>{% endfor %}
+    </select>
+    <label for="sync_username">{{ t("settings.sync.username") }}</label>
+    <input type="text" id="sync_username" name="username" required maxlength="30" autocomplete="off">
+    <label for="sync_lang">{{ t("analyze.lang") }}</label>
+    <select id="sync_lang" name="lang">
+      <option value="tr"{% if ui_lang == "tr" %} selected{% endif %}>Türkçe</option>
+      <option value="en"{% if ui_lang == "en" %} selected{% endif %}>English</option>
+    </select>
+    <button type="submit">{{ t("settings.sync.link") }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="card">
   <h2 class="section-title">{{ t("settings.api_access") }}</h2>
   <p class="hint" style="margin-top:0;">{{ t("settings.api_intro") | safe }}</p>
@@ -83,4 +137,14 @@
     <button type="submit">{{ t("settings.update_password") }}</button>
   </form>
 </div>
+<script>
+  // Stored times are UTC; show them in the viewer's own time zone.
+  document.querySelectorAll("time.local-time").forEach(function (el) {
+    var d = new Date(el.getAttribute("datetime"));
+    if (isNaN(d)) return;
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    el.textContent = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  });
+</script>
 {% endblock %}
