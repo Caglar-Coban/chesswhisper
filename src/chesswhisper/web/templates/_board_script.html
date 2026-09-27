@@ -1,0 +1,77 @@
+<script>
+/* Draws a chess board as inline SVG with python-chess's piece artwork.
+   Shared by the game viewer and the puzzle page. Pieces and markers ignore
+   the pointer, so a click always lands on a square carrying data-square. */
+var ChessBoard = (function () {
+  var PIECES = {{ pieces | tojson }};
+  var COLORS = {{ board_colors | tojson }};
+  var FILES = "abcdefgh";
+
+  function xy(square, whiteBottom) {
+    var file = FILES.indexOf(square[0]), rank = Number(square[1]) - 1;
+    return [(whiteBottom ? file : 7 - file) * 45, (whiteBottom ? 7 - rank : rank) * 45];
+  }
+
+  function arrow(from, to, color, whiteBottom) {
+    var a = xy(from, whiteBottom), b = xy(to, whiteBottom);
+    var x1 = a[0] + 22.5, y1 = a[1] + 22.5, x2 = b[0] + 22.5, y2 = b[1] + 22.5;
+    var angle = Math.atan2(y2 - y1, x2 - x1), head = 14;
+    var bx = x2 - Math.cos(angle) * head, by = y2 - Math.sin(angle) * head;
+    var left = [bx + Math.sin(angle) * 9, by - Math.cos(angle) * 9];
+    var right = [bx - Math.sin(angle) * 9, by + Math.cos(angle) * 9];
+    return '<g opacity="0.8" pointer-events="none"><line x1="' + x1 + '" y1="' + y1 + '" x2="' + bx + '" y2="' + by +
+      '" stroke="' + color + '" stroke-width="7" stroke-linecap="round"/><polygon points="' + x2 + "," + y2 + " " +
+      left[0] + "," + left[1] + " " + right[0] + "," + right[1] + '" fill="' + color + '"/></g>';
+  }
+
+  /* opts: whiteBottom, highlight (squares), selected (square), targets (squares),
+     arrows ([{from, to, color}]) */
+  function render(el, fen, opts) {
+    opts = opts || {};
+    var whiteBottom = opts.whiteBottom !== false;
+    var highlight = {}, targets = {};
+    (opts.highlight || []).forEach(function (s) { highlight[s] = true; });
+    (opts.targets || []).forEach(function (s) { targets[s] = true; });
+    var parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360">'];
+    for (var rank = 1; rank <= 8; rank++) {
+      for (var f = 0; f < 8; f++) {
+        var square = FILES[f] + rank, p = xy(square, whiteBottom);
+        parts.push('<rect data-square="' + square + '" x="' + p[0] + '" y="' + p[1] + '" width="45" height="45" fill="' +
+          ((f + rank) % 2 ? COLORS.dark : COLORS.light) + '"/>');
+        if (highlight[square]) {
+          parts.push('<rect x="' + p[0] + '" y="' + p[1] + '" width="45" height="45" fill="#f2c94c" opacity="0.45" pointer-events="none"/>');
+        }
+        if (opts.selected === square) {
+          parts.push('<rect x="' + p[0] + '" y="' + p[1] + '" width="45" height="45" fill="#2f80ed" opacity="0.35" pointer-events="none"/>');
+        }
+      }
+    }
+    var rows = fen.split(" ")[0].split("/");
+    for (var r = 0; r < 8; r++) {
+      var file = 0;
+      for (var i = 0; i < rows[r].length; i++) {
+        var ch = rows[r][i];
+        if (ch >= "1" && ch <= "8") { file += Number(ch); continue; }
+        var pos = xy(FILES[file] + (8 - r), whiteBottom);
+        parts.push('<g pointer-events="none" transform="translate(' + pos[0] + "," + pos[1] + ')">' + PIECES[ch] + "</g>");
+        file++;
+      }
+    }
+    Object.keys(targets).forEach(function (square) {
+      var t = xy(square, whiteBottom);
+      parts.push('<circle cx="' + (t[0] + 22.5) + '" cy="' + (t[1] + 22.5) + '" r="7" fill="#1f2226" opacity="0.28" pointer-events="none"/>');
+    });
+    (opts.arrows || []).forEach(function (a) { parts.push(arrow(a.from, a.to, a.color, whiteBottom)); });
+    for (var k = 0; k < 8; k++) {
+      var fileLabel = FILES[whiteBottom ? k : 7 - k];
+      var rankLabel = whiteBottom ? 8 - k : k + 1;
+      parts.push('<text x="' + (k * 45 + 41) + '" y="357" font-size="8" text-anchor="end" pointer-events="none" fill="' + COLORS.coord + '">' + fileLabel + "</text>");
+      parts.push('<text x="2" y="' + (k * 45 + 10) + '" font-size="8" pointer-events="none" fill="' + COLORS.coord + '">' + rankLabel + "</text>");
+    }
+    parts.push("</svg>");
+    el.innerHTML = parts.join("");
+  }
+
+  return { render: render };
+})();
+</script>

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — {{ t("title.puzzles") }}{% endblock %}
+{% block content %}
+<div class="card">
+  {% if puzzle is none %}
+  <h2 class="section-title">{{ t("puzzles.heading") }}</h2>
+  <p class="trend-empty">{{ t("puzzles.empty") }} <a href="/">{{ t("puzzles.start_analysis") }}</a>.</p>
+  {% else %}
+  <div class="viewer-head">
+    <h2>{{ t("puzzles.heading") }}</h2>
+    <p>{{ t("puzzles.stats", solved=solved_count, total=total) }}{% if solved_before %} · {{ t("puzzles.solved_before") }}{% endif %}</p>
+  </div>
+  <div class="viewer">
+    <div>
+      <div class="viewer-board puzzle-board" id="board" role="img" aria-label="{{ t('viewer.board') }}"></div>
+    </div>
+    <div>
+      <p style="margin-top:0; font-weight:600;">{{ t("puzzles.to_move_" ~ puzzle.your_color) }}</p>
+      <p style="font-size:14px;">
+        {{ t("puzzles.context", n=puzzle.game_number, opponent=puzzle.opponent, move=puzzle.move_label, pawns="%.1f"|format(puzzle.cp_loss / 100)) }}
+      </p>
+      <p class="hint">{{ t("puzzles.hint") }}</p>
+      <div class="puzzle-result" id="result" aria-live="polite"></div>
+      <div class="puzzle-actions">
+        <button type="button" class="secondary-button" id="btn-retry" hidden>{{ t("puzzles.try_again") }}</button>
+        <button type="button" class="secondary-button" id="btn-solution" hidden>{{ t("puzzles.show_solution") }}</button>
+        <a class="secondary-button" id="btn-next" href="/puzzles" hidden>{{ t("puzzles.next") }}</a>
+      </div>
+      {% if viewer_url %}<p style="margin-top:18px; font-size:14px;"><a href="{{ viewer_url }}">{{ t("puzzles.open_game") }}</a></p>{% endif %}
+      <input type="hidden" id="csrf" value="{{ csrf_token }}">
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% if puzzle is not none %}
+{% include "_board_script.html" %}
+<script>
+(function () {
+  var FEN = {{ puzzle.fen | tojson }};
+  var LEGAL = {{ legal_moves | tojson }};
+  var WHITE_BOTTOM = {{ (puzzle.your_color != "black") | tojson }};
+  var ATTEMPT_URL = "/puzzles/{{ puzzle.record_id }}/{{ puzzle.index }}/attempt";
+  var TEXT = {
+    correct: {{ t("puzzles.correct") | tojson }},
+    wrong: {{ t("puzzles.wrong") | tojson }},
+    solution: {{ t("puzzles.solution") | tojson }},
+    stats: {{ t("puzzles.stats") | tojson }},
+    failed: {{ t("puzzles.check_failed") | tojson }}
+  };
+
+  var boardEl = document.getElementById("board");
+  var resultEl = document.getElementById("result");
+  var retry = document.getElementById("btn-retry");
+  var solutionBtn = document.getElementById("btn-solution");
+  var next = document.getElementById("btn-next");
+  var selected = null, locked = false, arrows = [], lastAnswer = null;
+
+  function movesFrom(square) {
+    return LEGAL.filter(function (m) { return m.slice(0, 2) === square; });
+  }
+
+  function draw() {
+    var targets = selected ? movesFrom(selected).map(function (m) { return m.slice(2, 4); }) : [];
+    ChessBoard.render(boardEl, FEN, { whiteBottom: WHITE_BOTTOM, selected: selected, targets: targets, arrows: arrows });
+  }
+
+  function showResult(text, kind) {
+    resultEl.textContent = text;
+    resultEl.className = "puzzle-result" + (kind ? " " + kind : "");
+  }
+
+  function submit(move) {
+    locked = true;
+    var form = new FormData();
+    form.append("move", move);
+    form.append("csrf_token", document.getElementById("csrf").value);
+    fetch(ATTEMPT_URL, { method: "POST", body: form })
+      .then(function (response) {
+        if (!response.ok) throw new Error(String(response.status));
+        return response.json();
+      })
+      .then(function (data) {
+        lastAnswer = data;
+        document.querySelector(".viewer-head p").textContent =
+          TEXT.stats.replace("{solved}", data.solved).replace("{total}", data.total);
+        if (data.correct) {
+          arrows = [{ from: data.best_uci.slice(0, 2), to: data.best_uci.slice(2, 4), color: "#2e8b57" }];
+          showResult(TEXT.correct.replace("{move}", data.best_san), "correct");
+          retry.hidden = true;
+          solutionBtn.hidden = true;
+        } else {
+          arrows = [{ from: move.slice(0, 2), to: move.slice(2, 4), color: "#c0392b" }];
+          showResult(TEXT.wrong, "wrong");
+          retry.hidden = false;
+          solutionBtn.hidden = false;
+        }
+        next.hidden = false;
+        draw();
+      })
+      .catch(function () {
+        locked = false;
+        showResult(TEXT.failed, "wrong");
+      });
+  }
+
+  boardEl.addEventListener("click", function (e) {
+    if (locked) return;
+    var target = e.target.closest("[data-square]");
+    if (!target) return;
+    var square = target.getAttribute("data-square");
+    if (selected) {
+      var candidates = movesFrom(selected).filter(function (m) { return m.slice(2, 4) === square; });
+      if (candidates.length) {
+        // A promotion offers four moves to the same square; take the queen.
+        var move = candidates.filter(function (m) { return m.length === 4 || m[4] === "q"; })[0] || candidates[0];
+        selected = null;
+        draw();
+        submit(move);
+        return;
+      }
+    }
+    selected = movesFrom(square).length ? square : null;
+    draw();
+  });
+
+  retry.addEventListener("click", function () {
+    locked = false;
+    arrows = [];
+    selected = null;
+    showResult("", "");
+    retry.hidden = true;
+    solutionBtn.hidden = true;
+    draw();
+  });
+
+  solutionBtn.addEventListener("click", function () {
+    if (!lastAnswer) return;
+    arrows = [{ from: lastAnswer.best_uci.slice(0, 2), to: lastAnswer.best_uci.slice(2, 4), color: "#2e8b57" }];
+    showResult(TEXT.solution.replace("{move}", lastAnswer.best_san), "");
+    retry.hidden = true;
+    solutionBtn.hidden = true;
+    draw();
+  });
+
+  draw();
+})();
+</script>
+{% endif %}
+{% endblock %}

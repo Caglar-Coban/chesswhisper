@@ -33,7 +33,9 @@
 {% endif %}
 {% if cards %}
 <section class="card board-section" aria-labelledby="critical-title">
-  <h2 id="critical-title" class="section-title">{{ t("report.critical") }}</h2>
+  <h2 id="critical-title" class="section-title">{{ t("report.critical") }}
+    {% if not viewing_as_admin %}<a class="practice-link no-print" id="practice-link" href="/puzzles">{{ t("report.practice") }}</a>{% endif %}
+  </h2>
   <p class="hint board-legend">
     <span class="legend-key legend-played"></span> {{ t("report.legend_played") }}
     <span class="legend-key legend-best"></span> {{ t("report.legend_best") }}

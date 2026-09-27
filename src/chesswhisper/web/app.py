@@ -42,7 +42,8 @@ from chesswhisper.web.auth import (
 )
 from chesswhisper.web.boards import PIECE_SVGS, VIEWER_COLORS, board_cards
 from chesswhisper.web.db import get_db, utcnow
-from chesswhisper.web.models import AnalysisRecord, User, UserApiKey
+from chesswhisper.web.models import AnalysisRecord, PuzzleAttempt, User, UserApiKey
+from chesswhisper.web.puzzles import Puzzle, legal_moves, order_puzzles, puzzles_from_records
 from chesswhisper.web.ratelimit import SlidingWindowLimiter
 from chesswhisper.web.security import (
     MIN_PASSWORD_LENGTH,
@@ -633,6 +634,106 @@ async def index(request: Request, current_user: User = Depends(get_current_user)
     )
 
 
+_UCI_RE = re.compile(r"[a-h][1-8][a-h][1-8][qrbn]?")
+
+
+def _user_puzzles(db: Session, user: User) -> tuple[list[Puzzle], dict[tuple[int, int], bool]]:
+    """The user's puzzles in the order to offer them, and which have been solved."""
+    records = (
+        db.query(AnalysisRecord).filter_by(user_id=user.id).order_by(AnalysisRecord.created_at.desc()).all()
+    )
+    solved: dict[tuple[int, int], bool] = {}
+    for record_id, index, was_solved in (
+        db.query(PuzzleAttempt.record_id, PuzzleAttempt.move_index, PuzzleAttempt.solved).filter_by(user_id=user.id)
+    ):
+        solved[(record_id, index)] = solved.get((record_id, index), False) or was_solved
+    return order_puzzles(puzzles_from_records(records), solved), solved
+
+
+def _solved_count(puzzles: list[Puzzle], solved: dict[tuple[int, int], bool]) -> int:
+    return sum(1 for p in puzzles if solved.get(p.key))
+
+
+@app.get("/puzzles", response_class=HTMLResponse, response_model=None)
+async def puzzles_next(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse | RedirectResponse:
+    puzzles, _ = _user_puzzles(db, current_user)
+    if not puzzles:
+        return _render(request, "puzzle.html", {"current_user": current_user, "puzzle": None})
+    first = puzzles[0]
+    return RedirectResponse(f"/puzzles/{first.record_id}/{first.index}", status_code=303)
+
+
+@app.get("/puzzles/{record_id}/{index}", response_class=HTMLResponse)
+async def puzzle_page(
+    request: Request,
+    record_id: int,
+    index: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    puzzles, solved = _user_puzzles(db, current_user)
+    puzzle = next((p for p in puzzles if p.key == (record_id, index)), None)
+    if puzzle is None:
+        return _render_error(request, _tr(request, "error.puzzle_not_found"), 404, current_user)
+    record = db.get(AnalysisRecord, record_id)
+    viewer_url = (
+        f"/history/{record_id}/games/{puzzle.game_number}?ply={puzzle.ply}"
+        if record is not None and record.games_json else None
+    )
+    return _render(
+        request, "puzzle.html",
+        {
+            "current_user": current_user,
+            "puzzle": puzzle,
+            "legal_moves": legal_moves(puzzle.fen),
+            "solved_before": solved.get(puzzle.key, False),
+            "solved_count": _solved_count(puzzles, solved),
+            "total": len(puzzles),
+            "viewer_url": viewer_url,
+            "pieces": PIECE_SVGS,
+            "board_colors": VIEWER_COLORS,
+        },
+    )
+
+
+@app.post("/puzzles/{record_id}/{index}/attempt", response_model=None)
+async def puzzle_attempt(
+    record_id: int,
+    index: int,
+    move: str = Form(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> JSONResponse:
+    puzzles, solved = _user_puzzles(db, current_user)
+    puzzle = next((p for p in puzzles if p.key == (record_id, index)), None)
+    if puzzle is None:
+        return JSONResponse({"detail": "Puzzle not found."}, status_code=404)
+    move = move.strip().lower()
+    if not _UCI_RE.fullmatch(move) or move not in legal_moves(puzzle.fen):
+        return JSONResponse({"detail": "Not a legal move in this position."}, status_code=400)
+
+    correct = move == puzzle.best_uci
+    db.add(PuzzleAttempt(
+        user_id=current_user.id, record_id=record_id, move_index=index, move_uci=move, solved=correct,
+    ))
+    db.commit()
+    solved[puzzle.key] = solved.get(puzzle.key, False) or correct
+    return JSONResponse({
+        "correct": correct,
+        "best_uci": puzzle.best_uci,
+        "best_san": puzzle.best_san,
+        "played_uci": puzzle.played_uci,
+        "played_san": puzzle.played_san,
+        "solved": _solved_count(puzzles, solved),
+        "total": len(puzzles),
+    })
+
+
 class AnalysisRequestError(Exception):
     """An analysis request that can't start; *message* is already translated."""
 
@@ -874,7 +975,7 @@ async def admin_user_history_detail(
             "games": _game_summaries(record),
             "games_url_prefix": f"/admin/users/{user_id}/history/{record_id}/games",
             "download_url": f"/admin/users/{user_id}/history/{record_id}/report.md",
-            "back_url": f"/admin/users/{user_id}",
+            "back_url": f"/admin/users/{user_id}", "viewing_as_admin": True,
         },
     )
 

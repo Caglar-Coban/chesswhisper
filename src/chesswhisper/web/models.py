@@ -29,6 +29,7 @@ class User(Base):
     analyses: Mapped[list[AnalysisRecord]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    puzzle_attempts: Mapped[list[PuzzleAttempt]] = relationship(cascade="all, delete-orphan")
 
 
 class UserApiKey(Base):
@@ -65,3 +66,18 @@ class AnalysisRecord(Base):
     games_json: Mapped[str | None] = mapped_column(Text, default=None)
 
     user: Mapped[User] = relationship(back_populates="analyses")
+    puzzle_attempts: Mapped[list[PuzzleAttempt]] = relationship(cascade="all, delete-orphan")
+
+
+class PuzzleAttempt(Base):
+    """One try at a puzzle made from a record's critical move (see web/puzzles.py)."""
+
+    __tablename__ = "puzzle_attempts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    record_id: Mapped[int] = mapped_column(ForeignKey("analysis_records.id"), index=True)
+    move_index: Mapped[int]
+    move_uci: Mapped[str] = mapped_column(String(5))
+    solved: Mapped[bool]
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)

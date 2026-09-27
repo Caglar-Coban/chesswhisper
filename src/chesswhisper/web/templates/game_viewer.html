@@ -34,11 +34,10 @@
     <span>{% if game_number < games_total %}<a href="{{ url_prefix }}/games/{{ game_number + 1 }}">{{ t("viewer.next_game") }}</a>{% endif %}</span>
   </div>
 </div>
+{% include "_board_script.html" %}
 <script>
 (function () {
   var game = {{ timeline | tojson }};
-  var PIECES = {{ pieces | tojson }};
-  var COLORS = {{ board_colors | tojson }};
   var LABELS = {
     blunder: {{ t("class.blunder") | tojson }}, mistake: {{ t("class.mistake") | tojson }},
     inaccuracy: {{ t("class.inaccuracy") | tojson }}, fine: ""
@@ -65,50 +64,12 @@
     return (cp < 0 ? "−" : "+") + (Math.abs(cp) / 100).toFixed(1);
   }
 
-  function squareXY(file, rank) {
-    var col = whiteBottom ? file : 7 - file;
-    var row = whiteBottom ? 7 - rank : rank;
-    return [col * 45, row * 45];
-  }
-
   function drawBoard() {
-    var placement = fenAt(ply).split(" ")[0].split("/");
     var last = ply > 0 ? moves[ply - 1].uci : null;
-    var marked = {};
-    if (last) {
-      marked[last.slice(0, 2)] = true;
-      marked[last.slice(2, 4)] = true;
-    }
-    var parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360">'];
-    for (var rank = 0; rank < 8; rank++) {
-      for (var file = 0; file < 8; file++) {
-        var xy = squareXY(file, rank);
-        var name = "abcdefgh"[file] + (rank + 1);
-        parts.push('<rect x="' + xy[0] + '" y="' + xy[1] + '" width="45" height="45" fill="' +
-          ((file + rank) % 2 ? COLORS.light : COLORS.dark) + '"/>');
-        if (marked[name]) {
-          parts.push('<rect x="' + xy[0] + '" y="' + xy[1] + '" width="45" height="45" fill="#f2c94c" opacity="0.45"/>');
-        }
-      }
-    }
-    for (var r = 0; r < 8; r++) {
-      var rank8 = 7 - r, f = 0;
-      for (var i = 0; i < placement[r].length; i++) {
-        var ch = placement[r][i];
-        if (ch >= "1" && ch <= "8") { f += Number(ch); continue; }
-        var pos = squareXY(f, rank8);
-        parts.push('<g transform="translate(' + pos[0] + ',' + pos[1] + ')">' + PIECES[ch] + "</g>");
-        f++;
-      }
-    }
-    for (var k = 0; k < 8; k++) {
-      var fileLabel = "abcdefgh"[whiteBottom ? k : 7 - k];
-      var rankLabel = whiteBottom ? 8 - k : k + 1;
-      parts.push('<text x="' + (k * 45 + 41) + '" y="357" font-size="8" text-anchor="end" fill="' + COLORS.coord + '">' + fileLabel + "</text>");
-      parts.push('<text x="2" y="' + (k * 45 + 10) + '" font-size="8" fill="' + COLORS.coord + '">' + rankLabel + "</text>");
-    }
-    parts.push("</svg>");
-    document.getElementById("board").innerHTML = parts.join("");
+    ChessBoard.render(document.getElementById("board"), fenAt(ply), {
+      whiteBottom: whiteBottom,
+      highlight: last ? [last.slice(0, 2), last.slice(2, 4)] : []
+    });
   }
 
   function drawInfo() {

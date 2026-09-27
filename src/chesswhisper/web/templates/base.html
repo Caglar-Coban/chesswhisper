@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}chesswhisper{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%99%9E%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #f6f7f5;
@@ -262,6 +263,15 @@
   .board-link { font-size: 13px; text-decoration: none; }
   .board-link:hover { text-decoration: underline; }
   .games-card { margin-bottom: 20px; }
+  .practice-link { float: right; font-size: 14px; font-weight: 500; text-decoration: none; }
+  .practice-link:hover { text-decoration: underline; }
+  .puzzle-board svg { cursor: pointer; }
+  .puzzle-result { margin-top: 14px; font-size: 15px; min-height: 24px; }
+  .puzzle-result.correct { color: #2e8b57; font-weight: 600; }
+  .puzzle-result.wrong { color: var(--danger); font-weight: 600; }
+  .puzzle-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+  .puzzle-actions button, .puzzle-actions a.secondary-button { margin: 0; }
+  .puzzle-actions a.secondary-button { display: inline-block; text-decoration: none; font-weight: 500; border-radius: 8px; }
   .report-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; }
   .report-actions .secondary-button { display: inline-block; text-decoration: none; font-weight: 500; border-radius: 8px; }
   @media print {
@@ -345,6 +355,7 @@
       {% if current_user %}
       <a href="/">{{ t("nav.analyze") }}</a>
       <a href="/history">{{ t("nav.history") }}</a>
+      <a href="/puzzles">{{ t("nav.puzzles") }}</a>
       <a href="/settings">{{ t("nav.settings") }}</a>
       {% if current_user.is_admin %}<a href="/admin">{{ t("nav.admin") }}</a>{% endif %}
       <form method="post" action="/logout" style="display:inline; margin:0;">

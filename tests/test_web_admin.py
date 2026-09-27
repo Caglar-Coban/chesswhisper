@@ -169,3 +169,25 @@ def test_admin_can_download_another_users_report(clients):
 
     assert response.status_code == 200
     assert response.text == "# Alice report"
+
+
+def test_admin_report_view_does_not_offer_the_admins_own_puzzles(clients):
+    admin_client, _ = clients
+    db = next(get_db())
+    alice = db.query(User).filter_by(username="alice").one()
+    fen = chess.STARTING_FEN
+    moves = [{
+        "game_index": 0, "opponent": "Bob", "your_color": "white", "ply": 1, "move_number": 1,
+        "san": "a3", "uci": "a2a3", "best_uci": "e2e4", "best_san": "e4", "fen_before": fen,
+        "cp_before": 40, "cp_after": -320, "cp_loss": 360, "classification": "blunder",
+    }]
+    record = AnalysisRecord(
+        user_id=alice.id, player_name="Alice", lang="en", llm_used="none", games_count=1,
+        overall_acpl=1.0, overall_accuracy=99.0, report_markdown="# r", critical_moves_json=json.dumps(moves),
+    )
+    db.add(record)
+    db.commit()
+
+    page = admin_client.get(f"/admin/users/{alice.id}/history/{record.id}").text
+
+    assert 'id="practice-link"' not in page
