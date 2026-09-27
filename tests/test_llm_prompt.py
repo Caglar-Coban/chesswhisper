@@ -108,3 +108,16 @@ def test_build_prompt_includes_endgames():
     report.endgames = [EndgameStats("rook", games=3, winning=2, converted=1, level=1, held=1, acpl=24.5)]
 
     assert "rook: 3 games, winning 2 (won 1), level 1 (held 1), losing 0 (saved 0), ACPL 24.5" in build_prompt(report, lang="en")
+
+
+def test_build_prompt_includes_recent_form():
+    from datetime import datetime
+
+    from chesswhisper.form import FormPeriod, RecentForm
+
+    report = _sample_report()
+    period = FormPeriod(games=10, first=datetime(2026, 1, 1), last=datetime(2026, 2, 1), accuracy=90.0, acpl=30.0,
+                        blunders_per_game=0.5, score=0.6)
+    report.recent_form = RecentForm(recent=period, earlier=period)
+
+    assert "recent: 10 games, accuracy 90.0%, ACPL 30.0, 0.5 blunders per game, score 60%" in build_prompt(report, lang="en")

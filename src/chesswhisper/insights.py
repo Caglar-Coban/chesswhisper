@@ -21,6 +21,7 @@ MOTIF_SHARE = 0.3
 MIN_THEORY_GAMES = 3
 MIN_CHANCES = 5
 MIN_WINNING_ENDGAMES = 3
+FORM_ACCURACY_GAP = 3.0
 CONVERSION_FLOOR = 0.6
 PUNISH_RATE_FLOOR = 0.5
 THEORY_DROP_CP = 100
@@ -85,6 +86,12 @@ def key_findings(report: AggregateReport) -> list[Finding]:
         findings.append(motif)
 
     findings.extend(_theory_findings(report))
+
+    form = report.recent_form
+    if form is not None and abs(form.recent.accuracy - form.earlier.accuracy) >= FORM_ACCURACY_GAP:
+        kind = "form_up" if form.recent.accuracy > form.earlier.accuracy else "form_down"
+        findings.append((kind, {"recent_n": form.recent.games, "earlier_n": form.earlier.games,
+                                "recent": round(form.recent.accuracy, 1), "earlier": round(form.earlier.accuracy, 1)}))
 
     winning = sum(row.winning for row in report.endgames)
     converted = sum(row.converted for row in report.endgames)

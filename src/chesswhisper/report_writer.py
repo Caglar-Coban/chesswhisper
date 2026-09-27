@@ -126,6 +126,23 @@ def render_markdown(report, commentary: str, lang: str) -> str:
             )
         parts.append("")
 
+    if report.recent_form is not None:
+        parts.append(f"## {t('recent_form', lang)}")
+        parts.append(t("recent_form_note", lang))
+        parts.append("")
+        parts.append(
+            f"| {t('period_column', lang)} | {t('dates_column', lang)} | {t('accuracy', lang)} | "
+            f"{t('acpl_column', lang)} | {t('blunders_per_game_column', lang)} | {t('score_column', lang)} |"
+        )
+        parts.append("| --- | --- | --- | --- | --- | --- |")
+        for key, period in (("period_recent", report.recent_form.recent), ("period_earlier", report.recent_form.earlier)):
+            score = f"{period.score:.0%}" if period.score is not None else "-"
+            parts.append(
+                f"| {t(key, lang).format(n=period.games)} | {period.first:%Y-%m-%d} – {period.last:%Y-%m-%d} | "
+                f"{period.accuracy:.1f}% | {period.acpl:.1f} | {period.blunders_per_game:.1f} | {score} |"
+            )
+        parts.append("")
+
     if report.by_time_class:
         parts.append(f"## {t('by_time_class', lang)}")
         parts.extend(_segment_table(report.by_time_class, "time_class_column", "tc_", lang))

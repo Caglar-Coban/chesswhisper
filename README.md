@@ -34,6 +34,7 @@ and Turkish.
 - **Tactical motifs.** Each mistake and blunder is labeled with the tactic
   behind it (fork, pin, hanging piece, mate, back-rank mate, promotion) and
   whether you allowed it or missed it.
+- **Recent form.** Your newest games against the ones before them.
 - **Endgames.** By kind of endgame, whether you win the winning ones, hold
   the level ones and save the losing ones.
 - **Missed chances.** How many of your opponents' mistakes you punished,

@@ -62,6 +62,14 @@ def build_prompt(report, lang: str) -> str:
                 lines.append(f"  no clear tactic (positional or deeper): {stat.total}")
             else:
                 lines.append(f"  {stat.motif}: allowed {stat.allowed}, missed {stat.missed}")
+    if report.recent_form is not None:
+        lines.append("Recent form (newest games against the ones before them):")
+        for label, period in (("recent", report.recent_form.recent), ("earlier", report.recent_form.earlier)):
+            score = f"{period.score:.0%}" if period.score is not None else "unknown"
+            lines.append(
+                f"  {label}: {period.games} games, accuracy {period.accuracy:.1f}%, ACPL {period.acpl:.1f}, "
+                f"{period.blunders_per_game:.1f} blunders per game, score {score}"
+            )
     if report.endgames:
         lines.append("Endgames reached (from the evaluation on entering them: winning/level/losing for the player):")
         for row in report.endgames:

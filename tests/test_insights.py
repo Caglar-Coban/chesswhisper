@@ -1,3 +1,5 @@
+import pytest
+
 from chesswhisper.insights import key_findings, render_finding
 from chesswhisper.stats_engine import (
     AggregateReport,
@@ -184,3 +186,33 @@ def test_no_conversion_finding_when_converting_well_or_too_few():
         agg = _agg()
         agg.endgames = rows
         assert not [f for f in key_findings(agg) if f[0] == "conversion"]
+
+
+def _form(recent_acc, earlier_acc):
+    from datetime import datetime
+
+    from chesswhisper.form import FormPeriod, RecentForm
+
+    def period(n, acc):
+        return FormPeriod(games=n, first=datetime(2026, 1, 1), last=datetime(2026, 2, 1), accuracy=acc, acpl=30,
+                          blunders_per_game=1, score=0.5)
+
+    return RecentForm(recent=period(10, recent_acc), earlier=period(20, earlier_acc))
+
+
+@pytest.mark.parametrize(("recent", "earlier", "kind"), [(91.24, 87.0, "form_up"), (84.0, 88.0, "form_down")])
+def test_flags_a_change_in_recent_form(recent, earlier, kind):
+    agg = _agg()
+    agg.recent_form = _form(recent, earlier)
+
+    [finding] = [f for f in key_findings(agg) if f[0].startswith("form")]
+
+    assert finding == (kind, {"recent_n": 10, "earlier_n": 20, "recent": round(recent, 1), "earlier": earlier})
+    assert render_finding(finding, "en").startswith("Your last 10 games are")
+
+
+def test_no_form_finding_for_a_small_change():
+    agg = _agg()
+    agg.recent_form = _form(88.0, 86.5)
+
+    assert not [f for f in key_findings(agg) if f[0].startswith("form")]

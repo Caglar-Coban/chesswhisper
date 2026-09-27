@@ -1,11 +1,13 @@
 import math
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import chess
 
 from chesswhisper.chances import Chance, ChanceStats, chance_stats, opponent_chances
 from chesswhisper.endgames import EndgameEntry, EndgameStats, endgame_entry, endgame_stats
+from chesswhisper.form import RecentForm, game_datetime, recent_form
 from chesswhisper.motifs import MOTIFS, OTHER, error_motif
 from chesswhisper.openings import match_opening
 from chesswhisper.theory import TheoryExit, TheoryStats, book_prefixes, theory_exit, theory_stats
@@ -233,6 +235,8 @@ class GameReport:
     chances: list[Chance] = field(default_factory=list)
     # The first endgame position and how it went (see endgames.py); None without an endgame.
     endgame: EndgameEntry | None = None
+    # When the game was played, from its PGN headers (see form.py); None if they don't say.
+    played_at: datetime | None = None
 
 
 @dataclass
@@ -312,6 +316,7 @@ class AggregateReport:
     opening_theory: list[TheoryStats] = field(default_factory=list)
     chances: ChanceStats = field(default_factory=lambda: ChanceStats(total=0, punished=0, missed_by_motif=[]))
     endgames: list[EndgameStats] = field(default_factory=list)
+    recent_form: RecentForm | None = None
 
 
 def detect_player(loaded_games) -> str:
@@ -460,6 +465,7 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
         theory=theory_exit(evals, your_bool_color, book_prefixes(eco_table), custom_start=is_custom_start),
         chances=opponent_chances(evals, your_bool_color),
         endgame=endgame_entry(evals, your_bool_color, result, custom_start=is_custom_start),
+        played_at=game_datetime(loaded.headers),
     )
 
 
@@ -598,6 +604,7 @@ def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
         opening_theory=theory_stats(game_reports),
         chances=chance_stats(game_reports),
         endgames=endgame_stats(game_reports),
+        recent_form=recent_form(game_reports),
         **_breakdowns(game_reports),
     )
 

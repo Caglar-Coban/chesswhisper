@@ -259,3 +259,30 @@ def test_endgames_section_in_turkish():
 
     assert "## Oyun Sonları" in md
     assert "| Kale | 3 |" in md
+
+
+def _with_form():
+    from datetime import datetime
+
+    from chesswhisper.form import FormPeriod, RecentForm
+
+    report = _sample_report()
+    report.recent_form = RecentForm(
+        recent=FormPeriod(games=10, first=datetime(2026, 9, 10), last=datetime(2026, 9, 20), accuracy=91.2,
+                          acpl=28.0, blunders_per_game=0.4, score=0.65),
+        earlier=FormPeriod(games=15, first=datetime(2026, 8, 1), last=datetime(2026, 9, 9), accuracy=87.0,
+                           acpl=39.5, blunders_per_game=0.9, score=None),
+    )
+    return report
+
+
+def test_recent_form_section():
+    md = render_markdown(_with_form(), commentary="", lang="en")
+
+    assert "## Recent Form" in md
+    assert "| Last 10 games | 2026-09-10 \u2013 2026-09-20 | 91.2% | 28.0 | 0.4 | 65% |" in md
+    assert "| The 15 before | 2026-08-01 \u2013 2026-09-09 | 87.0% | 39.5 | 0.9 | - |" in md
+
+
+def test_no_recent_form_section_without_a_comparison():
+    assert "Recent Form" not in render_markdown(_sample_report(), commentary="", lang="en")

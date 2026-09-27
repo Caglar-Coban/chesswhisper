@@ -4,6 +4,16 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-09-27
+
+### Added
+
+- Recent form: with at least ten dated games, the newest half (up to 20
+  games) is compared with the games before it on accuracy, ACPL, blunders
+  per game and score. Reports get a "Recent Form" table and a key finding
+  when accuracy moved by 3 points or more; the LLM prompt gets the numbers.
+  Game dates come from the PGN's UTCDate/UTCTime (or Date) headers.
+
 ## [0.12.0] - 2026-09-27
 
 ### Added
@@ -251,6 +261,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.13.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.13.0
 [0.12.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.12.0
 [0.11.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.11.0
 [0.10.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.10.0
