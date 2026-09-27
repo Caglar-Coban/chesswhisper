@@ -4,7 +4,7 @@ This guide covers running the web UI as a long-lived service for yourself
 or a few people you trust: on a home server, a spare machine on your LAN,
 or a small VPS. It does not turn chesswhisper into a public web service.
 Sign-up is open unless you close it, there's no email verification, and
-background jobs live in memory, so read [Reaching it from other
+it is built to run as one process, so read [Reaching it from other
 machines](#reaching-it-from-other-machines) before exposing it anywhere.
 
 The quickest route is [Docker](#docker); the rest of the guide sets it up
@@ -168,10 +168,21 @@ The **Deploy demo** workflow publishes it on every push to `master`:
 ### Keep it to one process
 
 `chesswhisper serve` starts a single uvicorn process, and it has to stay
-that way. Analysis progress lives in that process's memory, so do not run
-it under gunicorn, with `--workers` or with `WEB_CONCURRENCY` set, and do not start two copies against
-the same data directory. A restart drops any analysis still running;
-already-finished ones are in the database and survive.
+that way. Analyses are queued in the database but run by a worker pool
+inside that process, so do not run it under gunicorn, with `--workers` or
+with `WEB_CONCURRENCY` set, and do not start two copies against the same
+data directory.
+
+Queued and running analyses survive a restart: when the server starts
+again it runs them from the beginning, and games it had already analyzed
+come back from the evaluation cache. An analysis interrupted three times is
+marked failed instead. Finished jobs (their status page and any warnings)
+are kept for 7 days; the reports themselves stay in your history.
+
+`CHESSWHISPER_WORKERS` (default 2) sets how many analyses run at once;
+others wait in line, and their progress page shows how many are ahead.
+Each analysis runs its own Stockfish on up to 4 threads, so on a small
+machine `1` may be the better choice.
 
 ## Reaching it from other machines
 

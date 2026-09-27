@@ -4,6 +4,26 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-09-27
+
+### Added
+
+- Analyses submitted in the web UI or through the API go into a queue kept
+  in the database (migration 0007). A restart no longer loses them: queued
+  and interrupted analyses run again when the server starts, reusing cached
+  evaluations for games already done. One interrupted three times is marked
+  failed.
+- `CHESSWHISPER_WORKERS` (default 2) limits how many analyses run at once.
+  The progress page and the API's job status show a waiting analysis's
+  place in line (`status: "queued"`, `position`).
+
+### Changed
+
+- Finished jobs are kept for 7 days instead of an hour.
+- An LLM key is read when the analysis starts rather than held in memory
+  with the job; if it was removed in between, the analysis fails with a
+  message saying so.
+
 ## [0.3.0] - 2026-09-27
 
 ### Added
@@ -117,6 +137,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.4.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.1.0
