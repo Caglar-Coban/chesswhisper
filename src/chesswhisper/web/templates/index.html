@@ -35,6 +35,9 @@
       <option value="en"{% if ui_lang == "en" %} selected{% endif %}>English</option>
     </select>
 
+    {% if demo %}
+    <input type="hidden" name="llm" value="none">
+    {% else %}
     <label for="llm">{{ t("analyze.llm") }}</label>
     <select id="llm" name="llm">
       <option value="none" selected>{{ t("analyze.llm_none") }}</option>
@@ -42,6 +45,7 @@
       <option value="openai">OpenAI</option>
     </select>
     <p class="hint">{{ t("analyze.llm_hint") | safe }}</p>
+    {% endif %}
 
     <button type="submit" id="submit-btn">{{ t("analyze.submit") }}</button>
     <p class="status-line" id="status-line">{{ t("analyze.starting_note") }}</p>

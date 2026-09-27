@@ -62,6 +62,14 @@ _STRINGS: dict[str, dict[str, str]] = {
     },
     "puzzles.start_analysis": {"tr": "Analiz başlat", "en": "Start an analysis"},
 
+    # Public demo
+    "demo.banner": {"tr": "Herkese açık demo: veriler yeniden başlatmada sıfırlanır; LLM yorumu kapalı ve analiz başına en fazla 10 oyun.",
+                    "en": "Public demo: data resets on restart, LLM commentary is off, and analyses are capped at 10 games."},
+    "demo.login_hint": {"tr": "Hazır verilerle göz atmak için <strong>{username}</strong> / <strong>{password}</strong> ile giriş yap ya da kendi hesabını aç.",
+                        "en": "Sign in as <strong>{username}</strong> / <strong>{password}</strong> to browse ready-made analyses, or create your own account."},
+    "demo.keys_off": {"tr": "Bu herkese açık demoda API anahtarı saklanmaz ve LLM yorumu kapalıdır.",
+                      "en": "This public demo doesn't store API keys, and LLM commentary is off."},
+
     # Login / register
     "auth.username": {"tr": "Kullanıcı adı", "en": "Username"},
     "auth.password": {"tr": "Parola", "en": "Password"},
@@ -262,6 +270,9 @@ _STRINGS: dict[str, dict[str, str]] = {
     "error.engine_setup": {"tr": "Motor kurulum hatası: {detail}", "en": "Engine setup failed: {detail}"},
     "error.bad_provider": {"tr": "Geçersiz sağlayıcı.", "en": "Invalid provider."},
     "error.delete_self": {"tr": "Kendi hesabını silemezsin.", "en": "You can't delete your own account."},
+    "error.demo_no_llm": {"tr": "Herkese açık demoda LLM yorumu kapalı.", "en": "LLM commentary is off in the public demo."},
+    "error.demo_max_games": {"tr": "Demoda analiz başına en fazla {n} oyun çekilebilir.",
+                             "en": "The demo fetches at most {n} games per analysis."},
 }
 
 

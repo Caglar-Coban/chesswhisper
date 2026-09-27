@@ -369,6 +369,7 @@
       <a class="lang-switch" href="/language/{{ other_lang }}?next={{ request.url.path | urlencode }}" lang="{{ other_lang }}">{{ t("nav.switch_language") }}</a>
     </nav>
   </header>
+  {% if demo %}<div class="banner warning demo-banner no-print">{{ t("demo.banner") }}</div>{% endif %}
   {% block content %}{% endblock %}
 </div>
 </body>

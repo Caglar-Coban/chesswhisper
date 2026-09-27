@@ -311,6 +311,30 @@ def serve(host, port):
     uvicorn.run("chesswhisper.web.app:app", host=host, port=port)
 
 
+@cli.command("seed-demo")
+@click.option("--analyses", default=3, type=click.IntRange(min=1, max=12), help="How many analyses to split the demo games into.")
+@click.option("--movetime", default=300, type=click.IntRange(min=1), help="Engine think time per position, in milliseconds.")
+@click.option("--threads", default=None, type=click.IntRange(min=1, max=256), help="Stockfish search threads.")
+def seed_demo_command(analyses, movetime, threads):
+    """Create the public demo account with analyses of the bundled games."""
+    try:
+        from chesswhisper.web.db import init_db
+        from chesswhisper.web.demo import DEMO_USERNAME, seed_demo
+    except ImportError:
+        click.echo(
+            'Error: the web UI requires extra dependencies. Install them with: pip install -e ".[web]"',
+            err=True,
+        )
+        sys.exit(1)
+
+    init_db()
+    added = seed_demo(analyses=analyses, movetime=movetime, threads=threads)
+    if added:
+        click.echo(f"Demo account {DEMO_USERNAME!r} seeded with {added} analyses.")
+    else:
+        click.echo(f"Demo account {DEMO_USERNAME!r} already has analyses; nothing to do.")
+
+
 @cli.command("create-admin")
 @click.option("--username", prompt=True)
 @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)

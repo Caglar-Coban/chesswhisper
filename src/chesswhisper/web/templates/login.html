@@ -3,6 +3,7 @@
 {% block content %}
 <div class="card">
   {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+  {% if demo %}<p class="hint" style="margin-top:0;">{{ t("demo.login_hint", username=demo_username, password=demo_password) | safe }}</p>{% endif %}
   <form method="post" action="/login">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label for="username">{{ t("auth.username") }}</label>

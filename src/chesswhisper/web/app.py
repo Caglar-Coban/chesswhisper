@@ -42,6 +42,7 @@ from chesswhisper.web.auth import (
 )
 from chesswhisper.web.boards import PIECE_SVGS, VIEWER_COLORS, board_cards
 from chesswhisper.web.db import get_db, utcnow
+from chesswhisper.web.demo import DEMO_MAX_GAMES, DEMO_PASSWORD, DEMO_USERNAME, demo_mode
 from chesswhisper.web.models import AnalysisRecord, PuzzleAttempt, User, UserApiKey
 from chesswhisper.web.puzzles import Puzzle, legal_moves, order_puzzles, puzzles_from_records
 from chesswhisper.web.ratelimit import SlidingWindowLimiter
@@ -138,6 +139,9 @@ def _render(request: Request, template_name: str, context: dict, status_code: in
             "ui_lang": lang,
             "t": lambda key, **params: ui_text(key, lang, **params),
             "registration_open": registration_open(),
+            "demo": demo_mode(),
+            "demo_username": DEMO_USERNAME,
+            "demo_password": DEMO_PASSWORD,
         },
         status_code=status_code,
     )
@@ -163,6 +167,31 @@ def _report_to_safe_html(report_markdown: str) -> str:
 
 def _start_background(target: Callable[[], None]) -> None:
     threading.Thread(target=target, daemon=True).start()
+
+
+def save_analysis(
+    db: Session, user_id: int, aggregate, commentary: str, lang: str, llm: str, created_at=None
+) -> AnalysisRecord:
+    """Store a finished analysis: the report plus what the boards, viewer and puzzles need."""
+    moves = critical_moves(aggregate.games)
+    timelines = game_timelines(aggregate.games)
+    record = AnalysisRecord(
+        user_id=user_id,
+        player_name=aggregate.player,
+        lang=lang,
+        llm_used=llm,
+        games_count=len(aggregate.games),
+        overall_acpl=aggregate.overall_acpl,
+        overall_accuracy=aggregate.overall_accuracy,
+        report_markdown=render_markdown(aggregate, commentary, lang),
+        critical_moves_json=json.dumps(moves) if moves else None,
+        games_json=json.dumps(timelines) if timelines else None,
+    )
+    if created_at is not None:
+        record.created_at = created_at
+    db.add(record)
+    db.commit()
+    return record
 
 
 def _run_analysis_job(
@@ -191,23 +220,7 @@ def _run_analysis_job(
             jobs.mark_error(job_id, ui_text("error.engine_setup", ui_language, detail=exc))
             return
 
-        report_markdown = render_markdown(aggregate, commentary, lang)
-        moves = critical_moves(aggregate.games)
-        timelines = game_timelines(aggregate.games)
-        record = AnalysisRecord(
-            user_id=user_id,
-            player_name=aggregate.player,
-            lang=lang,
-            llm_used=llm,
-            games_count=len(aggregate.games),
-            overall_acpl=aggregate.overall_acpl,
-            overall_accuracy=aggregate.overall_accuracy,
-            report_markdown=report_markdown,
-            critical_moves_json=json.dumps(moves) if moves else None,
-            games_json=json.dumps(timelines) if timelines else None,
-        )
-        db.add(record)
-        db.commit()
+        record = save_analysis(db, user_id, aggregate, commentary, lang, llm)
         jobs.mark_done(job_id, record.id, fetch_warnings + warnings)
     except Exception:
         # Last-resort safety net: without this, an exception type this
@@ -424,6 +437,8 @@ async def settings_submit(
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse:
+    if demo_mode():
+        return _render_error(request, _tr(request, "demo.keys_off"), 403, current_user)
     key_row = db.get(UserApiKey, current_user.id)
     if key_row is None:
         key_row = UserApiKey(user_id=current_user.id)
@@ -449,6 +464,8 @@ async def settings_delete_key(
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse:
+    if demo_mode():
+        return _render_error(request, _tr(request, "demo.keys_off"), 403, current_user)
     column = _KEY_COLUMNS.get(provider)
     if column is None:
         return _render_error(request, _tr(request, "error.bad_provider"), 400, current_user)
@@ -630,7 +647,11 @@ async def history_delete(
 async def index(request: Request, current_user: User = Depends(get_current_user)) -> HTMLResponse:
     return _render(
         request, "index.html",
-        {"current_user": current_user, "default_max_games": DEFAULT_MAX_GAMES, "max_games_limit": MAX_GAMES_LIMIT},
+        {
+            "current_user": current_user,
+            "default_max_games": DEFAULT_MAX_GAMES,
+            "max_games_limit": DEMO_MAX_GAMES if demo_mode() else MAX_GAMES_LIMIT,
+        },
     )
 
 
@@ -783,6 +804,8 @@ async def start_analysis(
         raise fail(400, "error.bad_lang")
     if llm not in LLM_CHOICES:
         raise fail(400, "error.bad_llm")
+    if demo_mode() and llm != "none":
+        raise fail(400, "error.demo_no_llm")
 
     running = jobs.running_job_for(user_id)
     if running is not None:
@@ -799,6 +822,8 @@ async def start_analysis(
             game_count = int(max_games)
         except (TypeError, ValueError):
             raise fail(400, "error.bad_game_count") from None
+        if demo_mode() and game_count > DEMO_MAX_GAMES:
+            raise fail(400, "error.demo_max_games", n=DEMO_MAX_GAMES)
     else:
         if not pgn_bytes:
             raise fail(400, "error.need_file")

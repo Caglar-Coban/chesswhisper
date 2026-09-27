@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}chesswhisper — {{ t("title.settings") }}{% endblock %}
 {% block content %}
+{% if demo %}
+<div class="card">
+  <h2 class="section-title">{{ t("settings.api_keys") }}</h2>
+  <p class="hint" style="margin-top:0;">{{ t("demo.keys_off") }}</p>
+</div>
+{% else %}
 <div class="card">
   <h2 class="section-title">{{ t("settings.api_keys") }}</h2>
   {% if message %}<div class="banner warning">{{ message }}</div>{% endif %}
@@ -34,6 +40,8 @@
   </div>
   {% endif %}
 </div>
+
+{% endif %}
 
 <div class="card">
   <h2 class="section-title">{{ t("settings.api_access") }}</h2>
