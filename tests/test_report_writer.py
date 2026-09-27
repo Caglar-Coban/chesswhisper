@@ -234,3 +234,28 @@ def test_opponent_errors_section_and_per_game_line():
 
 def test_no_opponent_errors_section_without_any():
     assert "Opponents' Mistakes" not in render_markdown(_sample_report(), commentary="", lang="en")
+
+
+def _with_endgames():
+    from chesswhisper.endgames import EndgameEntry, EndgameStats
+
+    report = _sample_report()
+    report.endgames = [EndgameStats("rook", games=3, winning=2, converted=1, level=1, held=1, acpl=24.5)]
+    report.games[0].endgame = EndgameEntry(kind="rook", move_number=41, eval_at_entry=230, expectation="winning",
+                                           result="win", acpl=12.0)
+    return report
+
+
+def test_endgames_section_and_per_game_line():
+    md = render_markdown(_with_endgames(), commentary="", lang="en")
+
+    assert "## Endgames" in md
+    assert "| Rook | 3 | 1 / 2 | 1 / 1 | 0 / 0 | 24.5 |" in md
+    assert "- Endgame: rook, from move 41, +2.3 on entry" in md
+
+
+def test_endgames_section_in_turkish():
+    md = render_markdown(_with_endgames(), commentary="", lang="tr")
+
+    assert "## Oyun Sonları" in md
+    assert "| Kale | 3 |" in md

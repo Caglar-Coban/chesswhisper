@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import chess
 
 from chesswhisper.chances import Chance, ChanceStats, chance_stats, opponent_chances
+from chesswhisper.endgames import EndgameEntry, EndgameStats, endgame_entry, endgame_stats
 from chesswhisper.motifs import MOTIFS, OTHER, error_motif
 from chesswhisper.openings import match_opening
 from chesswhisper.theory import TheoryExit, TheoryStats, book_prefixes, theory_exit, theory_stats
@@ -230,6 +231,8 @@ class GameReport:
     theory: TheoryExit | None = None
     # The opponent's mistakes and blunders and whether they were punished (see chances.py).
     chances: list[Chance] = field(default_factory=list)
+    # The first endgame position and how it went (see endgames.py); None without an endgame.
+    endgame: EndgameEntry | None = None
 
 
 @dataclass
@@ -308,6 +311,7 @@ class AggregateReport:
     motifs: list[MotifStat] = field(default_factory=list)
     opening_theory: list[TheoryStats] = field(default_factory=list)
     chances: ChanceStats = field(default_factory=lambda: ChanceStats(total=0, punished=0, missed_by_motif=[]))
+    endgames: list[EndgameStats] = field(default_factory=list)
 
 
 def detect_player(loaded_games) -> str:
@@ -455,6 +459,7 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
         evals=list(evals),
         theory=theory_exit(evals, your_bool_color, book_prefixes(eco_table), custom_start=is_custom_start),
         chances=opponent_chances(evals, your_bool_color),
+        endgame=endgame_entry(evals, your_bool_color, result, custom_start=is_custom_start),
     )
 
 
@@ -592,6 +597,7 @@ def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
         motifs=motif_stats(game_reports),
         opening_theory=theory_stats(game_reports),
         chances=chance_stats(game_reports),
+        endgames=endgame_stats(game_reports),
         **_breakdowns(game_reports),
     )
 

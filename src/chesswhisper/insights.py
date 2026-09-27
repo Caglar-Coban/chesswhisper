@@ -20,6 +20,8 @@ MIN_MOTIF_ERRORS = 5
 MOTIF_SHARE = 0.3
 MIN_THEORY_GAMES = 3
 MIN_CHANCES = 5
+MIN_WINNING_ENDGAMES = 3
+CONVERSION_FLOOR = 0.6
 PUNISH_RATE_FLOOR = 0.5
 THEORY_DROP_CP = 100
 THEORY_OPENING_DROP_CP = 150
@@ -83,6 +85,11 @@ def key_findings(report: AggregateReport) -> list[Finding]:
         findings.append(motif)
 
     findings.extend(_theory_findings(report))
+
+    winning = sum(row.winning for row in report.endgames)
+    converted = sum(row.converted for row in report.endgames)
+    if winning >= MIN_WINNING_ENDGAMES and converted / winning < CONVERSION_FLOOR:
+        findings.append(("conversion", {"converted": converted, "winning": winning}))
 
     chances = report.chances
     if chances.total >= MIN_CHANCES and (chances.punish_rate or 0) < PUNISH_RATE_FLOOR:

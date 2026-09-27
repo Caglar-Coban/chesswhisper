@@ -164,3 +164,23 @@ def test_no_chances_finding_when_most_are_punished_or_too_few():
         agg = _agg()
         agg.chances = stats
         assert not [f for f in key_findings(agg) if f[0] == "chances"]
+
+
+def test_flags_poor_conversion_of_winning_endgames():
+    from chesswhisper.endgames import EndgameStats
+
+    agg = _agg()
+    agg.endgames = [EndgameStats("rook", games=4, winning=3, converted=1), EndgameStats("pawn", games=1, winning=1, converted=1)]
+
+    finding = ("conversion", {"converted": 2, "winning": 4})
+    assert finding in key_findings(agg)
+    assert render_finding(finding, "en") == "You converted only 2 of 4 winning endgames: endgame technique would win you points."
+
+
+def test_no_conversion_finding_when_converting_well_or_too_few():
+    from chesswhisper.endgames import EndgameStats
+
+    for rows in ([EndgameStats("rook", winning=5, converted=4)], [EndgameStats("rook", winning=2, converted=0)]):
+        agg = _agg()
+        agg.endgames = rows
+        assert not [f for f in key_findings(agg) if f[0] == "conversion"]

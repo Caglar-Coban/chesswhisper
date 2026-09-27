@@ -4,6 +4,17 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-09-27
+
+### Added
+
+- Endgame report: each game's first endgame position is classified (pawn,
+  rook, minor piece, rook and minor piece, queen and other pieces) and its
+  evaluation compared with the result. Reports show, per kind, winning
+  endgames won, level ones held and losing ones saved, with the ACPL from
+  there on, plus a line per game and a key finding when fewer than 60% of
+  at least three winning endgames were won. The LLM prompt gets the same.
+
 ## [0.11.0] - 2026-09-27
 
 ### Added
@@ -240,6 +251,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.12.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.12.0
 [0.11.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.11.0
 [0.10.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.10.0
 [0.9.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.9.0

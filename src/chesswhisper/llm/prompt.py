@@ -62,6 +62,13 @@ def build_prompt(report, lang: str) -> str:
                 lines.append(f"  no clear tactic (positional or deeper): {stat.total}")
             else:
                 lines.append(f"  {stat.motif}: allowed {stat.allowed}, missed {stat.missed}")
+    if report.endgames:
+        lines.append("Endgames reached (from the evaluation on entering them: winning/level/losing for the player):")
+        for row in report.endgames:
+            lines.append(
+                f"  {row.kind}: {row.games} games, winning {row.winning} (won {row.converted}), "
+                f"level {row.level} (held {row.held}), losing {row.losing} (saved {row.saved}), ACPL {row.acpl:.1f}"
+            )
     if report.chances.total:
         chances = report.chances
         missed = ", ".join(f"{motif} {count}" for motif, count in chances.missed_by_motif) or "none"

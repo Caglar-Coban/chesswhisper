@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chesswhisper"
-version = "0.11.0"
+version = "0.12.0"
 description = "Stockfish + LLM chess coaching: turns your games into a coaching report, from the command line or a small web UI"
 readme = "README.md"
 license = "MIT"

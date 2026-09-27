@@ -99,3 +99,12 @@ def test_build_prompt_includes_opponent_errors():
     report.chances = ChanceStats(total=6, punished=2, missed_by_motif=[("fork", 3), ("other", 1)])
 
     assert "Opponents' mistakes and blunders: 6, punished by the player: 2; missed ones by the tactic the reply needed: fork 3, other 1" in build_prompt(report, lang="en")
+
+
+def test_build_prompt_includes_endgames():
+    from chesswhisper.endgames import EndgameStats
+
+    report = _sample_report()
+    report.endgames = [EndgameStats("rook", games=3, winning=2, converted=1, level=1, held=1, acpl=24.5)]
+
+    assert "rook: 3 games, winning 2 (won 1), level 1 (held 1), losing 0 (saved 0), ACPL 24.5" in build_prompt(report, lang="en")

@@ -175,6 +175,22 @@ def render_markdown(report, commentary: str, lang: str) -> str:
                 parts.append(f"| {t('motif_' + motif, lang)} | {count} |")
         parts.append("")
 
+    if report.endgames:
+        parts.append(f"## {t('endgames', lang)}")
+        parts.append(t("endgames_note", lang))
+        parts.append("")
+        parts.append(
+            f"| {t('endgame_column', lang)} | {t('opening_games', lang)} | {t('converted_column', lang)} | "
+            f"{t('held_column', lang)} | {t('saved_column', lang)} | {t('acpl_column', lang)} |"
+        )
+        parts.append("| --- | --- | --- | --- | --- | --- |")
+        for row in report.endgames:
+            parts.append(
+                f"| {t('endgame_' + row.kind, lang)} | {row.games} | {row.converted} / {row.winning} | "
+                f"{row.held} / {row.level} | {row.saved} / {row.losing} | {row.acpl:.1f} |"
+            )
+        parts.append("")
+
     parts.append(f"## {t('time_management', lang)}")
     parts.extend(_time_management_lines(report.time_management, lang))
     parts.append("")
@@ -194,6 +210,10 @@ def render_markdown(report, commentary: str, lang: str) -> str:
         theory_line = _theory_line(game.theory, lang)
         if theory_line:
             parts.append(f"- {theory_line}")
+        if game.endgame is not None:
+            parts.append("- " + t("game_endgame", lang).format(
+                kind=t("endgame_" + game.endgame.kind, lang).lower(), move=game.endgame.move_number,
+                eval=_signed_pawns(game.endgame.eval_at_entry)))
         if game.chances:
             punished = sum(1 for chance in game.chances if chance.punished)
             parts.append(f"- {t('game_chances', lang).format(punished=punished, total=len(game.chances))}")
