@@ -77,3 +77,16 @@ def test_build_prompt_includes_tactical_motifs():
 
     assert "fork: allowed 2, missed 1" in prompt
     assert "no clear tactic (positional or deeper): 4" in prompt
+
+
+def test_build_prompt_includes_opening_theory():
+    from chesswhisper.theory import TheoryStats
+
+    report = _sample_report()
+    report.opening_theory = [TheoryStats(name="Ruy Lopez", eco="C60", games=3, you_left=2, opponent_left=1,
+                                         avg_book_moves=6.0, avg_eval_at_exit=15.0, avg_change=-90.0)]
+
+    prompt = build_prompt(report, lang="en")
+
+    assert "Ruy Lopez: 3 games, 6.0 moves in book on average, left by the player 2x" in prompt
+    assert "change over the next 10 moves -90" in prompt

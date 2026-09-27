@@ -111,3 +111,36 @@ def test_no_motif_finding_below_the_thresholds():
 
     for agg in (too_few, too_small_a_share, only_other):
         assert not [f for f in key_findings(agg) if f[0].startswith("motif")]
+
+
+def _theory_row(name, left, change):
+    from chesswhisper.theory import TheoryStats
+
+    return TheoryStats(name=name, eco="X", games=left, you_left=left, opponent_left=0, avg_book_moves=4.0,
+                       avg_eval_at_exit=0.0, avg_change=change)
+
+
+def test_flags_an_opening_where_leaving_theory_goes_badly():
+    agg = _agg()
+    agg.opening_theory = [_theory_row("Ruy Lopez", 3, -200.0), _theory_row("Sicilian Defense", 4, -160.0)]
+
+    finding = ("theory_opening", {"opening": "Ruy Lopez", "pawns": "2.0", "n": 3})
+    assert finding in key_findings(agg)
+    assert render_finding(finding, "en").startswith("In the Ruy Lopez you are 2.0 pawns worse")
+
+
+def test_flags_an_overall_drop_after_theory():
+    agg = _agg()
+    agg.opening_theory = [_theory_row("Ruy Lopez", 2, -140.0), _theory_row("Sicilian Defense", 2, -100.0)]
+
+    assert ("theory_drop", {"pawns": "1.2", "n": 4}) in key_findings(agg)
+
+
+def test_no_theory_finding_for_small_or_mild_drops():
+    few = _agg()
+    few.opening_theory = [_theory_row("Ruy Lopez", 2, -400.0)]
+    mild = _agg()
+    mild.opening_theory = [_theory_row("Ruy Lopez", 5, -50.0)]
+
+    for agg in (few, mild):
+        assert not [f for f in key_findings(agg) if f[0].startswith("theory")]

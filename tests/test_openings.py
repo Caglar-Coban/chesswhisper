@@ -29,5 +29,17 @@ def test_match_bare_e4_has_a_catch_all_entry():
 
 def test_match_falls_back_to_unknown():
     table = load_eco_table()
-    result = match_opening(["a3", "a6", "a4", "a5"], table)
-    assert result is UNKNOWN_OPENING
+    assert match_opening([], table) is UNKNOWN_OPENING
+    assert match_opening(["e4"], [e for e in table if e.moves[0] != "e4"]) is UNKNOWN_OPENING
+
+
+def test_the_bundled_table_is_deep_and_every_line_is_legal():
+    import chess
+
+    table = load_eco_table()
+    assert len(table) > 3000
+    assert max(len(e.moves) for e in table) >= 20
+    for entry in table:
+        board = chess.Board()
+        for san in entry.moves:
+            board.push_san(san)  # raises on an illegal or ambiguous move

@@ -22,6 +22,16 @@ def build_prompt(report, lang: str) -> str:
     for op in report.openings:
         lines.append(f"  {op.name} ({op.eco}): {op.games} games, {op.wins}W/{op.losses}L/{op.draws}D")
 
+    theory_rows = [row for row in report.opening_theory if row.you_left or row.opponent_left]
+    if theory_rows:
+        lines.append("Leaving opening theory, per opening (evals in centipawns from the player's side):")
+        for row in theory_rows:
+            lines.append(
+                f"  {row.name}: {row.games} games, {row.avg_book_moves:.1f} moves in book on average, "
+                f"left by the player {row.you_left}x and by the opponent {row.opponent_left}x, "
+                f"eval on leaving {row.avg_eval_at_exit or 0:+.0f}, "
+                f"change over the next 10 moves {row.avg_change or 0:+.0f}"
+            )
     if report.by_time_class:
         lines.append("By time control:")
         for seg in report.by_time_class:

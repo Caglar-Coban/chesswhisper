@@ -37,8 +37,10 @@ and Turkish.
 - **Key findings.** The clearest patterns stated in a sentence each, such as
   "your mistakes cluster in moves 31-40", with minimum sample sizes so a few
   games don't produce noise.
-- **Opening repertoire and time management.** ECO-matched openings with your
-  record in each, and your error rate with under 30 seconds on the clock.
+- **Opening repertoire and theory.** Openings named from the Lichess
+  opening list with your record in each, where each game left theory, who
+  left it and how the next ten moves went.
+- **Time management.** Your error rate with under 30 seconds on the clock.
 - **Games straight from Lichess or chess.com** by username.
 - **Optional coaching commentary** from Claude or OpenAI, in English or
   Turkish, written from all of the above.
@@ -338,3 +340,7 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+The opening names in `src/chesswhisper/data/eco.tsv` come from
+[lichess-org/chess-openings](https://github.com/lichess-org/chess-openings),
+which is in the public domain (CC0).

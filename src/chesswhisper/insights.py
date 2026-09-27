@@ -18,6 +18,9 @@ HOTSPOT_RATIO = 1.5
 ACCURACY_GAP = 5.0
 MIN_MOTIF_ERRORS = 5
 MOTIF_SHARE = 0.3
+MIN_THEORY_GAMES = 3
+THEORY_DROP_CP = 100
+THEORY_OPENING_DROP_CP = 150
 
 Finding = tuple[str, dict]
 
@@ -77,7 +80,34 @@ def key_findings(report: AggregateReport) -> list[Finding]:
     if motif is not None:
         findings.append(motif)
 
+    findings.extend(_theory_findings(report))
+
     return findings
+
+
+def _pawns(cp: float) -> str:
+    return f"{abs(cp) / 100:.1f}"
+
+
+def _theory_findings(report: AggregateReport) -> list[Finding]:
+    """A drop after leaving theory: in one opening if one stands out, else overall."""
+    rows = [row for row in report.opening_theory if row.avg_change is not None]
+    standouts = [
+        row for row in rows
+        if row.you_left + row.opponent_left >= MIN_THEORY_GAMES and (row.avg_change or 0) <= -THEORY_OPENING_DROP_CP
+    ]
+    if standouts:
+        worst = min(standouts, key=lambda row: row.avg_change or 0)
+        return [("theory_opening", {"opening": worst.name, "pawns": _pawns(worst.avg_change or 0),
+                                    "n": worst.you_left + worst.opponent_left})]
+
+    games = sum(row.you_left + row.opponent_left for row in rows)
+    if games < MIN_THEORY_GAMES:
+        return []
+    average = sum((row.avg_change or 0) * (row.you_left + row.opponent_left) for row in rows) / games
+    if average > -THEORY_DROP_CP:
+        return []
+    return [("theory_drop", {"pawns": _pawns(average), "n": games})]
 
 
 def _motif_finding(report: AggregateReport) -> Finding | None:

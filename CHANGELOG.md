@@ -4,6 +4,23 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-09-27
+
+### Added
+
+- Opening theory: each game records where it left the book, who left it,
+  and the evaluation then and ten moves later. Reports get an "Opening
+  Theory" table per opening family, a line per game ("You left theory on
+  move 3 (Nc3); eval +0.2, ten moves later −3.5"), and a key finding
+  when leaving theory goes badly, overall or in one opening. The LLM prompt
+  gets the same numbers.
+
+### Changed
+
+- The bundled opening table is now the Lichess opening list (3,815 named
+  lines, public domain / CC0) instead of 41 lines, so openings are named
+  much more precisely (for example "French Defense: Winawer Variation").
+
 ## [0.9.0] - 2026-09-27
 
 ### Added
@@ -211,6 +228,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.10.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.10.0
 [0.9.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.9.0
 [0.8.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.7.0

@@ -174,3 +174,38 @@ def test_tactical_patterns_section_in_turkish():
 
 def test_no_tactical_patterns_section_without_mistakes():
     assert "Tactical Patterns" not in render_markdown(_sample_report(), commentary="", lang="en")
+
+
+def _with_theory():
+    from chesswhisper.theory import TheoryExit, TheoryStats
+
+    report = _sample_report()
+    report.opening_theory = [TheoryStats(name="Ruy Lopez", eco="C60", games=2, you_left=1, opponent_left=1,
+                                         avg_book_moves=5.5, avg_eval_at_exit=30.0, avg_change=-120.0)]
+    report.games[0].theory = TheoryExit(book_plies=8, left_by="you", exit_move=5, eval_at_exit=20,
+                                        eval_later=-80, exit_san="c3")
+    return report
+
+
+def test_opening_theory_section_and_per_game_line():
+    md = render_markdown(_with_theory(), commentary="", lang="en")
+
+    assert "## Opening Theory" in md
+    assert "| Ruy Lopez | 2 | 5.5 | 1 / 1 | +0.3 | \u22121.2 |" in md
+    assert "- You left theory on move 5 (c3); eval +0.2, ten moves later \u22120.8" in md
+
+
+def test_opening_theory_in_turkish_and_a_game_that_stayed_in_book():
+    from chesswhisper.theory import TheoryExit
+
+    report = _with_theory()
+    report.games[0].theory = TheoryExit(book_plies=12, left_by=None, exit_move=None, eval_at_exit=None, eval_later=None)
+
+    md = render_markdown(report, commentary="", lang="tr")
+
+    assert "## A\u00e7\u0131l\u0131\u015f Teorisi" in md
+    assert "Oyun boyunca a\u00e7\u0131l\u0131\u015f teorisinde kal\u0131nd\u0131." in md
+
+
+def test_no_opening_theory_section_when_no_game_left_the_book():
+    assert "Opening Theory" not in render_markdown(_sample_report(), commentary="", lang="en")

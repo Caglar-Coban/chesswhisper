@@ -6,6 +6,7 @@ import chess
 
 from chesswhisper.motifs import MOTIFS, OTHER, error_motif
 from chesswhisper.openings import match_opening
+from chesswhisper.theory import TheoryExit, TheoryStats, book_prefixes, theory_exit, theory_stats
 
 INACCURACY_CP = 50
 MISTAKE_CP = 100
@@ -224,6 +225,8 @@ class GameReport:
     black: str = ""
     # Every ply's evaluation, for replaying the game (see timeline.py).
     evals: list = field(default_factory=list)
+    # Where the game left opening theory (see theory.py); None for set-up positions.
+    theory: TheoryExit | None = None
 
 
 @dataclass
@@ -300,6 +303,7 @@ class AggregateReport:
     move_ranges: list[PatternBucket] = field(default_factory=list)
     eval_states: list[PatternBucket] = field(default_factory=list)
     motifs: list[MotifStat] = field(default_factory=list)
+    opening_theory: list[TheoryStats] = field(default_factory=list)
 
 
 def detect_player(loaded_games) -> str:
@@ -445,6 +449,7 @@ def build_game_report(loaded, evals, player_name: str, eco_table) -> GameReport:
         white=white,
         black=black,
         evals=list(evals),
+        theory=theory_exit(evals, your_bool_color, book_prefixes(eco_table), custom_start=is_custom_start),
     )
 
 
@@ -580,6 +585,7 @@ def build_aggregate_report(player: str, game_reports: list) -> AggregateReport:
         openings=sorted(opening_map.values(), key=lambda o: o.games, reverse=True),
         time_management=combined_time_buckets.to_stats(),
         motifs=motif_stats(game_reports),
+        opening_theory=theory_stats(game_reports),
         **_breakdowns(game_reports),
     )
 

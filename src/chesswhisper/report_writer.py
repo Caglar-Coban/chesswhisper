@@ -66,6 +66,23 @@ def _pattern_table(buckets, label_column: str, label_for, lang: str) -> list[str
     return lines
 
 
+def _signed_pawns(cp: float | None) -> str:
+    if cp is None:
+        return "-"
+    sign = "+" if cp >= 0 else "−"
+    return f"{sign}{abs(cp) / 100:.1f}"
+
+
+def _theory_line(theory, lang: str) -> str | None:
+    if theory is None:
+        return None
+    if theory.left_by is None:
+        return t("theory_stayed", lang)
+    text = t(f"theory_left_{theory.left_by}", lang).format(move=theory.exit_move, san=theory.exit_san)
+    evals = t("theory_eval", lang).format(at=_signed_pawns(theory.eval_at_exit), later=_signed_pawns(theory.eval_later))
+    return f"{text}; {evals}"
+
+
 def render_markdown(report, commentary: str, lang: str) -> str:
     parts = [f"# {t('report_title', lang)}", ""]
     parts.append(f"**{t('player', lang)}:** {report.player}")
@@ -92,6 +109,22 @@ def render_markdown(report, commentary: str, lang: str) -> str:
             f"| {op.eco} | {op.name} | {op.games} | {op.wins}/{op.losses}/{op.draws}/{op.unknown} |"
         )
     parts.append("")
+
+    if any(row.you_left or row.opponent_left for row in report.opening_theory):
+        parts.append(f"## {t('opening_theory', lang)}")
+        parts.append(t("opening_theory_note", lang))
+        parts.append("")
+        parts.append(
+            f"| {t('opening_column', lang)} | {t('opening_games', lang)} | {t('book_depth_column', lang)} | "
+            f"{t('left_by_column', lang)} | {t('eval_at_exit_column', lang)} | {t('change_column', lang)} |"
+        )
+        parts.append("| --- | --- | --- | --- | --- | --- |")
+        for row in report.opening_theory:
+            parts.append(
+                f"| {row.name} | {row.games} | {row.avg_book_moves:.1f} | {row.you_left} / {row.opponent_left} | "
+                f"{_signed_pawns(row.avg_eval_at_exit)} | {_signed_pawns(row.avg_change)} |"
+            )
+        parts.append("")
 
     if report.by_time_class:
         parts.append(f"## {t('by_time_class', lang)}")
@@ -143,6 +176,9 @@ def render_markdown(report, commentary: str, lang: str) -> str:
             f"### {game.game_index + 1}. {t('vs_label', lang)} {game.opponent} ({result_str}, {color_str})"
         )
         parts.append(f"- {game.opening_name} ({game.eco})")
+        theory_line = _theory_line(game.theory, lang)
+        if theory_line:
+            parts.append(f"- {theory_line}")
         parts.append(f"- {t('acpl', lang)}: {game.your_stats.acpl:.1f}")
         parts.append(f"- {t('accuracy', lang)}: {game.your_stats.accuracy:.1f}%")
         if game.top_mistakes:
