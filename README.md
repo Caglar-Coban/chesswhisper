@@ -37,6 +37,8 @@ and Turkish.
 - **Recent form.** Your newest games against the ones before them.
 - **Endgames.** By kind of endgame, whether you win the winning ones, hold
   the level ones and save the losing ones.
+- **Filters.** Narrow an analysis to some time controls or to your games
+  with one colour, up front or afterwards from the report page.
 - **Missed chances.** How many of your opponents' mistakes you punished,
   and what the ones you let go needed.
 - **Key findings.** The clearest patterns stated in a sentence each, such as
@@ -182,6 +184,8 @@ chesswhisper analyze --chesscom YourChessComName --llm claude
 | `--depth N` | Fixed search depth instead of a time limit. |
 | `--threads N` | Stockfish threads (default: half your CPU cores, at most 4). |
 | `--no-cache` | Re-analyze every game instead of reusing saved evaluations. |
+| `--time-control TC` | Only games at this time control (`bullet`, `blitz`, `rapid`, `classical`, `correspondence`); repeat for several. |
+| `--color COLOR` | Only games where the player had this colour (`white` or `black`). |
 | `--engine-path PATH` | Use this Stockfish binary instead of downloading one. |
 
 `chesswhisper --version` prints the installed version.
@@ -249,6 +253,7 @@ TOKEN=cw_...
 curl -X POST http://127.0.0.1:8000/api/v1/analyses \
      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
      -d '{"source": "lichess", "username": "YourLichessName", "max_games": 10}'
+# add "time_controls": ["blitz"] or "color": "black" to narrow it
 # -> 202 {"job_id": "...", "status_url": "/api/v1/jobs/..."}
 
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/jobs/<job_id>

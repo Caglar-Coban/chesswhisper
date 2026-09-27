@@ -65,6 +65,11 @@ class AnalysisRecord(Base):
     # JSON list from timeline.game_timelines(), for the move-by-move viewer;
     # None for records saved before it existed.
     games_json: Mapped[str | None] = mapped_column(Text, default=None)
+    # The games analyzed, so the analysis can be run again with a filter;
+    # None for records saved before 0.14.
+    pgn_text: Mapped[str | None] = mapped_column(Text, default=None)
+    # The filter this analysis ran with (GameFilter.to_json()); None: all games.
+    filters_json: Mapped[str | None] = mapped_column(Text, default=None)
 
     user: Mapped[User] = relationship(back_populates="analyses")
     puzzle_attempts: Mapped[list[PuzzleAttempt]] = relationship(cascade="all, delete-orphan")
@@ -107,6 +112,7 @@ class AnalysisJob(Base):
     lang: Mapped[str] = mapped_column(String(8), default="en")
     llm: Mapped[str] = mapped_column(String(20), default="none")
     ui_language: Mapped[str] = mapped_column(String(8), default="en")
+    filters_json: Mapped[str | None] = mapped_column(Text, default=None)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(default=None)
     finished_at: Mapped[datetime | None] = mapped_column(default=None)

@@ -5,6 +5,28 @@
   <a class="secondary-button" href="{{ download_url }}" download>{{ t("report.download") }}</a>
   <button type="button" class="secondary-button" onclick="window.print()">{{ t("report.print") }}</button>
 </div>
+{% if filter_url and not viewing_as_admin %}
+<details class="card filter-card no-print"{% if not current_filter.is_empty %} open{% endif %}>
+  <summary>{{ t("filter.rerun") }}</summary>
+  <form method="post" action="{{ filter_url }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <fieldset>
+      <legend>{{ t("filter.time_controls") }}</legend>
+      {% for tc in filter_time_classes %}
+      <label class="inline"><input type="checkbox" name="time_control" value="{{ tc }}"{% if tc in current_filter.time_classes %} checked{% endif %}> {{ t("tc." ~ tc) }}</label>
+      {% endfor %}
+    </fieldset>
+    <label for="filter-color">{{ t("filter.color") }}</label>
+    <select id="filter-color" name="color">
+      <option value="">{{ t("filter.either") }}</option>
+      <option value="white"{% if current_filter.color == "white" %} selected{% endif %}>{{ t("filter.white") }}</option>
+      <option value="black"{% if current_filter.color == "black" %} selected{% endif %}>{{ t("filter.black") }}</option>
+    </select>
+    <p class="hint">{{ t("filter.rerun_hint") }}</p>
+    <button type="submit">{{ t("filter.rerun_button") }}</button>
+  </form>
+</details>
+{% endif %}
 {% if warnings %}
 <div class="banner warning">
   <strong>{{ t("report.warnings") }}</strong>

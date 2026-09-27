@@ -39,6 +39,12 @@ def _make_data_dir(path, users=("alice",), with_cache=True):
     return path
 
 
+def _latest_revision():
+    from chesswhisper.backup import _known_revisions
+
+    return max(_known_revisions())  # revisions are numbered 0001_, 0002_, ...
+
+
 def _usernames(db_path):
     conn = sqlite3.connect(db_path)
     try:
@@ -79,7 +85,7 @@ def test_round_trip_into_an_empty_directory(tmp_path):
         assert (target / name).read_bytes() == (source / name).read_bytes()
     assert not (target / CACHE_FILE).exists()
     assert info.schema_revision == restored.schema_revision
-    assert info.schema_revision.startswith("0007")
+    assert info.schema_revision == _latest_revision()
 
 
 def test_manifest_describes_the_backup(tmp_path):
@@ -91,7 +97,7 @@ def test_manifest_describes_the_backup(tmp_path):
     with zipfile.ZipFile(archive) as zf:
         manifest = json.loads(zf.read(MANIFEST_FILE))
     assert manifest["format"] == 1
-    assert manifest["schema_revision"].startswith("0007")
+    assert manifest["schema_revision"] == _latest_revision()
     assert sorted(manifest["files"]) == sorted([DB_FILE, *KEY_FILES])
     assert manifest["chesswhisper_version"]
 

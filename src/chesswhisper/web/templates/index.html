@@ -35,6 +35,23 @@
       <option value="en"{% if ui_lang == "en" %} selected{% endif %}>English</option>
     </select>
 
+    <details class="filter-fields">
+      <summary>{{ t("filter.heading") }}</summary>
+      <fieldset>
+        <legend>{{ t("filter.time_controls") }}</legend>
+        {% for tc in filter_time_classes %}
+        <label class="inline"><input type="checkbox" name="time_control" value="{{ tc }}"> {{ t("tc." ~ tc) }}</label>
+        {% endfor %}
+      </fieldset>
+      <label for="color">{{ t("filter.color") }}</label>
+      <select id="color" name="color">
+        <option value="">{{ t("filter.either") }}</option>
+        <option value="white">{{ t("filter.white") }}</option>
+        <option value="black">{{ t("filter.black") }}</option>
+      </select>
+      <p class="hint">{{ t("filter.hint") }}</p>
+    </details>
+
     {% if demo %}
     <input type="hidden" name="llm" value="none">
     {% else %}

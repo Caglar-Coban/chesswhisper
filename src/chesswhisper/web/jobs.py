@@ -46,6 +46,7 @@ class JobInputs:
     llm: str
     ui_language: str
     fetch_warnings: list[str] = field(default_factory=list)
+    filters_json: str | None = None  # a GameFilter, see game_filter.py
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,7 @@ def _new_row(user_id: int, inputs: JobInputs | None) -> AnalysisJob:
         lang=inputs.lang,
         llm=inputs.llm,
         ui_language=inputs.ui_language,
+        filters_json=inputs.filters_json,
         created_at=utcnow(),
     )
 
@@ -142,6 +144,7 @@ def job_inputs(job_id: str) -> JobInputs | None:
             llm=row.llm,
             ui_language=row.ui_language,
             fetch_warnings=json.loads(row.warnings_json),
+            filters_json=row.filters_json,
         )
 
 

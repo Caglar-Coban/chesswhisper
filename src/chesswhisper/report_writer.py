@@ -83,9 +83,22 @@ def _theory_line(theory, lang: str) -> str | None:
     return f"{text}; {evals}"
 
 
+def describe_filter(game_filter, lang: str) -> str:
+    """ "Blitz, Rapid · as Black" in the report's language."""
+    parts = []
+    if game_filter.time_classes:
+        parts.append(", ".join(t(f"tc_{tc}", lang) for tc in game_filter.ordered_time_classes))
+    if game_filter.color is not None:
+        parts.append(t(f"filter_as_{game_filter.color}", lang))
+    return " · ".join(parts)
+
+
 def render_markdown(report, commentary: str, lang: str) -> str:
     parts = [f"# {t('report_title', lang)}", ""]
     parts.append(f"**{t('player', lang)}:** {report.player}")
+    if report.game_filter is not None:
+        parts.append("")
+        parts.append(f"**{t('filter_label', lang)}:** {describe_filter(report.game_filter, lang)}")
     parts.append("")
     parts.append(f"## {t('overall_summary', lang)}")
     parts.append(f"- {t('acpl', lang)}: {report.overall_acpl:.1f}")

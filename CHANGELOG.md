@@ -4,6 +4,20 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] - 2026-09-27
+
+### Added
+
+- Filtered reports: narrow an analysis to some time controls and/or the
+  games where the player had one colour, with `--time-control` and
+  `--color` on the command line, "Filter the games" on the analyze form,
+  or `time_controls` and `color` in the API. Filtered reports say so at
+  the top.
+- A saved analysis can be filtered afterwards from its report page: the
+  same games run again as a new report with the filter, straight from the
+  evaluation cache. Analyses now keep their games for this (migration
+  0008); ones saved before 0.14 can't be filtered afterwards.
+
 ## [0.13.0] - 2026-09-27
 
 ### Added
@@ -261,6 +275,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.14.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.14.0
 [0.13.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.13.0
 [0.12.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.12.0
 [0.11.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.11.0

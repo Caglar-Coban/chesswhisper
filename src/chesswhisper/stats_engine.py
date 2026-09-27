@@ -2,6 +2,7 @@ import math
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import chess
 
@@ -11,6 +12,9 @@ from chesswhisper.form import RecentForm, game_datetime, recent_form
 from chesswhisper.motifs import MOTIFS, OTHER, error_motif
 from chesswhisper.openings import match_opening
 from chesswhisper.theory import TheoryExit, TheoryStats, book_prefixes, theory_exit, theory_stats
+
+if TYPE_CHECKING:
+    from chesswhisper.game_filter import GameFilter
 
 INACCURACY_CP = 50
 MISTAKE_CP = 100
@@ -317,6 +321,8 @@ class AggregateReport:
     chances: ChanceStats = field(default_factory=lambda: ChanceStats(total=0, punished=0, missed_by_motif=[]))
     endgames: list[EndgameStats] = field(default_factory=list)
     recent_form: RecentForm | None = None
+    # Set when the analysis was narrowed to some of the games (see game_filter.py).
+    game_filter: "GameFilter | None" = None
 
 
 def detect_player(loaded_games) -> str:

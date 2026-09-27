@@ -20,6 +20,7 @@ from starlette.responses import RedirectResponse
 
 from chesswhisper.cli import run_analysis
 from chesswhisper.engine_provision import StockfishProvisionError
+from chesswhisper.game_filter import FILTER_TIME_CLASSES, GameFilter
 from chesswhisper.game_sources import (
     DEFAULT_MAX_GAMES,
     MAX_GAMES_LIMIT,
@@ -191,7 +192,8 @@ def _enqueue(job_id: str) -> None:
 
 
 def save_analysis(
-    db: Session, user_id: int, aggregate, commentary: str, lang: str, llm: str, created_at=None
+    db: Session, user_id: int, aggregate, commentary: str, lang: str, llm: str, created_at=None,
+    pgn_text: str | None = None, filters_json: str | None = None,
 ) -> AnalysisRecord:
     """Store a finished analysis: the report plus what the boards, viewer and puzzles need."""
     moves = critical_moves(aggregate.games)
@@ -207,6 +209,8 @@ def save_analysis(
         report_markdown=render_markdown(aggregate, commentary, lang),
         critical_moves_json=json.dumps(moves) if moves else None,
         games_json=json.dumps(timelines) if timelines else None,
+        pgn_text=pgn_text,
+        filters_json=filters_json,
     )
     if created_at is not None:
         record.created_at = created_at
@@ -250,6 +254,7 @@ def _run_analysis_job(job_id: str) -> None:
                 tmp_path, inputs.player, inputs.lang, inputs.llm,
                 llm_api_key=llm_api_key,
                 on_progress=lambda completed, total: jobs.update_progress(job_id, completed, total),
+                game_filter=GameFilter.from_json(inputs.filters_json),
             )
         except (OSError, ValueError) as exc:
             jobs.mark_error(job_id, str(exc))
@@ -258,7 +263,10 @@ def _run_analysis_job(job_id: str) -> None:
             jobs.mark_error(job_id, ui_text("error.engine_setup", ui_language, detail=exc))
             return
 
-        record = save_analysis(db, job.user_id, aggregate, commentary, inputs.lang, inputs.llm)
+        record = save_analysis(
+            db, job.user_id, aggregate, commentary, inputs.lang, inputs.llm,
+            pgn_text=inputs.pgn_text, filters_json=inputs.filters_json,
+        )
         jobs.mark_done(job_id, record.id, inputs.fetch_warnings + warnings)
     except Exception:
         # Last-resort safety net: an exception type not handled above (e.g. a
@@ -625,6 +633,9 @@ async def history_detail(
             "games": _game_summaries(record), "games_url_prefix": f"/history/{record_id}/games",
             "download_url": f"/history/{record_id}/report.md",
             "back_url": "/history", "warnings": warnings,
+            "filter_url": f"/history/{record_id}/filter" if record.pgn_text else None,
+            "current_filter": GameFilter.from_json(record.filters_json),
+            "filter_time_classes": FILTER_TIME_CLASSES,
         },
     )
 
@@ -690,6 +701,7 @@ async def index(request: Request, current_user: User = Depends(get_current_user)
             "current_user": current_user,
             "default_max_games": DEFAULT_MAX_GAMES,
             "max_games_limit": DEMO_MAX_GAMES if demo_mode() else MAX_GAMES_LIMIT,
+            "filter_time_classes": FILTER_TIME_CLASSES,
         },
     )
 
@@ -894,6 +906,7 @@ async def start_analysis(
     lang: str = "en",
     llm: str = "none",
     ui_language: str = "en",
+    game_filter: GameFilter | None = None,
 ) -> jobs.Job:
     """Validate a request, fetch the games if asked to, and start the background job.
 
@@ -966,6 +979,7 @@ async def start_analysis(
         llm=llm,
         ui_language=ui_language,
         fetch_warnings=fetch_warnings,
+        filters_json=game_filter.to_json() if game_filter is not None else None,
     )
     job, created = jobs.create_job_unless_running(user_id, inputs)
     if not created:
@@ -973,6 +987,44 @@ async def start_analysis(
         raise AnalysisAlreadyRunning(job)
     _enqueue(job.id)
     return job
+
+
+def _form_filter(time_controls: list[str], color: str) -> GameFilter | None:
+    """The filter chosen in a form, or None if it names something unknown."""
+    try:
+        return GameFilter(time_classes=frozenset(tc for tc in time_controls if tc), color=color or None)
+    except ValueError:
+        return None
+
+
+@app.post("/history/{record_id}/filter", response_class=HTMLResponse, response_model=None)
+async def history_filter(
+    request: Request,
+    record_id: int,
+    time_control: list[str] = Form(default=[]),  # noqa: B008 - FastAPI's own idiom
+    color: str = Form(default=""),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse | RedirectResponse:
+    """Run a saved analysis's games again, narrowed by a filter (quick: the evaluations are cached)."""
+    record = db.get(AnalysisRecord, record_id)
+    if record is None or record.user_id != current_user.id or not record.pgn_text:
+        return _render_error(request, _tr(request, "error.record_not_found"), 404, current_user)
+    game_filter = _form_filter(time_control, color)
+    if game_filter is None:
+        return _render_error(request, _tr(request, "error.bad_filter"), 400, current_user)
+    try:
+        job = await start_analysis(
+            db, current_user.id, source="file", pgn_bytes=record.pgn_text.encode("utf-8"),
+            player=record.player_name, lang=record.lang, llm="none", ui_language=ui_lang(request),
+            game_filter=game_filter,
+        )
+    except AnalysisAlreadyRunning as exc:
+        return RedirectResponse(f"/analyze/progress/{exc.job.id}", status_code=303)
+    except AnalysisRequestError as exc:
+        return _render_error(request, exc.message, exc.status_code, current_user)
+    return RedirectResponse(f"/analyze/progress/{job.id}", status_code=303)
 
 
 @app.post("/analyze", response_class=HTMLResponse, response_model=None)
@@ -985,10 +1037,15 @@ async def analyze(
     player: str = Form(default=""),
     lang: str = Form(default="en"),
     llm: str = Form(default="none"),
+    time_control: list[str] = Form(default=[]),  # noqa: B008 - FastAPI's own idiom
+    color: str = Form(default=""),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
+    game_filter = _form_filter(time_control, color)
+    if game_filter is None:
+        return _render_error(request, _tr(request, "error.bad_filter"), 400, current_user)
     pgn_bytes = None
     if source == "file" and pgn is not None and pgn.filename:
         # Read one byte past the limit so start_analysis can tell it was exceeded.
@@ -997,6 +1054,7 @@ async def analyze(
         job = await start_analysis(
             db, current_user.id, source=source, username=username, max_games=max_games,
             pgn_bytes=pgn_bytes, player=player, lang=lang, llm=llm, ui_language=ui_lang(request),
+            game_filter=game_filter,
         )
     except AnalysisAlreadyRunning as exc:
         return RedirectResponse(f"/analyze/progress/{exc.job.id}", status_code=303)

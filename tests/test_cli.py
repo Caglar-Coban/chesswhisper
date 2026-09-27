@@ -732,3 +732,78 @@ def test_analyze_no_cache_flag(tmp_path, monkeypatch):
     CliRunner().invoke(cli, ["analyze", str(pgn_path), "--no-cache", "-o", str(tmp_path / "r.md")])
 
     assert seen["use_cache"] is False
+
+
+# --- filters ---------------------------------------------------------------------
+
+FILTER_PGN = textwrap.dedent("""
+    [Event "Blitz"]
+    [White "Alice"]
+    [Black "Bob"]
+    [Result "1-0"]
+    [TimeControl "180+2"]
+
+    1. e4 e5 2. Nf3 Nc6 1-0
+
+    [Event "Bullet"]
+    [White "Bob"]
+    [Black "Alice"]
+    [Result "0-1"]
+    [TimeControl "60+0"]
+
+    1. d4 d5 2. c4 e6 0-1
+""").strip() + "\n"
+
+
+def _filter_pgn(tmp_path):
+    path = tmp_path / "filter.pgn"
+    path.write_text(FILTER_PGN, encoding="utf-8")
+    return path
+
+
+def test_run_analysis_keeps_only_games_inside_the_filter(tmp_path, monkeypatch):
+    from chesswhisper.game_filter import GameFilter
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+    game_filter = GameFilter(color="black")
+
+    aggregate, _, warnings = run_analysis(str(_filter_pgn(tmp_path)), "Alice", "en", "none", game_filter=game_filter)
+
+    assert [g.your_color for g in aggregate.games] == ["black"]
+    assert aggregate.game_filter == game_filter
+    assert "left out 1 game(s) outside the filter." in warnings
+
+
+def test_run_analysis_with_an_empty_filter_is_unfiltered(tmp_path, monkeypatch):
+    from chesswhisper.game_filter import GameFilter
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    aggregate, _, _ = run_analysis(str(_filter_pgn(tmp_path)), "Alice", "en", "none", game_filter=GameFilter())
+
+    assert len(aggregate.games) == 2
+    assert aggregate.game_filter is None
+
+
+def test_run_analysis_fails_clearly_when_nothing_matches(tmp_path, monkeypatch):
+    from chesswhisper.game_filter import GameFilter
+
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+
+    with pytest.raises(ValueError, match="match the filter"):
+        run_analysis(str(_filter_pgn(tmp_path)), "Alice", "en", "none",
+                     game_filter=GameFilter(time_classes=frozenset({"classical"})))
+
+
+def test_cli_filter_options_narrow_the_report(tmp_path, monkeypatch):
+    monkeypatch.setattr("chesswhisper.cli._open_engine", lambda **kwargs: FakeEngine())
+    output = tmp_path / "report.md"
+
+    result = CliRunner().invoke(cli, [
+        "analyze", str(_filter_pgn(tmp_path)), "--player", "Alice", "--time-control", "blitz",
+        "--time-control", "rapid", "--color", "white", "-o", str(output),
+    ])
+
+    assert result.exit_code == 0, result.output
+    report = output.read_text(encoding="utf-8")
+    assert "**Filter:** Blitz, Rapid \u00b7 as White" in report

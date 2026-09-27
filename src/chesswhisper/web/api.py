@@ -18,6 +18,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from chesswhisper.game_filter import GameFilter
 from chesswhisper.game_sources import DEFAULT_MAX_GAMES, MAX_GAMES_LIMIT
 from chesswhisper.web import jobs
 from chesswhisper.web.db import get_db
@@ -62,6 +63,12 @@ class AnalysisRequest(BaseModel):
     lang: Literal["en", "tr"] = "en"
     llm: Literal["none", "claude", "openai"] = Field(
         default="none", description="Coaching commentary, using the API key saved in your settings."
+    )
+    time_controls: list[Literal["bullet", "blitz", "rapid", "classical", "correspondence"]] = Field(
+        default=[], description="Only games at these time controls; empty for all."
+    )
+    color: Literal["white", "black"] | None = Field(
+        default=None, description="Only games where the player had this colour."
     )
 
 
@@ -141,6 +148,7 @@ async def create_analysis(
             lang=body.lang,
             llm=body.llm,
             ui_language="en",
+            game_filter=GameFilter(time_classes=frozenset(body.time_controls), color=body.color),
         )
     except web_app.AnalysisAlreadyRunning as exc:
         return JSONResponse(

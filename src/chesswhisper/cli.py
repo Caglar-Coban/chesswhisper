@@ -11,6 +11,7 @@ from dotenv import find_dotenv, load_dotenv
 from chesswhisper.engine_analyzer import analyze_game
 from chesswhisper.engine_provision import StockfishProvisionError, get_stockfish_path
 from chesswhisper.eval_cache import EvalCache, cache_key
+from chesswhisper.game_filter import COLORS, FILTER_TIME_CLASSES, GameFilter
 from chesswhisper.game_sources import DEFAULT_MAX_GAMES, MAX_GAMES_LIMIT, GameFetchError, fetch_pgn
 from chesswhisper.llm.base import LLMProviderError
 from chesswhisper.llm.none_provider import NoneProvider
@@ -101,6 +102,7 @@ def run_analysis(
     on_progress: Callable[[int, int], None] | None = None,
     threads: int | None = None,
     use_cache: bool = True,
+    game_filter: GameFilter | None = None,
 ):
     """Runs the full analysis pipeline and returns (aggregate_report, commentary, warnings).
 
@@ -123,6 +125,9 @@ def run_analysis(
     With use_cache, each game's evaluations are looked up in (and saved to)
     the on-disk EvalCache, and Stockfish is only started for games it hasn't
     seen with the same search limit.
+
+    With a non-empty game_filter, games outside it (by time control or the
+    player's colour) are skipped before any engine work.
     """
     warnings = []
 
@@ -144,6 +149,7 @@ def run_analysis(
 
     total_games = len(load_result.games)
     skipped_for_player = 0
+    skipped_by_filter = 0
     try:
         game_reports = []
         for processed, loaded in enumerate(load_result.games, start=1):
@@ -151,6 +157,11 @@ def run_analysis(
             black = loaded.headers.get("Black", "")
             if player not in (white, black):
                 skipped_for_player += 1
+                if on_progress is not None:
+                    on_progress(processed, total_games)
+                continue
+            if game_filter is not None and not game_filter.matches(loaded.headers, player):
+                skipped_by_filter += 1
                 if on_progress is not None:
                     on_progress(processed, total_games)
                 continue
@@ -172,10 +183,17 @@ def run_analysis(
     if skipped_for_player:
         warnings.append(f"skipped {skipped_for_player} game(s) not featuring player {player!r}.")
 
+    if skipped_by_filter:
+        warnings.append(f"left out {skipped_by_filter} game(s) outside the filter.")
+
     if not game_reports:
+        if skipped_by_filter:
+            raise ValueError(f"none of {player!r}'s games match the filter")
         raise ValueError(f"no games featuring player {player!r} were found in {pgn_path}")
 
     aggregate = build_aggregate_report(player, game_reports)
+    if game_filter is not None and not game_filter.is_empty:
+        aggregate.game_filter = game_filter
 
     commentary = ""
     if llm_name != "none":
@@ -217,9 +235,12 @@ def cli():
     help=f"Stockfish search threads (default: half your CPU cores, at most {MAX_DEFAULT_THREADS}).",
 )
 @click.option("--no-cache", is_flag=True, help="Re-analyze every game instead of reusing saved evaluations.")
+@click.option("--time-control", "time_controls", multiple=True, type=click.Choice(FILTER_TIME_CLASSES),
+              help="Only games at this time control (repeat for several).")
+@click.option("--color", type=click.Choice(COLORS), default=None, help="Only games where the player had this colour.")
 def analyze(
     pgn_path, lichess_user, chesscom_user, max_games, player, lang, llm_name, output_path, movetime, depth,
-    engine_path, threads, no_cache,
+    engine_path, threads, no_cache, time_controls, color,
 ):
     sources_given = [s for s in (pgn_path, lichess_user, chesscom_user) if s is not None]
     if len(sources_given) != 1:
@@ -273,6 +294,7 @@ def analyze(
             aggregate, commentary, warnings = run_analysis(
                 analysis_path, player, lang, llm_name, movetime=movetime, depth=depth, engine_path=engine_path,
                 threads=threads, use_cache=not no_cache,
+                game_filter=GameFilter(time_classes=frozenset(time_controls), color=color),
             )
         except (OSError, ValueError, StockfishProvisionError) as exc:
             click.echo(f"Error: {exc}", err=True)
