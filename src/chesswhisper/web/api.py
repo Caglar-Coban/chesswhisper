@@ -12,8 +12,9 @@ import json
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse, Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -25,15 +26,17 @@ from chesswhisper.web.security import hash_api_token
 
 router = APIRouter(prefix="/api/v1", tags=["chesswhisper"])
 
+# auto_error=False so a missing header gets the same 401 (and message) as a bad token.
+_bearer = HTTPBearer(auto_error=False, description="Your personal token from Settings → API access.")
+
 
 def api_user(
-    authorization: str | None = Header(default=None, description="`Bearer <token>`"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    scheme, _, token = (authorization or "").partition(" ")
     user = None
-    if scheme.lower() == "bearer" and token.strip():
-        user = db.query(User).filter_by(api_token_hash=hash_api_token(token.strip())).first()
+    if credentials is not None and credentials.credentials.strip():
+        user = db.query(User).filter_by(api_token_hash=hash_api_token(credentials.credentials.strip())).first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

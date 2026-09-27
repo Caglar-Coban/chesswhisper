@@ -4,13 +4,34 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] - 2026-09-27
+
+### Added
+
+- Puzzles made from your own mistakes: each blunder or mistake with a better
+  engine move becomes a "find the better move" puzzle. Unattempted puzzles
+  come first, then missed ones, then solved ones; attempts are saved
+  (migration 0006) and the same position from overlapping analyses appears
+  once.
+- JSON API under `/api/v1` with personal bearer tokens (created and revoked
+  in Settings, stored hashed; migration 0005): start analyses, follow jobs,
+  list, read and delete analyses. Interactive docs at `/api/docs`.
+- Test coverage is measured in CI, which fails below 90% (currently about
+  97%).
 
 ### Changed
 
 - English is now the default for the web interface, the analyze form's report
   language and the command line's `--lang`. Turkish is one click (or
   `--lang tr`) away.
+- The web form and the API start analyses through one shared function.
+- The game viewer and the puzzles share one board-drawing script.
+
+### Fixed
+
+- Buttons meant to stay hidden until you answer a puzzle no longer show early
+  (class styles were overriding the `hidden` attribute).
+- Pages no longer request a missing `/favicon.ico`.
 
 ## [0.2.0] - 2026-09-27
 
@@ -96,5 +117,6 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.3.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.1.0

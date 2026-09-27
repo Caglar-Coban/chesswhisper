@@ -42,6 +42,8 @@
     }
   }
   * { box-sizing: border-box; }
+  /* Class rules that set display must not override the hidden attribute. */
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--bg);

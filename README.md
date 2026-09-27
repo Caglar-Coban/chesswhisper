@@ -13,8 +13,9 @@ from Claude or OpenAI.
 
 It runs as a command-line tool that writes a Markdown report, or as a small
 multi-user web app with saved history, a progress trend chart, board
-diagrams of your worst moves and a move-by-move game viewer. The web
-interface is available in English and Turkish.
+diagrams of your worst moves, a move-by-move game viewer, puzzles made from
+your own mistakes and a JSON API. The web interface is available in English
+and Turkish.
 
 ![A report: the analyzed games, then the costliest mistakes drawn on boards](docs/images/report.png)
 
@@ -38,9 +39,14 @@ interface is available in English and Turkish.
 - **Games straight from Lichess or chess.com** by username.
 - **Optional coaching commentary** from Claude or OpenAI, in English or
   Turkish, written from all of the above.
+- **Puzzles from your own mistakes.** Every blunder and mistake becomes a
+  "find the better move" puzzle in the position where you went wrong, with
+  your progress tracked.
 - **Web UI** with accounts, encrypted per-user API keys, background analysis
   with a progress page, history with a trend chart, critical-move boards, a
   game viewer, Markdown download and a print/PDF layout.
+- **JSON API** with personal tokens and interactive OpenAPI docs, for
+  scripting analyses or building another front end.
 
 <table>
   <tr>
@@ -58,6 +64,14 @@ interface is available in English and Turkish.
   <tr>
     <td>Accuracy and ACPL over time for each player you've analyzed.</td>
     <td>Upload a PGN or fetch games by Lichess / chess.com username.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/puzzle.png" alt="A puzzle built from one of your mistakes, with a piece selected and its legal moves marked"></td>
+    <td><img src="docs/images/api-docs.png" alt="Interactive API documentation"></td>
+  </tr>
+  <tr>
+    <td>Puzzles from your own games: click a piece to see its moves, then find the engine's choice.</td>
+    <td>The JSON API, documented and testable at <code>/api/docs</code>.</td>
   </tr>
 </table>
 
@@ -101,8 +115,9 @@ flowchart LR
     I --> P
     P --> R
     R --> O1[report.md]
-    R --> W[FastAPI web UI]
+    R --> W[FastAPI web UI<br/>and JSON API]
     S --> T[timeline<br/>move-by-move data] --> W
+    S --> Z[puzzles<br/>from critical moves] --> W
     W --> DB[(SQLite + Alembic)]
 ```
 
@@ -110,7 +125,8 @@ The command line and the web UI share one pipeline (`run_analysis` in
 `cli.py`). The web app runs it on a background thread per analysis, reports
 progress to the page, and stores the report, the critical moves and each
 game's timeline so the report, boards and viewer can be rebuilt without
-re-running the engine.
+re-running the engine. The web form and the JSON API start analyses through
+the same function, so they validate and behave identically.
 
 ### How the numbers are computed
 
@@ -182,10 +198,14 @@ chesswhisper serve                  # http://127.0.0.1:8000
   Download it as Markdown or print it to PDF.
 - **Game viewer:** board, evaluation graph and annotated move list; click,
   use the arrow keys or Home/End, and flip the board.
+- **Puzzles:** your blunders and mistakes as "find the better move"
+  exercises. New puzzles come first, then ones you missed, then ones you've
+  solved; the same position from overlapping analyses appears once.
 - **History:** every past analysis and a trend chart of accuracy and ACPL for
   each player.
 - **Settings:** store, replace or remove your own Anthropic/OpenAI keys
-  (encrypted at rest) and change your password.
+  (encrypted at rest), change your password, and create or revoke an API
+  token.
 - **Admin:** list users, see who is locked out, view anyone's history, reset
   a password or delete an account.
 - **Language:** English by default; switch to Turkish from the header.
@@ -201,6 +221,34 @@ you trust, not the open internet: it has no HTTPS of its own and no email
 verification. The [deployment guide](docs/deployment.md) covers running it
 as a service or in Docker, reaching it from other machines, backups and
 upgrades.
+
+## JSON API
+
+Create a token under **Settings → API access** (it's shown once and stored
+hashed), then send it as a bearer token. Interactive documentation is at
+`/api/docs`.
+
+```
+TOKEN=cw_...
+curl -X POST http://127.0.0.1:8000/api/v1/analyses \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"source": "lichess", "username": "YourLichessName", "max_games": 10}'
+# -> 202 {"job_id": "...", "status_url": "/api/v1/jobs/..."}
+
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/jobs/<job_id>
+# -> {"status": "done", "completed": 10, "total": 10, "analysis_url": "/api/v1/analyses/12", ...}
+
+curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/api/v1/analyses/12?include_moves=true"
+```
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/v1/me` | Who the token belongs to. |
+| `POST /api/v1/analyses` | Start an analysis from PGN text (`"source": "pgn"`) or a Lichess / chess.com username. `409` if one is already running. |
+| `GET /api/v1/jobs/{id}` | Progress, warnings, and the analysis URL once done. |
+| `GET /api/v1/analyses` | Your analyses, newest first. |
+| `GET /api/v1/analyses/{id}` | Report, critical moves and games; `?include_moves=true` adds every move with its evaluation. |
+| `DELETE /api/v1/analyses/{id}` | Delete an analysis. |
 
 ## Configuration
 
@@ -257,7 +305,14 @@ src/chesswhisper/
   report_writer.py    Markdown report (with i18n.py for Turkish/English)
   llm/                Claude / OpenAI commentary
   paths.py            the data directory
-  web/                FastAPI app, templates, models, migrations, UI text
+  web/
+    app.py            pages, forms and start_analysis
+    api.py            the JSON API
+    puzzles.py        puzzles from critical moves
+    jobs.py           background analysis jobs
+    models.py         SQLAlchemy models (schema managed by migrations/)
+    ui_text.py        interface text in English and Turkish
+    templates/        Jinja pages; charts, boards and viewer are plain JS + SVG
 docs/
   deployment.md       running the web UI as a service or in Docker
   superpowers/        design specs and implementation plans for each feature

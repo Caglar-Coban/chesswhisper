@@ -232,3 +232,11 @@ def test_openapi_documents_only_the_api(web):
     assert spec["paths"] and all(path.startswith("/api/v1/") for path in spec["paths"])
     assert TestClient(app).get("/api/docs").status_code == 200
     assert TestClient(app).get("/docs").status_code == 404
+
+
+def test_openapi_declares_bearer_auth(web):
+    spec = TestClient(app).get("/api/openapi.json").json()
+
+    schemes = spec["components"]["securitySchemes"]
+    assert any(s["type"] == "http" and s["scheme"] == "bearer" for s in schemes.values())
+    assert spec["paths"]["/api/v1/analyses"]["post"]["security"]
