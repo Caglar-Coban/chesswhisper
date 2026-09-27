@@ -2,6 +2,8 @@ import os
 import sys
 import tempfile
 from collections.abc import Callable
+from datetime import datetime
+from pathlib import Path
 
 import click
 from dotenv import find_dotenv, load_dotenv
@@ -13,6 +15,7 @@ from chesswhisper.game_sources import DEFAULT_MAX_GAMES, MAX_GAMES_LIMIT, GameFe
 from chesswhisper.llm.base import LLMProviderError
 from chesswhisper.llm.none_provider import NoneProvider
 from chesswhisper.openings import load_eco_table
+from chesswhisper.paths import data_dir
 from chesswhisper.pgn_loader import load_pgn
 from chesswhisper.report_writer import write_report
 from chesswhisper.stats_engine import build_aggregate_report, build_game_report, detect_player
@@ -333,6 +336,43 @@ def seed_demo_command(analyses, movetime, threads):
         click.echo(f"Demo account {DEMO_USERNAME!r} seeded with {added} analyses.")
     else:
         click.echo(f"Demo account {DEMO_USERNAME!r} already has analyses; nothing to do.")
+
+
+@cli.command()
+@click.option("-o", "--output", "output_path", default=None, type=click.Path(dir_okay=False),
+              help="Where to write the backup. Defaults to chesswhisper-backup-<date>-<time>.zip here.")
+@click.option("--include-cache", is_flag=True, help="Also back up the evaluation cache (only a speed-up; can be large).")
+def backup(output_path, include_cache):
+    """Back up the web UI's database and keys to a zip file. Safe while the server runs."""
+    from chesswhisper.backup import BackupError, create_backup
+
+    if output_path is None:
+        output_path = f"chesswhisper-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+    try:
+        info = create_backup(Path(output_path), data_dir(), include_cache=include_cache)
+    except BackupError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    click.echo(f"Backed up {', '.join(info.files)} to {output_path}")
+    if "api_key_encryption.key" in info.files:
+        click.echo("Keep it private: with the key file in it, it can decrypt the saved API keys.")
+
+
+@cli.command()
+@click.argument("archive", type=click.Path(exists=True, dir_okay=False))
+@click.option("--force", is_flag=True, help="Replace an existing database (the current files are kept in a pre-restore folder).")
+def restore(archive, force):
+    """Restore a backup made with `chesswhisper backup`. Stop the server first."""
+    from chesswhisper.backup import BackupError, restore_backup
+
+    target = data_dir()
+    try:
+        info = restore_backup(Path(archive), target, force=force)
+    except BackupError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    click.echo(f"Restored {', '.join(info.files)} into {target}")
+    click.echo("Start the server again; any newer database migrations run then.")
 
 
 @cli.command("create-admin")

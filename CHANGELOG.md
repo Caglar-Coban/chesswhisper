@@ -4,6 +4,18 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-09-27
+
+### Added
+
+- `chesswhisper backup` writes the web UI's database and keys (and, with
+  `--include-cache`, the evaluation cache) to one zip file. It is safe while
+  the server runs.
+- `chesswhisper restore FILE` puts a backup back. It validates the archive
+  before changing anything, refuses to replace an existing database without
+  `--force`, keeps the replaced files in a `pre-restore-*` folder, and
+  refuses backups from a newer version.
+
 ## [0.4.0] - 2026-09-27
 
 ### Added
@@ -137,6 +149,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.5.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.2.0

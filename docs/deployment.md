@@ -222,21 +222,33 @@ option that works for you:
 
 ## Backups
 
-Back up the data directory. The database can be copied safely while the
-server runs with SQLite's online backup:
+`chesswhisper backup` writes the database and both key files to one zip.
+It is safe to run while the server is up: the database is copied with
+SQLite's online backup, so the snapshot is consistent even mid-write.
 
 ```
-sqlite3 ~/.local/share/chesswhisper/chesswhisper.db ".backup /backups/chesswhisper-$(date +%F).db"
+sudo -u chesswhisper /var/lib/chesswhisper/venv/bin/chesswhisper backup -o /backups/chesswhisper-$(date +%F).zip
 ```
 
-Copy `api_key_encryption.key` and `session_secret.key` alongside it once;
-they don't change. Keep the backups private: whoever has the key file and
+Run it as the service's user (and with the same `CHESSWHISPER_DATA_DIR`)
+so it reads the right data directory; in Docker, `docker compose exec
+chesswhisper chesswhisper backup -o /data/backup.zip`. Add
+`--include-cache` to keep the evaluation cache too; it is only a speed-up
+and can be large. Keep the backups private: whoever has the key file and
 the database can decrypt users' API keys.
+
+To restore, stop the server and run `chesswhisper restore FILE`. It checks
+the archive first (a chesswhisper backup, an intact database, a schema
+this version knows) and refuses to replace an existing database unless you
+add `--force`; then the files it replaces are moved to a `pre-restore-*`
+folder in the data directory rather than deleted. A backup from an older
+version is fine: its migrations run when the server starts. One from a
+newer version is refused, so upgrade first.
 
 ## Upgrading
 
 ```
-# 1. back up the database (see above)
+# 1. back up (see above)
 sudo -u chesswhisper git -C /var/lib/chesswhisper/app pull
 sudo -u chesswhisper /var/lib/chesswhisper/venv/bin/pip install "/var/lib/chesswhisper/app[web]"
 sudo systemctl restart chesswhisper
