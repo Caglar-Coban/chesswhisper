@@ -70,6 +70,9 @@ class AnalysisRecord(Base):
     pgn_text: Mapped[str | None] = mapped_column(Text, default=None)
     # The filter this analysis ran with (GameFilter.to_json()); None: all games.
     filters_json: Mapped[str | None] = mapped_column(Text, default=None)
+    # summary.report_summary() of the analysis, for comparing two of them;
+    # None for records saved before 0.15.
+    summary_json: Mapped[str | None] = mapped_column(Text, default=None)
 
     user: Mapped[User] = relationship(back_populates="analyses")
     puzzle_attempts: Mapped[list[PuzzleAttempt]] = relationship(cascade="all, delete-orphan")

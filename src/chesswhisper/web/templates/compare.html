@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — {{ t("title.compare") }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h2 class="section-title">{{ t("compare.heading") }}</h2>
+  {% if partial %}<p class="hint">{{ t("compare.partial") }}</p>{% endif %}
+  <div class="table-scroll">
+    <table class="data-table compare-table">
+      <thead>
+        <tr>
+          <th>{{ t("compare.metric") }}</th>
+          {% for r in (before, after) %}
+          <th class="num">
+            <a href="/history/{{ r.id }}">{{ r.player_name }}</a><br>
+            <time class="local-time hint" datetime="{{ r.created_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ r.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</time>
+          </th>
+          {% endfor %}
+          <th class="num">{{ t("compare.change") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ t("metric." ~ row.key) }}</td>
+          <td class="num">{{ row.before }}</td>
+          <td class="num">{{ row.after }}</td>
+          <td class="num{% if row.verdict %} change-{{ row.verdict }}{% endif %}">{{ row.change }}{% if row.verdict %} <span class="visually-hidden">({{ t("compare." ~ row.verdict) }})</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p><a class="back-link" href="/history">&larr; {{ t("compare.back") }}</a></p>
+</section>
+<script>
+  document.querySelectorAll("time.local-time").forEach(function (el) {
+    var d = new Date(el.getAttribute("datetime"));
+    if (isNaN(d)) return;
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    el.textContent = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  });
+</script>
+{% endblock %}

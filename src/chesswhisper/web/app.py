@@ -30,6 +30,7 @@ from chesswhisper.game_sources import (
 )
 from chesswhisper.report_writer import render_markdown
 from chesswhisper.stats_engine import critical_moves
+from chesswhisper.summary import compare, report_summary
 from chesswhisper.timeline import game_timelines
 from chesswhisper.web import jobs
 from chesswhisper.web.auth import (
@@ -211,6 +212,7 @@ def save_analysis(
         games_json=json.dumps(timelines) if timelines else None,
         pgn_text=pgn_text,
         filters_json=filters_json,
+        summary_json=json.dumps(report_summary(aggregate)),
     )
     if created_at is not None:
         record.created_at = created_at
@@ -597,7 +599,62 @@ async def history_list(
             "current_user": current_user, "records": records,
             "trend": build_trend(records, player),
             "detail_url_prefix": "/history", "viewing_as_admin": False,
+            "can_compare": len(records) >= 2,
         },
+    )
+
+
+def _record_summary(record: AnalysisRecord) -> dict:
+    """The saved summary, or what any record has (games, accuracy, ACPL) for older ones."""
+    if record.summary_json:
+        try:
+            return json.loads(record.summary_json)
+        except ValueError:
+            pass
+    return {"games": record.games_count, "accuracy": record.overall_accuracy, "acpl": record.overall_acpl}
+
+
+def _format_metric(value: float | None, fmt: str, signed: bool = False) -> str:
+    if value is None:
+        return "-"
+    sign = ("+" if value > 0 else "\u2212" if value < 0 else "\u00b1") if signed else ""
+    magnitude = abs(value) if signed else value
+    if fmt == "percent":
+        return f"{sign}{magnitude:.1f}%"
+    if fmt == "ratio":
+        return f"{sign}{magnitude * 100:.0f}%"
+    if fmt == "int":
+        return f"{sign}{magnitude:.0f}"
+    return f"{sign}{magnitude:.2f}"
+
+
+@app.get("/history/compare", response_class=HTMLResponse)
+async def history_compare(
+    request: Request,
+    ids: list[int] = Query(default=[]),  # noqa: B008 - FastAPI's own idiom
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """Two of the user's analyses side by side, older first."""
+    found = [db.get(AnalysisRecord, record_id) for record_id in dict.fromkeys(ids)]
+    records = [r for r in found if r is not None and r.user_id == current_user.id]
+    if len(found) != 2 or len(records) != 2:
+        return _render_error(request, _tr(request, "error.compare_pick_two"), 400, current_user)
+    before, after = sorted(records, key=lambda r: (r.created_at, r.id))
+    rows = [
+        {
+            "key": row.key,
+            "before": _format_metric(row.before, row.fmt),
+            "after": _format_metric(row.after, row.fmt),
+            "change": _format_metric(row.change, row.fmt, signed=True),
+            "verdict": row.verdict,
+        }
+        for row in compare(_record_summary(before), _record_summary(after))
+    ]
+    return _render(
+        request, "compare.html",
+        {"current_user": current_user, "before": before, "after": after, "rows": rows,
+         "partial": not (before.summary_json and after.summary_json)},
     )
 
 

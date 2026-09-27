@@ -222,7 +222,7 @@ chesswhisper backup                 # database and keys to one zip; `restore` pu
   from overlapping analyses appears once. Filter them by theme to practice
   one kind of tactic.
 - **History:** every past analysis and a trend chart of accuracy and ACPL for
-  each player.
+  each player. Tick two analyses to compare them side by side.
 - **Settings:** store, replace or remove your own Anthropic/OpenAI keys
   (encrypted at rest), change your password, and create or revoke an API
   token.

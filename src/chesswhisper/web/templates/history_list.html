@@ -52,11 +52,12 @@
   <div class="table-scroll">
     <table class="data-table">
       <thead>
-        <tr><th>{{ t("history.date") }}</th><th>{{ t("history.player") }}</th><th class="num">{{ t("history.accuracy") }}</th><th class="num">ACPL</th><th class="num">{{ t("history.games") }}</th><th></th></tr>
+        <tr>{% if can_compare %}<th><span class="visually-hidden">{{ t("compare.select") }}</span></th>{% endif %}<th>{{ t("history.date") }}</th><th>{{ t("history.player") }}</th><th class="num">{{ t("history.accuracy") }}</th><th class="num">ACPL</th><th class="num">{{ t("history.games") }}</th><th></th></tr>
       </thead>
       <tbody>
         {% for r in records %}
         <tr>
+          {% if can_compare %}<td><input type="checkbox" name="ids" value="{{ r.id }}" form="compare-form" aria-label="{{ t('compare.select') }}"></td>{% endif %}
           <td class="nowrap"><time class="local-time" datetime="{{ r.created_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ r.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</time></td>
           <td>{{ r.player_name }}</td>
           <td class="num">{{ "%.1f"|format(r.overall_accuracy) }}%</td>
@@ -76,6 +77,12 @@
       </tbody>
     </table>
   </div>
+  {% if can_compare %}
+  <form id="compare-form" method="get" action="/history/compare" class="compare-form">
+    <button type="submit" class="secondary-button">{{ t("compare.button") }}</button>
+    <span class="hint">{{ t("compare.hint") }}</span>
+  </form>
+  {% endif %}
   <script>
     // Stored times are UTC; show them in the viewer's own time zone.
     document.querySelectorAll("time.local-time").forEach(function (el) {

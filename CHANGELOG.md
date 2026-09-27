@@ -4,6 +4,19 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] - 2026-09-27
+
+### Added
+
+- Compare two analyses: tick two in History and see them side by side,
+  older first, with the change in each measure marked better or worse:
+  accuracy, ACPL, score, inaccuracies, mistakes and blunders per game,
+  mistakes by phase, tactics allowed and missed, opponent errors punished
+  and winning endgames won.
+- Each analysis keeps a summary of those numbers for this (migration
+  0009). For analyses saved before 0.15 only games, accuracy and ACPL can
+  be compared.
+
 ## [0.14.0] - 2026-09-27
 
 ### Added
@@ -275,6 +288,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.15.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.15.0
 [0.14.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.14.0
 [0.13.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.13.0
 [0.12.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.12.0
