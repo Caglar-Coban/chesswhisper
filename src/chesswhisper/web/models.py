@@ -32,6 +32,7 @@ class User(Base):
     puzzle_attempts: Mapped[list[PuzzleAttempt]] = relationship(cascade="all, delete-orphan")
     analysis_jobs: Mapped[list[AnalysisJob]] = relationship(cascade="all, delete-orphan")
     game_sync: Mapped[GameSync | None] = relationship(uselist=False, cascade="all, delete-orphan")
+    puzzle_rush_runs: Mapped[list[PuzzleRushRun]] = relationship(cascade="all, delete-orphan")
 
 
 class UserApiKey(Base):
@@ -93,6 +94,20 @@ class PuzzleAttempt(Base):
     move_uci: Mapped[str] = mapped_column(String(5))
     solved: Mapped[bool]
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class PuzzleRushRun(Base):
+    """One finished timed round of puzzles (see /puzzles/rush); it doesn't touch the review schedule."""
+
+    __tablename__ = "puzzle_rush_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    minutes: Mapped[int]
+    theme: Mapped[str | None] = mapped_column(String(20), default=None)
+    solved: Mapped[int]
+    misses: Mapped[int]
 
 
 class AnalysisJob(Base):

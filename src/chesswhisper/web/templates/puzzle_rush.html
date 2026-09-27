@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}chesswhisper — {{ t("rush.title") }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="viewer-head">
+    <h2>{{ t("rush.title") }}</h2>
+    <p>{{ t("rush.intro", misses=max_misses) }}</p>
+  </div>
+  {% if not total %}
+  <p class="trend-empty">{{ t("puzzles.empty") }} <a href="/">{{ t("puzzles.start_analysis") }}</a>.</p>
+  {% else %}
+  <form id="rush-setup" class="repertoire-controls">
+    <span class="segmented" role="radiogroup" aria-label="{{ t('rush.length') }}">
+      {% for m in minutes_choices %}
+      <button type="button" data-minutes="{{ m }}" class="{{ 'current' if loop.first else '' }}">{{ t("rush.minutes", n=m) }}</button>
+      {% endfor %}
+    </span>
+    <select id="rush-theme" aria-label="{{ t('puzzles.themes') }}">
+      <option value="">{{ t("puzzles.theme_all") }} ({{ total }})</option>
+      {% for name, count in theme_counts %}<option value="{{ name }}">{{ t("theme." ~ name) }} ({{ count }})</option>{% endfor %}
+    </select>
+    <button type="submit" id="rush-start">{{ t("rush.start") }}</button>
+  </form>
+  <p class="hint">
+    {% for m in minutes_choices %}{{ t("rush.best", n=m) }} <strong id="best-{{ m }}">{{ best[m] if best[m] is not none else "—" }}</strong>{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+
+  <div class="viewer" id="rush-play" hidden>
+    <div>
+      <div class="viewer-board puzzle-board" id="board" role="img" aria-label="{{ t('viewer.board') }}"></div>
+    </div>
+    <div>
+      <p class="rush-clock" id="clock" aria-live="off">0:00</p>
+      <p class="rush-score">{{ t("rush.solved") }} <strong id="score">0</strong></p>
+      <p class="rush-misses" aria-label="{{ t('rush.misses') }}">{% for _ in range(max_misses) %}<span class="rush-miss"></span>{% endfor %}</p>
+      <p style="font-weight:600;" id="to-move"></p>
+      <p class="hint">{{ t("puzzles.hint") }}</p>
+      <div class="puzzle-result" id="result" aria-live="polite"></div>
+      <div class="puzzle-actions">
+        <button type="button" class="secondary-button" id="btn-again" hidden>{{ t("rush.again") }}</button>
+      </div>
+    </div>
+  </div>
+
+  {% if recent %}
+  <h3 class="section-title" style="margin-top:22px;">{{ t("rush.recent") }}</h3>
+  <ul class="rush-recent">
+    {% for run in recent %}
+    <li><time class="local-time" datetime="{{ run.created_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{{ run.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</time>
+      · {{ t("rush.minutes", n=run.minutes) }}{% if run.theme %} · {{ t("theme." ~ run.theme) }}{% endif %} · <strong>{{ run.solved }}</strong></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <input type="hidden" id="csrf" value="{{ csrf_token }}">
+  {% endif %}
+</div>
+{% if total %}
+{% include "_board_script.html" %}
+<script>
+(function () {
+  var MAX_MISSES = {{ max_misses | tojson }};
+  var TEXT = {
+    white: {{ t("puzzles.to_move_white") | tojson }},
+    black: {{ t("puzzles.to_move_black") | tojson }},
+    correct: {{ t("rush.correct") | tojson }},
+    wrong: {{ t("rush.wrong") | tojson }},
+    over: {{ t("rush.over") | tojson }},
+    newBest: {{ t("rush.new_best") | tojson }},
+    outOfPuzzles: {{ t("rush.out_of_puzzles") | tojson }},
+    failed: {{ t("puzzles.check_failed") | tojson }}
+  };
+  var GREEN = "#2e8b57", RED = "#c0392b", GREY = "#7f8c8d";
+
+  var setup = document.getElementById("rush-setup");
+  var play = document.getElementById("rush-play");
+  var boardEl = document.getElementById("board");
+  var resultEl = document.getElementById("result");
+  var again = document.getElementById("btn-again");
+  var minutes = {{ minutes_choices[0] | tojson }};
+  var queue = [], puzzle = null, fen = null, legal = [], played = [];
+  var selected = null, arrows = [], locked = true, solved = 0, misses = 0, deadline = 0, timer = null, theme = "";
+
+  setup.querySelectorAll("[data-minutes]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      minutes = Number(btn.getAttribute("data-minutes"));
+      setup.querySelectorAll("[data-minutes]").forEach(function (b) { b.classList.toggle("current", b === btn); });
+    });
+  });
+
+  function post(url, fields) {
+    var form = new FormData();
+    Object.keys(fields).forEach(function (k) { form.append(k, fields[k]); });
+    form.append("csrf_token", document.getElementById("csrf").value);
+    return fetch(url, { method: "POST", body: form }).then(function (r) {
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json();
+    });
+  }
+
+  function movesFrom(square) { return legal.filter(function (m) { return m.slice(0, 2) === square; }); }
+
+  function draw() {
+    var targets = selected ? movesFrom(selected).map(function (m) { return m.slice(2, 4); }) : [];
+    ChessBoard.render(boardEl, fen, {
+      whiteBottom: puzzle.your_color !== "black", selected: selected, targets: targets, arrows: arrows
+    });
+  }
+
+  function say(text, kind) {
+    resultEl.textContent = text;
+    resultEl.className = "puzzle-result" + (kind ? " " + kind : "");
+  }
+
+  function drawMisses() {
+    document.querySelectorAll(".rush-miss").forEach(function (el, i) { el.classList.toggle("used", i < misses); });
+  }
+
+  function arrow(uci, color) { return { from: uci.slice(0, 2), to: uci.slice(2, 4), color: color }; }
+
+  function nextPuzzle() {
+    puzzle = queue.shift();
+    if (!puzzle) { finish(TEXT.outOfPuzzles); return; }
+    fen = puzzle.fen; legal = puzzle.legal_moves; played = []; arrows = []; selected = null; locked = false;
+    document.getElementById("to-move").textContent = TEXT[puzzle.your_color];
+    draw();
+  }
+
+  function tick() {
+    var left = Math.max(0, deadline - Date.now());
+    var s = Math.ceil(left / 1000);
+    document.getElementById("clock").textContent = Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
+    if (left <= 0) finish(TEXT.over);
+  }
+
+  function finish(message) {
+    if (timer === null) return;
+    clearInterval(timer);
+    timer = null;
+    locked = true;
+    say(message.replace("{n}", solved), "");
+    again.hidden = false;
+    setup.hidden = false;
+    post("/puzzles/rush/finish", { minutes: minutes, solved: solved, misses: misses, theme: theme })
+      .then(function (data) {
+        document.getElementById("best-" + minutes).textContent = data.best;
+        if (data.new_best) say(TEXT.newBest.replace("{n}", solved), "correct");
+      })
+      .catch(function () {});
+  }
+
+  function submit(move) {
+    locked = true;
+    post("/puzzles/rush/check", { record_id: puzzle.record_id, index: puzzle.index, move: move, previous: played.join(",") })
+      .then(function (data) {
+        if (timer === null) return;
+        if (data.status === "continue") {
+          played.push(move);
+          arrows = [arrow(move, GREEN)];
+          draw();
+          setTimeout(function () {
+            fen = data.fen; legal = data.legal_moves; arrows = [arrow(data.reply_uci, GREY)]; locked = false;
+            draw();
+          }, 350);
+          return;
+        }
+        if (data.correct) {
+          solved += 1;
+          document.getElementById("score").textContent = solved;
+          say(TEXT.correct, "correct");
+          arrows = [arrow(move, GREEN)];
+        } else {
+          misses += 1;
+          drawMisses();
+          say(TEXT.wrong, "wrong");
+          arrows = [arrow(move, RED), arrow(data.best_uci, GREEN)];
+        }
+        draw();
+        if (misses >= MAX_MISSES) { finish(TEXT.over); return; }
+        setTimeout(nextPuzzle, data.correct ? 350 : 1200);
+      })
+      .catch(function () { locked = false; say(TEXT.failed, "wrong"); });
+  }
+
+  boardEl.addEventListener("click", function (e) {
+    if (locked) return;
+    var target = e.target.closest("[data-square]");
+    if (!target) return;
+    var square = target.getAttribute("data-square");
+    if (selected) {
+      var candidates = movesFrom(selected).filter(function (m) { return m.slice(2, 4) === square; });
+      if (candidates.length) {
+        var move = candidates.filter(function (m) { return m.length === 4 || m[4] === "q"; })[0] || candidates[0];
+        selected = null;
+        draw();
+        submit(move);
+        return;
+      }
+    }
+    selected = movesFrom(square).length ? square : null;
+    draw();
+  });
+
+  function start() {
+    theme = document.getElementById("rush-theme").value;
+    fetch("/puzzles/rush/set" + (theme ? "?theme=" + encodeURIComponent(theme) : ""))
+      .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(function (data) {
+        queue = data.puzzles;
+        solved = 0; misses = 0;
+        document.getElementById("score").textContent = "0";
+        drawMisses();
+        say("", "");
+        again.hidden = true;
+        setup.hidden = true;
+        play.hidden = false;
+        deadline = Date.now() + minutes * 60 * 1000;
+        timer = setInterval(tick, 250);
+        tick();
+        nextPuzzle();
+      })
+      .catch(function () { say(TEXT.failed, "wrong"); });
+  }
+
+  setup.addEventListener("submit", function (e) { e.preventDefault(); start(); });
+  again.addEventListener("click", start);
+
+  document.querySelectorAll("time.local-time").forEach(function (el) {
+    var d = new Date(el.getAttribute("datetime"));
+    if (isNaN(d)) return;
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    el.textContent = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

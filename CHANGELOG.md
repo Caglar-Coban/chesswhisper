@@ -4,6 +4,22 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.22.0] - 2026-09-28
+
+### Added
+
+- Timed puzzle rounds (`/puzzles/rush`, "⏱ Timed round" on the puzzles
+  page): 3 or 5 minutes, optionally one theme, puzzles in random order;
+  the round ends when time runs out, after 3 misses or when the puzzles
+  do. A miss shows the right move. Your best per length and your recent
+  rounds are kept. Rounds don't change the review schedule.
+
+### Changed
+
+- The theme link in the header is now just its icon (the full text is its
+  tooltip), the History badge no longer wraps under its link, and the
+  repertoire's move table fits beside the board.
+
 ## [0.21.0] - 2026-09-28
 
 ### Added
@@ -351,6 +367,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.22.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.22.0
 [0.21.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.21.0
 [0.20.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.20.0
 [0.19.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.19.0

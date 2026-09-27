@@ -2,6 +2,7 @@
 {% block title %}chesswhisper — {{ t("title.puzzles") }}{% endblock %}
 {% block content %}
 <div class="card">
+  {% if total or has_any %}<a class="practice-link" href="/puzzles/rush">{{ t("puzzles.rush_link") }}</a>{% endif %}
   {% if theme_counts %}
   <nav class="theme-filter" aria-label="{{ t('puzzles.themes') }}">
     <a href="/puzzles"{% if not theme %} aria-current="true"{% endif %}>{{ t("puzzles.theme_all") }}</a>

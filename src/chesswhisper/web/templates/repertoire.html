@@ -4,7 +4,7 @@
 {% macro line_url(uci_list) -%}
 /repertoire?{{ {"player": selected, "color": color, "line": uci_list | join(",")} | urlencode }}
 {%- endmacro %}
-<div class="card">
+<div class="card repertoire">
   <h2 class="section-title">{{ t("repertoire.title") }}</h2>
   <p class="hint" style="margin-top:0;">{{ t("repertoire.intro") }}</p>
   {% if not position %}

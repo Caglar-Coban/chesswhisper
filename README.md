@@ -224,7 +224,8 @@ chesswhisper backup                 # database and keys to one zip; `restore` pu
   first, then new puzzles; one you get right comes back after 1, 3, 7, 14
   and then 30 days, one you miss comes back the next day. The same position
   from overlapping analyses appears once. Filter them by theme to practice
-  one kind of tactic.
+  one kind of tactic, or play a timed round (3 or 5 minutes, three misses
+  and it's over) to chase your best score.
 - **History:** every past analysis and a trend chart of accuracy and ACPL for
   each player. Tick two analyses to compare them side by side.
 - **Settings:** store, replace or remove your own Anthropic/OpenAI keys

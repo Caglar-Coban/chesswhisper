@@ -1,6 +1,7 @@
 import functools
 import json
 import os
+import random
 import re
 import tempfile
 from collections import Counter
@@ -51,8 +52,11 @@ from chesswhisper.web.auth import (
 from chesswhisper.web.boards import PIECE_SVGS, VIEWER_COLORS, board_cards
 from chesswhisper.web.db import get_db, session_scope, utcnow
 from chesswhisper.web.demo import DEMO_MAX_GAMES, DEMO_PASSWORD, DEMO_USERNAME, demo_mode
-from chesswhisper.web.models import AnalysisRecord, PuzzleAttempt, User, UserApiKey
+from chesswhisper.web.models import AnalysisRecord, PuzzleAttempt, PuzzleRushRun, User, UserApiKey
 from chesswhisper.web.puzzles import THEMES as PUZZLE_THEMES
+from chesswhisper.web.puzzles import (
+    Progress as PuzzleProgress,
+)
 from chesswhisper.web.puzzles import (
     Puzzle,
     check_moves,
@@ -993,6 +997,107 @@ async def puzzles_next(
     return RedirectResponse(f"/puzzles/{first.record_id}/{first.index}{_theme_query(theme)}", status_code=303)
 
 
+RUSH_MINUTES = (3, 5)
+RUSH_MAX_MISSES = 3
+RUSH_SET_SIZE = 100
+RUSH_RECENT_RUNS = 5
+
+
+# Registered before /puzzles/{record_id}/{index}, which would otherwise take /puzzles/rush/set.
+@app.get("/puzzles/rush", response_class=HTMLResponse)
+async def puzzle_rush(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """A timed round: solve as many puzzles as you can before the clock or three misses end it."""
+    puzzles, _ = _user_puzzles(db, current_user)
+    runs = db.query(PuzzleRushRun).filter_by(user_id=current_user.id)
+    all_runs = runs.all()
+    best = {
+        minutes: max((run.solved for run in all_runs if run.minutes == minutes), default=None)
+        for minutes in RUSH_MINUTES
+    }
+    recent = runs.order_by(PuzzleRushRun.created_at.desc()).limit(RUSH_RECENT_RUNS).all()
+    return _render(
+        request, "puzzle_rush.html",
+        {
+            "current_user": current_user, "total": len(puzzles), "theme_counts": theme_counts(puzzles),
+            "minutes_choices": RUSH_MINUTES, "max_misses": RUSH_MAX_MISSES, "best": best, "recent": recent,
+            "pieces": PIECE_SVGS, "board_colors": VIEWER_COLORS,
+        },
+    )
+
+
+@app.get("/puzzles/rush/set", response_model=None)
+async def puzzle_rush_set(
+    theme: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The round's puzzles, shuffled."""
+    puzzles, _ = _user_puzzles(db, current_user)
+    chosen = filter_by_theme(puzzles, _theme_param(theme))
+    chosen = random.sample(chosen, min(len(chosen), RUSH_SET_SIZE))
+    return JSONResponse({"puzzles": [
+        {"record_id": p.record_id, "index": p.index, "fen": p.fen, "your_color": p.your_color,
+         "legal_moves": legal_moves(p.fen)}
+        for p in chosen
+    ]})
+
+
+@app.post("/puzzles/rush/check", response_model=None)
+async def puzzle_rush_check(
+    record_id: int = Form(...),
+    index: int = Form(...),
+    move: str = Form(...),
+    previous: str = Form(default=""),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> JSONResponse:
+    """Judge a move like an attempt, but save nothing: a timed round leaves the review schedule alone."""
+    puzzles, _ = _user_puzzles(db, current_user)
+    judged = _judge(puzzles, record_id, index, move, previous)
+    if isinstance(judged, JSONResponse):
+        return judged
+    puzzle, moves, outcome = judged
+    if outcome.status == "continue":
+        return _continue_response(moves, outcome)
+    return JSONResponse({
+        "correct": outcome.status == "solved",
+        "status": outcome.status,
+        "best_uci": moves[-1] if outcome.status == "solved" else puzzle.solution[2 * outcome.step],
+    })
+
+
+@app.post("/puzzles/rush/finish", response_model=None)
+async def puzzle_rush_finish(
+    minutes: int = Form(...),
+    solved: int = Form(...),
+    misses: int = Form(...),
+    theme: str = Form(default=""),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> JSONResponse:
+    """Save a finished round; says whether it beat the best for that length."""
+    if minutes not in RUSH_MINUTES or not 0 <= solved <= RUSH_SET_SIZE or not 0 <= misses <= RUSH_MAX_MISSES:
+        return JSONResponse({"detail": "Not a possible result."}, status_code=400)
+    previous_best = max(
+        (run.solved for run in db.query(PuzzleRushRun).filter_by(user_id=current_user.id, minutes=minutes)),
+        default=None,
+    )
+    db.add(PuzzleRushRun(
+        user_id=current_user.id, minutes=minutes, theme=_theme_param(theme or None), solved=solved, misses=misses,
+    ))
+    db.commit()
+    return JSONResponse({
+        "best": max(solved, previous_best or 0),
+        "new_best": solved > 0 and (previous_best is None or solved > previous_best),
+    })
+
+
 @app.get("/puzzles/{record_id}/{index}", response_class=HTMLResponse)
 async def puzzle_page(
     request: Request,
@@ -1035,6 +1140,34 @@ async def puzzle_page(
     )
 
 
+def _judge(
+    puzzles: list[Puzzle], record_id: int, index: int, move: str, previous: str
+) -> tuple[Puzzle, list[str], PuzzleProgress] | JSONResponse:
+    """The puzzle and the verdict on its moves so far, or the error response to send."""
+    puzzle = next((p for p in puzzles if p.key == (record_id, index)), None)
+    if puzzle is None:
+        return JSONResponse({"detail": "Puzzle not found."}, status_code=404)
+    moves = [m.strip().lower() for m in previous.split(",") if m.strip()] + [move.strip().lower()]
+    if not all(_UCI_RE.fullmatch(m) for m in moves):
+        return JSONResponse({"detail": "Not a legal move in this position."}, status_code=400)
+    try:
+        return puzzle, moves, check_moves(puzzle, moves)
+    except ValueError:
+        return JSONResponse({"detail": "Not a legal move in this position."}, status_code=400)
+
+
+def _continue_response(moves: list[str], outcome: PuzzleProgress) -> JSONResponse:
+    return JSONResponse({
+        "correct": True,
+        "status": "continue",
+        "best_uci": moves[-1],
+        "reply_uci": outcome.reply_uci,
+        "reply_san": outcome.reply_san,
+        "fen": outcome.fen,
+        "legal_moves": legal_moves(outcome.fen) if outcome.fen else [],
+    })
+
+
 @app.post("/puzzles/{record_id}/{index}/attempt", response_model=None)
 async def puzzle_attempt(
     record_id: int,
@@ -1047,29 +1180,15 @@ async def puzzle_attempt(
 ) -> JSONResponse:
     """Judge the player's latest *move*, after the *previous* ones (comma-separated) of this try."""
     puzzles, progress = _user_puzzles(db, current_user)
-    puzzle = next((p for p in puzzles if p.key == (record_id, index)), None)
-    if puzzle is None:
-        return JSONResponse({"detail": "Puzzle not found."}, status_code=404)
-    moves = [m.strip().lower() for m in previous.split(",") if m.strip()] + [move.strip().lower()]
-    if not all(_UCI_RE.fullmatch(m) for m in moves):
-        return JSONResponse({"detail": "Not a legal move in this position."}, status_code=400)
-    try:
-        outcome = check_moves(puzzle, moves)
-    except ValueError:
-        return JSONResponse({"detail": "Not a legal move in this position."}, status_code=400)
+    judged = _judge(puzzles, record_id, index, move, previous)
+    if isinstance(judged, JSONResponse):
+        return judged
+    puzzle, moves, outcome = judged
 
     expected = puzzle.solution[2 * outcome.step]
     if outcome.status == "continue":
         # Right so far: nothing is saved until the line is finished or missed.
-        return JSONResponse({
-            "correct": True,
-            "status": "continue",
-            "best_uci": moves[-1],
-            "reply_uci": outcome.reply_uci,
-            "reply_san": outcome.reply_san,
-            "fen": outcome.fen,
-            "legal_moves": legal_moves(outcome.fen) if outcome.fen else [],
-        })
+        return _continue_response(moves, outcome)
 
     correct = outcome.status == "solved"
     move = moves[-1]
