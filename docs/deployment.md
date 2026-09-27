@@ -134,6 +134,32 @@ To upgrade, back up the volume (see [Backups](#backups)), then
 container starts. Set `CHESSWHISPER_ALLOW_REGISTRATION: "0"` in
 `docker-compose.yml` once your accounts exist.
 
+### A public demo on Hugging Face Spaces
+
+`deploy/huggingface/` holds a Space version of the image: it listens on
+7860, runs with `CHESSWHISPER_DEMO=1` (a "public demo" banner, a one-click
+demo login, no LLM commentary or stored API keys, at most 10 games per
+analysis) and seeds a `demo` account at build time with `chesswhisper
+seed-demo`. Free Spaces have no persistent disk, so each restart returns to
+that seeded state.
+
+The **Deploy demo** workflow publishes it on every push to `master`:
+
+1. Create a Hugging Face account and a token with write access
+   (Settings → Access Tokens).
+2. In the GitHub repository, add the token as the secret `HF_TOKEN` and the
+   Space name as the variable `HF_SPACE`, for example
+   `your-hf-name/chesswhisper`:
+
+   ```
+   gh secret set HF_TOKEN
+   gh variable set HF_SPACE --body "your-hf-name/chesswhisper"
+   ```
+
+3. Run the workflow once (Actions → Deploy demo → Run workflow). It creates
+   the Space if needed and uploads the app; the first build takes about ten
+   minutes because it analyzes the demo games.
+
 ### Keep it to one process
 
 `chesswhisper serve` starts a single uvicorn process, and it has to stay

@@ -258,6 +258,7 @@ curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/api/v1/analyses/12
 | `CHESSWHISPER_STOCKFISH_PATH` | Use this Stockfish binary. A `stockfish` on `PATH` is also picked up. |
 | `CHESSWHISPER_DATA_DIR` | Where to keep Stockfish, the evaluation cache and the web UI's database and keys. Defaults to the per-user data directory (`~/.local/share/chesswhisper` on Linux, `%LOCALAPPDATA%\chesswhisper\chesswhisper` on Windows); `/data` in Docker. |
 | `CHESSWHISPER_ALLOW_REGISTRATION` | `0` closes self-service sign-up in the web UI. |
+| `CHESSWHISPER_DEMO` | `1` runs the web UI as a public demo: a banner, a one-click demo login, no LLM commentary or stored API keys, and at most 10 games per analysis. `chesswhisper seed-demo` fills the demo account. See the [deployment guide](docs/deployment.md#a-public-demo-on-hugging-face-spaces). |
 
 ## Development
 

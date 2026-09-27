@@ -1,3 +1,5 @@
+import re
+
 import chess.engine
 import pytest
 from click.testing import CliRunner
@@ -117,3 +119,20 @@ def test_outside_demo_mode_nothing_changes(tmp_path, monkeypatch):
 
     assert "Public demo" not in c.get("/").text
     assert 'value="claude"' in c.get("/").text
+
+
+def test_one_click_demo_login(tmp_path, monkeypatch, engine):
+    monkeypatch.setenv("CHESSWHISPER_DEMO", "1")
+    init_db(tmp_path / "one_click.db")
+    demo.seed_demo(analyses=1)
+    visitor = CsrfClient(app, follow_redirects=False)
+    page = visitor.get("/login").text
+    assert 'id="demo-login"' in page
+    token = re.search(r'name="csrf_token" value="([^"]*)"', page).group(1)
+
+    response = visitor.post("/login", data={
+        "csrf_token": token, "username": demo.DEMO_USERNAME, "password": demo.DEMO_PASSWORD,
+    })
+
+    assert response.status_code == 303
+    assert visitor.get("/history").status_code == 200

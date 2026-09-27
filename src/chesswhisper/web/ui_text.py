@@ -67,6 +67,7 @@ _STRINGS: dict[str, dict[str, str]] = {
                     "en": "Public demo: data resets on restart, LLM commentary is off, and analyses are capped at 10 games."},
     "demo.login_hint": {"tr": "Hazır verilerle göz atmak için <strong>{username}</strong> / <strong>{password}</strong> ile giriş yap ya da kendi hesabını aç.",
                         "en": "Sign in as <strong>{username}</strong> / <strong>{password}</strong> to browse ready-made analyses, or create your own account."},
+    "demo.continue": {"tr": "Demo hesabıyla devam et →", "en": "Continue as the demo user →"},
     "demo.keys_off": {"tr": "Bu herkese açık demoda API anahtarı saklanmaz ve LLM yorumu kapalıdır.",
                       "en": "This public demo doesn't store API keys, and LLM commentary is off."},
 

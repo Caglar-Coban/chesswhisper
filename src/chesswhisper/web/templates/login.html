@@ -3,7 +3,15 @@
 {% block content %}
 <div class="card">
   {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
-  {% if demo %}<p class="hint" style="margin-top:0;">{{ t("demo.login_hint", username=demo_username, password=demo_password) | safe }}</p>{% endif %}
+  {% if demo %}
+  <form method="post" action="/login" style="margin-bottom:22px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="username" value="{{ demo_username }}">
+    <input type="hidden" name="password" value="{{ demo_password }}">
+    <button type="submit" id="demo-login" style="margin-top:0;">{{ t("demo.continue") }}</button>
+    <p class="hint">{{ t("demo.login_hint", username=demo_username, password=demo_password) | safe }}</p>
+  </form>
+  {% endif %}
   <form method="post" action="/login">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label for="username">{{ t("auth.username") }}</label>
