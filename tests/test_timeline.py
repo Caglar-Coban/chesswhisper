@@ -12,7 +12,7 @@ from chesswhisper.timeline import game_timelines
 ECO = load_eco_table()
 
 
-def _report(player="Alice", moves="1. e4 e5 2. Qh5 Nc6", losses=None, best=None, headers=""):
+def _report(player="Alice", moves="1. e4 e5 2. Qh5 Nc6", losses=None, best=None, headers="", lines=None):
     text = f'[White "Alice"]\n[Black "Bob"]\n[Result "1-0"]\n[TimeControl "180+2"]\n{headers}\n{moves} 1-0\n'
     game = chess.pgn.read_game(io.StringIO(text))
     board = game.board()
@@ -24,6 +24,7 @@ def _report(player="Alice", moves="1. e4 e5 2. Qh5 Nc6", losses=None, best=None,
         evals.append(PositionEval(
             ply=ply, move_san=san, color=color, cp_before=30, cp_after=30 - loss, fen_after=board.fen(),
             fen_before=fen_before, move_uci=move.uci(), best_move_uci=(best or {}).get(ply),
+            best_line_uci=(lines or {}).get(ply),
         ))
     loaded = LoadedGame(index=0, game=game, headers=dict(game.headers))
     return build_game_report(loaded, evals, player, ECO)
@@ -75,3 +76,19 @@ def test_games_started_from_a_fen_keep_their_start_position():
 
     assert timeline["start_fen"] == fen
     assert timeline["moves"][0]["move_number"] == 30
+
+
+def test_each_move_carries_the_engines_move_and_line_from_the_position_before_it():
+    [timeline] = game_timelines([_report(
+        best={1: "e2e4", 2: "c7c5"},
+        lines={1: ["e2e4", "e7e5", "g1f3"], 2: ["c7c5", "g1f3", "zzzz", "b8c6"]},
+    )])
+    first, second, third = timeline["moves"][:3]
+
+    # The engine agreed with 1. e4: no "better move", but its move and line are still given.
+    assert (first["best_san"], first["engine_uci"]) == (None, "e2e4")
+    assert first["line_uci"] == ["e2e4", "e7e5", "g1f3"]
+    assert first["line_san"] == ["e4", "e5", "Nf3"]
+    # A line is cut at its first unreadable move.
+    assert (second["line_uci"], second["line_san"]) == (["c7c5", "g1f3"], ["c5", "Nf3"])
+    assert (third["engine_uci"], third["line_uci"], third["line_san"]) == (None, [], [])

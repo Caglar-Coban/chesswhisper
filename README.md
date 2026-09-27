@@ -213,7 +213,8 @@ chesswhisper backup                 # database and keys to one zip; `restore` pu
   in green, each linking to that moment in the game), then the full report.
   Download it as Markdown or print it to PDF.
 - **Game viewer:** board, evaluation graph and annotated move list; click,
-  use the arrow keys or Home/End, and flip the board.
+  use the arrow keys or Home/End, and flip the board. An arrow shows the
+  engine's move, and you can play its line out on the board.
 - **Puzzles:** your blunders and mistakes as "find the better move"
   exercises (tactical ones play out the engine's line over several moves),
   scheduled with spaced repetition: reviews that are due come

@@ -300,6 +300,10 @@ _STRINGS: dict[str, dict[str, str]] = {
     "viewer.start_position": {"tr": "Başlangıç pozisyonu", "en": "Starting position"},
     "viewer.eval": {"tr": "Değerlendirme:", "en": "Evaluation:"},
     "viewer.better": {"tr": "Daha iyisi:", "en": "Better:"},
+    "viewer.show_arrow": {"tr": "Motorun hamlesini göster", "en": "Show the engine's move"},
+    "viewer.play_line": {"tr": "Motorun devamını oynat", "en": "Play the engine's line"},
+    "viewer.back_to_game": {"tr": "Oyuna dön", "en": "Back to the game"},
+    "viewer.engine_line": {"tr": "Motorun devamı (oklarla ilerle):", "en": "The engine's line (step with the arrows):"},
     "viewer.you_won": {"tr": "Kazandın", "en": "You won"},
     "viewer.you_lost": {"tr": "Kaybettin", "en": "You lost"},
 

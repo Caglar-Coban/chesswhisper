@@ -20,6 +20,11 @@
         <span class="spacer"></span>
         <button type="button" class="secondary-button" id="btn-flip" aria-label="{{ t('viewer.flip') }}">⇅</button>
       </div>
+      <div class="viewer-options">
+        <label class="inline"><input type="checkbox" id="show-arrow" checked> {{ t("viewer.show_arrow") }}</label>
+        <button type="button" class="secondary-button" id="btn-line" hidden>{{ t("viewer.play_line") }}</button>
+        <button type="button" class="secondary-button" id="btn-back" hidden>{{ t("viewer.back_to_game") }}</button>
+      </div>
       <div class="viewer-info" id="info" aria-live="polite"></div>
     </div>
     <div>
@@ -45,16 +50,47 @@
   var TEXT = {
     start: {{ t("viewer.start_position") | tojson }},
     evaluation: {{ t("viewer.eval") | tojson }},
-    better: {{ t("viewer.better") | tojson }}
+    better: {{ t("viewer.better") | tojson }},
+    line: {{ t("viewer.engine_line") | tojson }}
   };
+  var ENGINE_COLOR = "#2e8b57";
   var MARKS = { blunder: "??", mistake: "?", inaccuracy: "?!" };
   var MATE = 100000, MATE_THRESHOLD = 90000, CLAMP = 1000;
 
   var moves = game.moves;
   var ply = 0;
   var whiteBottom = game.your_color !== "black";
+  // While the engine's line from the current position is being played:
+  // {entry, fens, index} where fens[0] is the position the line starts from.
+  var variation = null;
+  var arrowToggle = document.getElementById("show-arrow");
+  var lineButton = document.getElementById("btn-line");
+  var backButton = document.getElementById("btn-back");
 
   function fenAt(p) { return p === 0 ? game.start_fen : moves[p - 1].fen; }
+
+  // The move entry played from the position after ply p: its engine move and
+  // line start from that position.
+  function nextEntry() { return ply < moves.length ? moves[ply] : null; }
+
+  function startVariation() {
+    var entry = nextEntry();
+    if (!entry || !entry.line_uci || !entry.line_uci.length) return;
+    var fens = [fenAt(ply)];
+    entry.line_uci.forEach(function (uci) { fens.push(ChessBoard.applyUci(fens[fens.length - 1], uci)); });
+    variation = { entry: entry, fens: fens, index: 0 };
+    render();
+  }
+
+  function stepVariation(delta) {
+    variation.index = Math.max(0, Math.min(variation.fens.length - 1, variation.index + delta));
+    render();
+  }
+
+  function endVariation() {
+    variation = null;
+    render();
+  }
 
   function formatEval(cp) {
     if (Math.abs(cp) >= MATE_THRESHOLD) {
@@ -64,17 +100,58 @@
     return (cp < 0 ? "−" : "+") + (Math.abs(cp) / 100).toFixed(1);
   }
 
+  function arrowFor(uci) {
+    return uci ? [{ from: uci.slice(0, 2), to: uci.slice(2, 4), color: ENGINE_COLOR }] : [];
+  }
+
   function drawBoard() {
+    var board = document.getElementById("board");
+    if (variation) {
+      var line = variation.entry.line_uci, i = variation.index;
+      var played = i > 0 ? line[i - 1] : null;
+      ChessBoard.render(board, variation.fens[i], {
+        whiteBottom: whiteBottom,
+        highlight: played ? [played.slice(0, 2), played.slice(2, 4)] : [],
+        arrows: arrowToggle.checked ? arrowFor(line[i]) : []
+      });
+      return;
+    }
     var last = ply > 0 ? moves[ply - 1].uci : null;
-    ChessBoard.render(document.getElementById("board"), fenAt(ply), {
+    var entry = nextEntry();
+    ChessBoard.render(board, fenAt(ply), {
       whiteBottom: whiteBottom,
-      highlight: last ? [last.slice(0, 2), last.slice(2, 4)] : []
+      highlight: last ? [last.slice(0, 2), last.slice(2, 4)] : [],
+      arrows: arrowToggle.checked && entry ? arrowFor(entry.engine_uci) : []
     });
+  }
+
+  function drawVariationInfo(info) {
+    var title = document.createElement("div");
+    title.textContent = TEXT.line;
+    var list = document.createElement("div");
+    list.className = "variation-line";
+    variation.entry.line_san.forEach(function (san, i) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = san;
+      if (i + 1 === variation.index) btn.classList.add("current");
+      btn.addEventListener("click", function () { variation.index = i + 1; render(); });
+      list.appendChild(btn);
+    });
+    info.appendChild(title);
+    info.appendChild(list);
   }
 
   function drawInfo() {
     var info = document.getElementById("info");
     info.textContent = "";
+    var entry = nextEntry();
+    lineButton.hidden = !!variation || !(entry && entry.line_uci && entry.line_uci.length);
+    backButton.hidden = !variation;
+    if (variation) {
+      drawVariationInfo(info);
+      return;
+    }
     if (ply === 0) {
       info.textContent = TEXT.start;
       return;
@@ -159,27 +236,46 @@
     });
   }
 
-  function go(p) {
-    ply = Math.max(0, Math.min(moves.length, p));
+  function render() {
     drawBoard();
     drawInfo();
     drawGraph();
     highlightMove();
   }
 
-  document.getElementById("btn-first").addEventListener("click", function () { go(0); });
-  document.getElementById("btn-prev").addEventListener("click", function () { go(ply - 1); });
-  document.getElementById("btn-next").addEventListener("click", function () { go(ply + 1); });
-  document.getElementById("btn-last").addEventListener("click", function () { go(moves.length); });
+  function go(p) {
+    variation = null;
+    ply = Math.max(0, Math.min(moves.length, p));
+    render();
+  }
+
+  // Stepping moves through the engine's line while it is shown, else through the game.
+  function step(delta) {
+    if (variation) stepVariation(delta);
+    else go(ply + delta);
+  }
+
+  document.getElementById("btn-first").addEventListener("click", function () {
+    if (variation) { variation.index = 0; render(); } else go(0);
+  });
+  document.getElementById("btn-prev").addEventListener("click", function () { step(-1); });
+  document.getElementById("btn-next").addEventListener("click", function () { step(1); });
+  document.getElementById("btn-last").addEventListener("click", function () {
+    if (variation) { variation.index = variation.fens.length - 1; render(); } else go(moves.length);
+  });
   document.getElementById("btn-flip").addEventListener("click", function () { whiteBottom = !whiteBottom; drawBoard(); });
+  arrowToggle.addEventListener("change", drawBoard);
+  lineButton.addEventListener("click", startVariation);
+  backButton.addEventListener("click", endVariation);
   document.getElementById("graph").addEventListener("click", function (e) {
     var rect = e.currentTarget.getBoundingClientRect();
     go(Math.round(((e.clientX - rect.left) / rect.width) * moves.length));
   });
   document.addEventListener("keydown", function (e) {
     if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
-    if (e.key === "ArrowLeft") { go(ply - 1); e.preventDefault(); }
-    else if (e.key === "ArrowRight") { go(ply + 1); e.preventDefault(); }
+    if (e.key === "ArrowLeft") { step(-1); e.preventDefault(); }
+    else if (e.key === "ArrowRight") { step(1); e.preventDefault(); }
+    else if (e.key === "Escape" && variation) { endVariation(); e.preventDefault(); }
     else if (e.key === "Home") { go(0); e.preventDefault(); }
     else if (e.key === "End") { go(moves.length); e.preventDefault(); }
   });

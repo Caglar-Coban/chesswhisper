@@ -72,6 +72,38 @@ var ChessBoard = (function () {
     el.innerHTML = parts.join("");
   }
 
-  return { render: render };
+  /* The piece placement after playing a UCI move on fen's board: enough for
+     drawing an engine line the server has already checked for legality.
+     Handles castling, en passant and promotion. Only the placement part of
+     the returned FEN is meaningful. */
+  function applyUci(fen, uci) {
+    var grid = fen.split(" ")[0].split("/").map(function (row) {
+      return row.replace(/\d/g, function (n) { return new Array(Number(n) + 1).join("."); }).split("");
+    });
+    function at(sq) { return grid[8 - Number(sq[1])][FILES.indexOf(sq[0])]; }
+    function put(sq, piece) { grid[8 - Number(sq[1])][FILES.indexOf(sq[0])] = piece; }
+    var from = uci.slice(0, 2), to = uci.slice(2, 4), piece = at(from);
+    var fileStep = FILES.indexOf(to[0]) - FILES.indexOf(from[0]);
+    if ((piece === "K" || piece === "k") && Math.abs(fileStep) === 2) {
+      var rank = from[1], kingside = fileStep > 0;
+      var rookFrom = (kingside ? "h" : "a") + rank, rookTo = (kingside ? "f" : "d") + rank;
+      put(rookTo, at(rookFrom));
+      put(rookFrom, ".");
+    }
+    if ((piece === "P" || piece === "p") && fileStep !== 0 && at(to) === ".") {
+      put(to[0] + from[1], ".");  // en passant: the captured pawn sits beside the mover
+    }
+    if (uci.length === 5) {
+      piece = piece === "P" ? uci[4].toUpperCase() : uci[4].toLowerCase();
+    }
+    put(to, piece);
+    put(from, ".");
+    var placement = grid.map(function (row) {
+      return row.join("").replace(/\.+/g, function (run) { return String(run.length); });
+    }).join("/");
+    return placement + " w - - 0 1";
+  }
+
+  return { render: render, applyUci: applyUci };
 })();
 </script>

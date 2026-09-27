@@ -12,9 +12,30 @@ import chess
 from chesswhisper.stats_engine import _best_san, classify_move, cp_loss
 
 
+def _line(fen_before: str | None, line: list[str] | None) -> tuple[list[str], list[str]]:
+    """The engine's line as UCI and SAN, cut at its first move that doesn't fit."""
+    if not fen_before or not line:
+        return [], []
+    board = chess.Board(fen_before)
+    ucis, sans = [], []
+    for uci in line:
+        try:
+            move = chess.Move.from_uci(uci)
+        except ValueError:
+            break
+        if move not in board.legal_moves:
+            break
+        sans.append(board.san(move))
+        ucis.append(uci)
+        board.push(move)
+    return ucis, sans
+
+
 def _move_entry(ev) -> dict:
     best_uci = ev.best_move_uci if ev.best_move_uci != ev.move_uci else None
     best_san = _best_san(ev.fen_before, best_uci) if ev.fen_before and best_uci else None
+    line_uci, line_san = _line(ev.fen_before, ev.best_line_uci)
+    engine_uci = ev.best_move_uci if ev.fen_before and _best_san(ev.fen_before, ev.best_move_uci) else None
     return {
         "ply": ev.ply,
         "move_number": chess.Board(ev.fen_before).fullmove_number if ev.fen_before else (ev.ply + 1) // 2,
@@ -26,6 +47,11 @@ def _move_entry(ev) -> dict:
         "classification": classify_move(cp_loss(ev)),
         "best_san": best_san,
         "best_uci": best_uci if best_san else None,
+        # The engine's choice in the position before this move (even when it was played)
+        # and its line from there, for the viewer's arrow and variation playback.
+        "engine_uci": engine_uci,
+        "line_uci": line_uci,
+        "line_san": line_san,
     }
 
 

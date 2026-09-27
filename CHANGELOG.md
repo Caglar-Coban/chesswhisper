@@ -4,6 +4,16 @@ All notable changes to chesswhisper are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] - 2026-09-27
+
+### Added
+
+- Game viewer: a green arrow shows the engine's move in the position on the
+  board (it can be switched off), and "Play the engine's line" steps
+  through the engine's continuation from there with the arrow keys or
+  buttons; Escape or "Back to the game" returns. Analyses saved before
+  this release have no engine lines to play.
+
 ## [0.15.0] - 2026-09-27
 
 ### Added
@@ -288,6 +298,7 @@ First release.
   for them.
 - History times are shown in the viewer's time zone.
 
+[0.16.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.16.0
 [0.15.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.15.0
 [0.14.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.14.0
 [0.13.0]: https://github.com/Caglar-Coban/chesswhisper/releases/tag/v0.13.0
