@@ -589,6 +589,117 @@ async def index(request: Request, current_user: User = Depends(get_current_user)
     )
 
 
+class AnalysisRequestError(Exception):
+    """An analysis request that can't start; *message* is already translated."""
+
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
+
+
+class MissingLlmKey(Exception):
+    """Commentary was requested from a provider the user has no key for."""
+
+
+class AnalysisAlreadyRunning(Exception):
+    def __init__(self, job: jobs.Job):
+        super().__init__(job.id)
+        self.job = job
+
+
+async def start_analysis(
+    db: Session,
+    user_id: int,
+    *,
+    source: str,
+    username: str = "",
+    max_games: int | str = DEFAULT_MAX_GAMES,
+    pgn_bytes: bytes | None = None,
+    player: str = "",
+    lang: str = "en",
+    llm: str = "none",
+    ui_language: str = "en",
+) -> jobs.Job:
+    """Validate a request, fetch the games if asked to, and start the background job.
+
+    Shared by the web form and the JSON API. *source* is "file" (with
+    *pgn_bytes*) or one of FETCH_SOURCES (with *username*). Raises
+    AnalysisRequestError, MissingLlmKey or AnalysisAlreadyRunning.
+    """
+
+    def fail(status_code: int, key: str, **params) -> AnalysisRequestError:
+        return AnalysisRequestError(status_code, ui_text(key, ui_language, **params))
+
+    fetching = source in FETCH_SOURCES
+    if source != "file" and not fetching:
+        raise fail(400, "error.bad_source")
+    if lang not in REPORT_LANGS:
+        raise fail(400, "error.bad_lang")
+    if llm not in LLM_CHOICES:
+        raise fail(400, "error.bad_llm")
+
+    running = jobs.running_job_for(user_id)
+    if running is not None:
+        # One analysis per user at a time: each one runs its own Stockfish.
+        raise AnalysisAlreadyRunning(running)
+
+    contents = b""
+    game_count = DEFAULT_MAX_GAMES
+    if fetching:
+        username = username.strip()
+        if not username:
+            raise fail(400, "error.need_username")
+        try:
+            game_count = int(max_games)
+        except (TypeError, ValueError):
+            raise fail(400, "error.bad_game_count") from None
+    else:
+        if not pgn_bytes:
+            raise fail(400, "error.need_file")
+        if len(pgn_bytes) > MAX_UPLOAD_BYTES:
+            raise fail(413, "error.file_too_large", mb=MAX_UPLOAD_BYTES // (1024 * 1024))
+        contents = pgn_bytes
+
+    llm_api_key = None
+    if llm != "none":
+        key_row = db.get(UserApiKey, user_id)
+        encrypted = None
+        if key_row is not None:
+            encrypted = key_row.anthropic_key_encrypted if llm == "claude" else key_row.openai_key_encrypted
+        if not encrypted:
+            raise MissingLlmKey()
+        llm_api_key = decrypt_api_key(encrypted)
+
+    fetch_warnings: list[str] = []
+    if fetching:
+        try:
+            fetched = await run_in_threadpool(fetch_pgn, source, username, game_count)
+        except GameSourceUnavailable as exc:
+            raise fail(502, "error.fetch_failed", detail=exc) from exc
+        except GameFetchError as exc:
+            raise AnalysisRequestError(400, str(exc)) from exc
+        contents = fetched.pgn_text.encode("utf-8")
+        fetch_warnings = fetched.warnings
+        player = player or fetched.player
+
+    with tempfile.NamedTemporaryFile(suffix=".pgn", delete=False) as tmp:
+        tmp.write(contents)
+        tmp_path = tmp.name
+
+    job, created = jobs.create_job_unless_running(user_id)
+    if not created:
+        # Another submission started an analysis while this one was fetching.
+        os.remove(tmp_path)
+        raise AnalysisAlreadyRunning(job)
+    _start_background(
+        lambda: _run_analysis_job(
+            job.id, user_id, tmp_path, player or None, lang, llm, llm_api_key, fetch_warnings, ui_language
+        )
+    )
+    return job
+
+
 @app.post("/analyze", response_class=HTMLResponse, response_model=None)
 async def analyze(
     request: Request,
@@ -603,76 +714,21 @@ async def analyze(
     db: Session = Depends(get_db),
     _csrf: None = Depends(verify_csrf),
 ) -> HTMLResponse | RedirectResponse:
-    fetching = source in FETCH_SOURCES
-    if source != "file" and not fetching:
-        return _render_error(request, _tr(request, "error.bad_source"), 400, current_user)
-    if lang not in REPORT_LANGS:
-        return _render_error(request, _tr(request, "error.bad_lang"), 400, current_user)
-    if llm not in LLM_CHOICES:
-        return _render_error(request, _tr(request, "error.bad_llm"), 400, current_user)
-
-    running = jobs.running_job_for(current_user.id)
-    if running is not None:
-        # One analysis per user at a time: each one runs its own Stockfish.
-        return RedirectResponse(f"/analyze/progress/{running.id}", status_code=303)
-
-    contents = b""
-    game_count = DEFAULT_MAX_GAMES
-    if fetching:
-        username = username.strip()
-        if not username:
-            return _render_error(request, _tr(request, "error.need_username"), 400, current_user)
-        try:
-            game_count = int(max_games)
-        except ValueError:
-            return _render_error(request, _tr(request, "error.bad_game_count"), 400, current_user)
-    else:
-        if pgn is None or not pgn.filename:
-            return _render_error(request, _tr(request, "error.need_file"), 400, current_user)
-        contents = await pgn.read(MAX_UPLOAD_BYTES + 1)
-        if len(contents) > MAX_UPLOAD_BYTES:
-            return _render_error(
-                request, _tr(request, "error.file_too_large", mb=MAX_UPLOAD_BYTES // (1024 * 1024)), 413, current_user
-            )
-
-    llm_api_key = None
-    if llm != "none":
-        key_row = db.get(UserApiKey, current_user.id)
-        encrypted = None
-        if key_row is not None:
-            encrypted = key_row.anthropic_key_encrypted if llm == "claude" else key_row.openai_key_encrypted
-        if not encrypted:
-            return RedirectResponse("/settings?message=missing_key", status_code=303)
-        llm_api_key = decrypt_api_key(encrypted)
-
-    fetch_warnings: list[str] = []
-    if fetching:
-        try:
-            fetched = await run_in_threadpool(fetch_pgn, source, username, game_count)
-        except GameSourceUnavailable as exc:
-            return _render_error(request, _tr(request, "error.fetch_failed", detail=exc), 502, current_user)
-        except GameFetchError as exc:
-            return _render_error(request, str(exc), 400, current_user)
-        contents = fetched.pgn_text.encode("utf-8")
-        fetch_warnings = fetched.warnings
-        player = player or fetched.player
-
-    with tempfile.NamedTemporaryFile(suffix=".pgn", delete=False) as tmp:
-        tmp.write(contents)
-        tmp_path = tmp.name
-
-    job, created = jobs.create_job_unless_running(current_user.id)
-    ui_language = ui_lang(request)
-    if not created:
-        # Another submission started an analysis while this one was fetching.
-        os.remove(tmp_path)
-        return RedirectResponse(f"/analyze/progress/{job.id}", status_code=303)
-    user_id = current_user.id
-    _start_background(
-        lambda: _run_analysis_job(
-            job.id, user_id, tmp_path, player or None, lang, llm, llm_api_key, fetch_warnings, ui_language
+    pgn_bytes = None
+    if source == "file" and pgn is not None and pgn.filename:
+        # Read one byte past the limit so start_analysis can tell it was exceeded.
+        pgn_bytes = await pgn.read(MAX_UPLOAD_BYTES + 1)
+    try:
+        job = await start_analysis(
+            db, current_user.id, source=source, username=username, max_games=max_games,
+            pgn_bytes=pgn_bytes, player=player, lang=lang, llm=llm, ui_language=ui_lang(request),
         )
-    )
+    except AnalysisAlreadyRunning as exc:
+        return RedirectResponse(f"/analyze/progress/{exc.job.id}", status_code=303)
+    except MissingLlmKey:
+        return RedirectResponse("/settings?message=missing_key", status_code=303)
+    except AnalysisRequestError as exc:
+        return _render_error(request, exc.message, exc.status_code, current_user)
     return RedirectResponse(f"/analyze/progress/{job.id}", status_code=303)
 
 
