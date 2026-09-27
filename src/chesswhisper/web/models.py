@@ -20,6 +20,8 @@ class User(Base):
     locked_until: Mapped[datetime | None] = mapped_column(default=None)
     # Stored in each login session; bumping it signs out every other session.
     session_version: Mapped[int] = mapped_column(default=0, server_default="0")
+    # SHA-256 of the user's personal API token; the token itself is shown once.
+    api_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, default=None)
 
     api_key: Mapped[UserApiKey | None] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"

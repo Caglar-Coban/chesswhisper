@@ -36,6 +36,31 @@
 </div>
 
 <div class="card">
+  <h2 class="section-title">{{ t("settings.api_access") }}</h2>
+  <p class="hint" style="margin-top:0;">{{ t("settings.api_intro") | safe }}</p>
+  {% if new_api_token %}
+  <div class="banner success">
+    {{ t("settings.api_token_new") }}
+    <pre class="token-box"><code id="api-token">{{ new_api_token }}</code></pre>
+  </div>
+  {% else %}
+  <p style="font-size:14px;">{{ t("settings.api_token_active") if has_api_token else t("settings.api_token_none") }}</p>
+  {% endif %}
+  <div class="key-row">
+    <form method="post" action="/settings/api-token">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="secondary-button">{{ t("settings.api_token_replace") if has_api_token else t("settings.api_token_create") }}</button>
+    </form>
+    {% if has_api_token %}
+    <form method="post" action="/settings/api-token/delete">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="link-button danger">{{ t("settings.api_token_revoke") }}</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
   <h2 class="section-title">{{ t("settings.change_password") }}</h2>
   {% if password_error %}<div class="banner error">{{ password_error }}</div>{% endif %}
   {% if password_message %}<div class="banner success">{{ password_message }}</div>{% endif %}

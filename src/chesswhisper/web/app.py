@@ -5,6 +5,7 @@ import tempfile
 import threading
 from collections.abc import Callable
 from datetime import timedelta
+from importlib.metadata import version as package_version
 
 import bleach
 import markdown as markdown_lib
@@ -47,7 +48,9 @@ from chesswhisper.web.security import (
     MIN_PASSWORD_LENGTH,
     decrypt_api_key,
     encrypt_api_key,
+    generate_api_token,
     get_session_secret,
+    hash_api_token,
     hash_password,
     verify_password,
 )
@@ -95,7 +98,18 @@ def registration_open() -> bool:
     return os.environ.get(ALLOW_REGISTRATION_ENV, "1").strip().lower() not in ("0", "false", "no", "off")
 
 
-app = FastAPI(title="chesswhisper")
+app = FastAPI(
+    title="chesswhisper API",
+    version=package_version("chesswhisper"),
+    description=(
+        "Start chess analyses, follow their progress and read the results. "
+        "Authenticate with the personal token from Settings → API access, sent as "
+        "`Authorization: Bearer <token>`."
+    ),
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
+    redoc_url=None,
+)
 app.add_middleware(SessionMiddleware, secret_key=get_session_secret().hex())
 
 
@@ -135,7 +149,9 @@ def _render_error(
 
 
 @app.exception_handler(Exception)
-async def _unhandled_exception_handler(request: Request, exc: Exception) -> HTMLResponse:
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> HTMLResponse | JSONResponse:
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"detail": "Internal server error."}, status_code=500)
     return _render_error(request, _tr(request, "error.unexpected"), 500, None)
 
 
@@ -368,12 +384,15 @@ def _render_settings(
     message: str | None = None,
     password_message: str | None = None,
     password_error: str | None = None,
+    new_api_token: str | None = None,
 ) -> HTMLResponse:
     key_row = db.get(UserApiKey, current_user.id)
     return _render(
         request, "settings.html",
         {
             "current_user": current_user,
+            "has_api_token": current_user.api_token_hash is not None,
+            "new_api_token": new_api_token,
             "has_anthropic_key": bool(key_row and key_row.anthropic_key_encrypted),
             "has_openai_key": bool(key_row and key_row.openai_key_encrypted),
             "message": message,
@@ -440,6 +459,31 @@ async def settings_delete_key(
         db.commit()
 
     return _render_settings(request, current_user, db, message=_tr(request, "settings.msg.key_removed"))
+
+
+@app.post("/settings/api-token", response_class=HTMLResponse)
+async def settings_create_api_token(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse:
+    token = generate_api_token()
+    current_user.api_token_hash = hash_api_token(token)  # replaces any earlier token
+    db.commit()
+    return _render_settings(request, current_user, db, new_api_token=token)
+
+
+@app.post("/settings/api-token/delete", response_class=HTMLResponse)
+async def settings_delete_api_token(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _csrf: None = Depends(verify_csrf),
+) -> HTMLResponse:
+    current_user.api_token_hash = None
+    db.commit()
+    return _render_settings(request, current_user, db, message=_tr(request, "settings.msg.token_revoked"))
 
 
 @app.post("/settings/password", response_class=HTMLResponse)
@@ -909,3 +953,14 @@ async def admin_reset_password(
     target.session_version += 1  # sign the user out everywhere
     db.commit()
     return RedirectResponse(f"/admin/users/{user_id}", status_code=303)
+
+
+# The JSON API lives in its own module; it calls start_analysis above.
+from chesswhisper.web.api import router as api_router  # noqa: E402
+
+app.include_router(api_router)
+
+# Keep the published OpenAPI schema (and /api/docs) to the JSON API.
+for _route in app.routes:
+    if hasattr(_route, "include_in_schema") and not getattr(_route, "path", "").startswith("/api/"):
+        _route.include_in_schema = False

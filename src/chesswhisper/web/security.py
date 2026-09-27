@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
 from pathlib import Path
@@ -36,6 +37,18 @@ def _get_or_create_secret_bytes(filename: str, generator) -> bytes:
 
 def get_session_secret() -> bytes:
     return _get_or_create_secret_bytes("session_secret.key", lambda: secrets.token_bytes(32))
+
+
+API_TOKEN_PREFIX = "cw_"
+
+
+def generate_api_token() -> str:
+    return API_TOKEN_PREFIX + secrets.token_urlsafe(32)
+
+
+def hash_api_token(token: str) -> str:
+    """Tokens are long and random, so a fast hash is enough (unlike passwords)."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def generate_csrf_token() -> str:
